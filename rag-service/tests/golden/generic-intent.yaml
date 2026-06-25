@@ -1,0 +1,11 @@
+name: generic-intent
+description: 用户说"我想租衣服"但没指定款式，应追问款式/编号
+customerId: golden-generic
+conversationId: golden-generic-v1
+steps:
+  - user: 我想租个衣服
+    expect:
+      action: ask_product
+      contains: ["款式", "编号"]
+      notContains: ["身高"]
+      minScore: 6

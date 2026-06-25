@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+.DS_Store
+data/local-vectors.json
+tests/.tmp/
+dashboard/node_modules/
+public/dashboard/

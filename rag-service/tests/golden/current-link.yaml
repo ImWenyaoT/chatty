@@ -1,0 +1,11 @@
+name: current-link
+description: "用户问 \"当前链接就是这款吗\" 时应直接确认商品并引导下一步"
+customerId: golden-current-link
+productId: SUIT-001
+conversationId: golden-current-link-v1
+steps:
+  - user: 就是当前链接这款吗
+    expect:
+      action: current_link_confirm
+      contains: ["当前链接"]
+      notContains: ["胸围", "常穿"]

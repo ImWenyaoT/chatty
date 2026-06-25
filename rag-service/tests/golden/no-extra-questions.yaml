@@ -1,0 +1,23 @@
+name: no-extra-questions
+description: 三项齐全（身高体重+档期+款式）后，不得追问围度/常穿码/套件拆分
+customerId: golden-no-extra
+productId: SUIT-001
+conversationId: golden-no-extra-v1
+steps:
+  - user: 我想租这款黑色双排扣西装
+  - user: 5月9号到5月10号用
+  - user: 身高175 体重56kg
+    expect:
+      actionIn: [confirm_size, confirm_review, guide_order]
+      contains: ["M", "L", "码"]
+      notContains:
+        - "胸围"
+        - "腰围"
+        - "肩宽"
+        - "三围"
+        - "软尺"
+        - "常穿"
+        - "几XL"
+        - "整套还是"
+        - "两件套"
+      minScore: 7

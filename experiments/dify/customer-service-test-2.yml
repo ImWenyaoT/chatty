@@ -1,0 +1,1378 @@
+app:
+  description: ''
+  icon: 🤖
+  icon_background: '#FFEAD5'
+  mode: advanced-chat
+  name: 客服测试
+  use_icon_as_answer_icon: false
+dependencies:
+- current_identifier: null
+  type: marketplace
+  value:
+    marketplace_plugin_unique_identifier: langgenius/openai:0.2.6@e2665624a156f52160927bceac9e169bd7e5ae6b936ae82575e14c90af390e6e
+    version: null
+kind: app
+version: 0.4.0
+workflow:
+  conversation_variables:
+  - description: 衣服的种类（西服为01、演出服02、玩偶服03、领带领结03、鞋子04）
+    id: 2d6b9170-6155-43c0-ac9d-165e09d1e50d
+    name: kind1
+    selector:
+    - conversation
+    - kind1
+    value: ''
+    value_type: string
+  - description: 衣服编号货号，一般在图片的右上角
+    id: 5cdba85f-866a-40dc-a417-e76305ca2ceb
+    name: sku1
+    selector:
+    - conversation
+    - sku1
+    value: ''
+    value_type: string
+  - description: 用户身高，单位 cm，用于尺码推荐和客服追问
+    id: 8f0f4f4d-1f6d-4f8f-9d8d-2f0f8d0a1001
+    name: user_height_cm
+    selector:
+    - conversation
+    - user_height_cm
+    value: ''
+    value_type: string
+  - description: 用户体重，单位 kg，用于尺码推荐和客服追问
+    id: 8f0f4f4d-1f6d-4f8f-9d8d-2f0f8d0a1002
+    name: user_weight_kg
+    selector:
+    - conversation
+    - user_weight_kg
+    value: ''
+    value_type: string
+  - description: 用户计划使用日期或租赁日期
+    id: 8f0f4f4d-1f6d-4f8f-9d8d-2f0f8d0a1003
+    name: rental_date
+    selector:
+    - conversation
+    - rental_date
+    value: ''
+    value_type: string
+  - description: 当前识别出的咨询意图，例如商品详情、尺码、档期、价格、售后
+    id: 8f0f4f4d-1f6d-4f8f-9d8d-2f0f8d0a1004
+    name: current_intent
+    selector:
+    - conversation
+    - current_intent
+    value: ''
+    value_type: string
+  environment_variables: []
+  features:
+    file_upload:
+      allowed_file_extensions:
+      - .JPG
+      - .JPEG
+      - .PNG
+      - .GIF
+      - .WEBP
+      - .SVG
+      allowed_file_types:
+      - image
+      allowed_file_upload_methods:
+      - remote_url
+      - local_file
+      enabled: true
+      fileUploadConfig:
+        audio_file_size_limit: 50
+        batch_count_limit: 5
+        file_size_limit: 15
+        image_file_size_limit: 10
+        video_file_size_limit: 100
+        workflow_file_upload_limit: 10
+      image:
+        enabled: false
+        number_limits: 3
+        transfer_methods:
+        - local_file
+        - remote_url
+      number_limits: 3
+    opening_statement: ''
+    retriever_resource:
+      enabled: true
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: false
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+    - data:
+        isInLoop: false
+        sourceType: code
+        targetType: llm
+      id: 1761900315567-source-llm-target
+      selected: false
+      source: '1761900315567'
+      sourceHandle: source
+      target: llm
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: llm
+        targetType: answer
+      id: llm-source-answer-target
+      selected: false
+      source: llm
+      sourceHandle: source
+      target: answer
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: question-classifier
+        targetType: question-classifier
+      id: 1761899441247-1-1762139055232-target
+      selected: false
+      source: '1761899441247'
+      sourceHandle: '1'
+      target: '1762139055232'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: question-classifier
+        targetType: parameter-extractor
+      id: 1762139055232-1762139481898-1761900014431-target
+      selected: false
+      source: '1762139055232'
+      sourceHandle: '1762139481898'
+      target: '1761900014431'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: parameter-extractor
+        targetType: if-else
+      id: 1761900014431-source-1762329729915-target
+      selected: false
+      source: '1761900014431'
+      sourceHandle: source
+      target: '1762329729915'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: if-else
+        targetType: answer
+      id: 1762329729915-d605da9a-e723-4234-bc8e-b088850d60b2-1762329898171-target
+      selected: false
+      source: '1762329729915'
+      sourceHandle: d605da9a-e723-4234-bc8e-b088850d60b2
+      target: '1762329898171'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: if-else
+        targetType: answer
+      id: 1762329729915-662d47c2-223c-4caa-ac05-f4f69084f065-1762330004888-target
+      selected: false
+      source: '1762329729915'
+      sourceHandle: 662d47c2-223c-4caa-ac05-f4f69084f065
+      target: '1762330004888'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: if-else
+        targetType: answer
+      id: 1762329729915-61dd9d6d-02f8-4a5a-b9fe-adbc13a4d6f3-1762331004661-target
+      selected: false
+      source: '1762329729915'
+      sourceHandle: 61dd9d6d-02f8-4a5a-b9fe-adbc13a4d6f3
+      target: '1762331004661'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: if-else
+        targetType: code
+      id: 1762329729915-15c3bc65-2ed1-4c95-9703-74cd8641c17b-1761900315567-target
+      selected: false
+      source: '1762329729915'
+      sourceHandle: 15c3bc65-2ed1-4c95-9703-74cd8641c17b
+      target: '1761900315567'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: question-classifier
+        targetType: llm
+      id: 1762139055232-1762331230986-1762343556663-target
+      selected: false
+      source: '1762139055232'
+      sourceHandle: '1762331230986'
+      target: '1762343556663'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: llm
+        targetType: answer
+      id: 1762343556663-source-1762343995368-target
+      selected: false
+      source: '1762343556663'
+      sourceHandle: source
+      target: '1762343995368'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: start
+        targetType: assigner
+      id: 1761896814780-source-1762346699869-target
+      selected: false
+      source: '1761896814780'
+      sourceHandle: source
+      target: '1762346699869'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: if-else
+        targetType: parameter-extractor
+      id: 1762347037112-true-1762347159279-target
+      selected: false
+      source: '1762347037112'
+      sourceHandle: 'true'
+      target: '1762347159279'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: parameter-extractor
+        targetType: assigner
+      id: 1762347159279-source-1762347264887-target
+      selected: false
+      source: '1762347159279'
+      sourceHandle: source
+      target: '1762347264887'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: assigner
+        targetType: if-else
+      id: 1762346699869-source-1762347037112-target
+      source: '1762346699869'
+      sourceHandle: source
+      target: '1762347037112'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: assigner
+        targetType: variable-aggregator
+      id: 1762347264887-source-1766215171864-target
+      source: '1762347264887'
+      sourceHandle: source
+      target: '1766215171864'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: if-else
+        targetType: variable-aggregator
+      id: 1762347037112-false-1766215171864-target
+      source: '1762347037112'
+      sourceHandle: 'false'
+      target: '1766215171864'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: variable-aggregator
+        targetType: question-classifier
+      id: 1766215171864-source-1761899441247-target
+      source: '1766215171864'
+      sourceHandle: source
+      target: '1761899441247'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: question-classifier
+        targetType: llm
+      id: 1762139055232-1762139487839-1766215496691-target
+      source: '1762139055232'
+      sourceHandle: '1762139487839'
+      target: '1766215496691'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: llm
+        targetType: answer
+      id: 1766215496691-source-1766215467043-target
+      source: '1766215496691'
+      sourceHandle: source
+      target: '1766215467043'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: question-classifier
+        targetType: code
+      id: 1762139055232-1-1766215934690-target
+      source: '1762139055232'
+      sourceHandle: '1'
+      target: '1766215934690'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: question-classifier
+        targetType: llm
+      id: 1762139055232-1762139476414-1766216894457-target
+      source: '1762139055232'
+      sourceHandle: '1762139476414'
+      target: '1766216894457'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: llm
+        targetType: answer
+      id: 1766216894457-source-1766216922043-target
+      source: '1766216894457'
+      sourceHandle: source
+      target: '1766216922043'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    nodes:
+    - data:
+        selected: false
+        title: 开始
+        type: start
+        variables:
+        - default: '12121221'
+          hint: ''
+          label: sku0
+          max_length: 48
+          options: []
+          placeholder: ''
+          required: true
+          type: text-input
+          variable: sku0
+      height: 88
+      id: '1761896814780'
+      position:
+        x: -482.33427933791916
+        y: 310.50493320110604
+      positionAbsolute:
+        x: -482.33427933791916
+        y: 310.50493320110604
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        context:
+          enabled: true
+          variable_selector:
+          - '1761900315567'
+          - result
+        memory:
+          query_prompt_template: '{{#sys.query#}}
+
+
+            {{#sys.files#}}'
+          role_prefix:
+            assistant: ''
+            user: ''
+          window:
+            enabled: false
+            size: 10
+        model:
+          completion_params:
+            temperature: 0.8
+          mode: chat
+          name: gpt-4o
+          provider: langgenius/openai/openai
+        prompt_template:
+        - id: ef3b8a05-8ce7-4e69-af2a-53015bc5e1b9
+          role: system
+          text: '你是服装租赁门店的在线客服，负责回答顾客关于当前商品的尺码问题。
+
+            用户当前问题：{{#sys.query#}}
+
+            已知推荐尺码：{{#1761900315567.result#}}
+
+            回复要求：
+
+            1. 语气自然、礼貌、简洁，像真实门店客服，不要自我介绍。
+
+            2. 先直接告诉用户推荐尺码。
+
+            3. 如果尺码结果是“尺码未知”或信息不足，要明确说明还需要补充身高(cm)和体重(kg)。
+
+            4. 不要编造库存、价格、档期、押金等实时信息。
+
+            5. 结尾可以顺带引导用户继续提供使用日期或商品编号，方便进一步确认。'
+        selected: false
+        title: LLM
+        type: llm
+        vision:
+          enabled: false
+      height: 88
+      id: llm
+      position:
+        x: 2188.8808497286477
+        y: 373.4524687278617
+      positionAbsolute:
+        x: 2188.8808497286477
+        y: 373.4524687278617
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        answer: '{{#llm.text#}}'
+        selected: false
+        title: 直接回复
+        type: answer
+        variables: []
+      height: 103
+      id: answer
+      position:
+        x: 2494.508722620068
+        y: 373.4524687278617
+      positionAbsolute:
+        x: 2494.508722620068
+        y: 373.4524687278617
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        classes:
+        - id: '1'
+          name: '当前商品相关咨询
+
+            顾客针对当前商品提问，包括：详情、面料、价格、库存、尺码、租期、试穿、押金、邮寄等问题。
+
+            如果顾客说了身高体重或问“穿多大”，也属于这一类。
+
+            举例：
+
+            “这件礼服是缎面吗？”；“这个西装有 M 码吗？”；“我165，120斤，穿多大？”；“这个礼服能租几天？”；“这个西装可以下周租吗？ “什么时间寄到”'
+        - id: '2'
+          name: '泛问找款 / 推荐需求
+
+            顾客不是在问当前商品，而是表达想找某类服装、相似款或按用途寻找合适款式。
+
+            通常没有明确的商品上下文，或者明确提到“有××吗”“想租××”。
+
+            举例：
+
+            “有学士服吗？”；“我要找白色礼服”；“想租西装去面试”；“有没有可爱的玩偶服装？”；“适合婚礼穿的礼服有哪些？”'
+        - id: '1761899868754'
+          name: '图片找商品
+
+            顾客发送了一张图片，可能没有文字，也可能附带简短描述（如“像这件”“有没有租的”）。
+
+            机器人需要先识别图片，再判断顾客意图（是想找图中商品还是相似款）。
+
+            举例：
+
+            （仅发图片）；“像这件，有没有租的？”；“这张图这种风格有吗？”；“我想租这种西装。”'
+        - id: '1761899874676'
+          name: '售后与服务咨询
+
+            顾客咨询售后、退换、清洗、押金、赔付等相关问题。
+
+            通常是已下单或租赁中的用户提出。
+
+            举例：
+
+            “衣服不合适可以换吗？”；“弄脏了怎么办？”；“押金什么时候退？”；“租期到了可以延长吗？”；“你们清洗吗？”'
+        - id: '1762136246444'
+          name: '其他 / 模糊 / 闲聊
+
+            顾客表达不清、意图不明确或只是随意聊天，需要机器人主动澄清或引导顾客说出目的。
+
+            举例：
+
+            “看看呗~”；“你是谁？”；“有推荐吗？”；“我想租点好看的~”；（没有实际问题或信息不完整）'
+        instructions: ''
+        model:
+          completion_params:
+            temperature: 0.7
+          mode: chat
+          name: gpt-4o
+          provider: langgenius/openai/openai
+        query_variable_selector:
+        - '1761896814780'
+        - sys.query
+        selected: false
+        title: 首次问题分类
+        type: question-classifier
+        vision:
+          configs:
+            detail: high
+            variable_selector:
+            - sys
+            - files
+          enabled: false
+      height: 828
+      id: '1761899441247'
+      position:
+        x: -57.80173587465197
+        y: -4.04359333893683
+      positionAbsolute:
+        x: -57.80173587465197
+        y: -4.04359333893683
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        instruction: '根据{{#sys.query#}}描述获取身高并以cm为单位赋值给身高height，如果没有就null，获取体重并以kg为单位赋值给体重weight，如果没有就null
+
+          根据收到的图片左上角的sku号判断出是否有SKU号，如果没有就赋值null'
+        model:
+          completion_params:
+            temperature: 0.7
+          mode: chat
+          name: gpt-4o
+          provider: langgenius/openai/openai
+        parameters:
+        - description: 体重，kg
+          name: weight
+          required: false
+          type: number
+        - description: 身高，cm
+          name: height
+          required: false
+          type: number
+        - description: 衣服的货号，如果是本店的商品图片左上角都会有sku编号
+          name: sku
+          required: false
+          type: string
+        - description: 用户计划使用或租赁的日期，没有则留空
+          name: rental_date
+          required: false
+          type: string
+        - description: 用户当前主要咨询意图，例如尺码、价格、档期、试穿、售后
+          name: intent
+          required: false
+          type: string
+        query:
+        - sys
+        - query
+
+                  提取规则：
+
+                  1. 身高提取为 height，单位统一为 cm；没有就留空。
+
+                  2. 体重提取为 weight，单位统一为 kg；如果用户说“120斤”要换算为 60kg；没有就留空。
+
+                  3. 如果图片中能识别到本店商品编号，则提取为 sku；没有就留空。
+
+                  4. 如果用户提到了使用日期、租赁日期、哪天穿、哪天要，用原话提取为 rental_date；没有就留空。
+
+                  5. 根据用户问题判断主要意图 intent，只能从以下值中选择一个：商品详情、价格押金、库存档期、尺码推荐、试穿换码、售后服务、找款推荐、其他。
+
+                  6. 不要臆造不存在的信息。'
+        reasoning_mode: prompt
+        selected: false
+        title: 参数提取器
+        type: parameter-extractor
+        vision:
+          configs:
+            detail: high
+            variable_selector:
+            - sys
+            - files
+          enabled: true
+      height: 88
+      id: '1761900014431'
+      position:
+        x: 951.5815004125213
+        y: 221.4427072554356
+      positionAbsolute:
+        x: 951.5815004125213
+        y: 221.4427072554356
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        code: "def recommend_size(weight: float, height: float) -> str:\n    # 尺码表数据（身高范围、体重范围、推荐尺码）\n\
+          \    table = [\n        (150, 155, 0, 45, \"S\"),\n        (150, 155, 45,\
+          \ 48.5, \"M\"),\n        (150, 155, 49, 53.5, \"L\"),\n        (150, 155,\
+          \ 54, 58.5, \"XL\"),\n        (150, 155, 59, 63, \"2XL\"),\n        (150,\
+          \ 155, 63, 68, \"3XL\"),\n        (150, 155, 68.5, 72.5, \"4XL\"),\n   \
+          \     (150, 155, 72.5, 77, \"5XL\"),\n        (156, 159, 0, 45, \"S\"),\n\
+          \        (156, 159, 45, 49, \"M\"),\n        (156, 159, 49, 54, \"L\"),\n\
+          \        (156, 159, 54, 59, \"XL\"),\n        (156, 159, 59, 63.5, \"2XL\"\
+          ),\n        (156, 159, 64, 68, \"3XL\"),\n        (156, 159, 68.5, 73, \"\
+          4XL\"),\n        (156, 159, 74, 77.5, \"5XL\"),\n        (160, 164, 0, 46,\
+          \ \"S\"),\n        (160, 164, 46, 50, \"M\"),\n        (160, 164, 50, 55,\
+          \ \"L\"),\n        (160, 164, 55, 60, \"XL\"),\n        (160, 164, 60, 65,\
+          \ \"2XL\"),\n        (160, 164, 65, 70, \"3XL\"),\n        (160, 164, 70,\
+          \ 75, \"4XL\"),\n        (160, 164, 75, 80, \"5XL\"),\n        (165, 170,\
+          \ 0, 46, \"S\"),\n        (165, 170, 46, 51, \"M\"),\n        (165, 170,\
+          \ 51, 56, \"L\"),\n        (165, 170, 56, 61, \"XL\"),\n        (165, 170,\
+          \ 61, 66, \"2XL\"),\n        (165, 170, 66, 71, \"3XL\"),\n        (165,\
+          \ 170, 71, 76, \"4XL\"),\n        (165, 170, 76, 81, \"5XL\"),\n    ]\n\
+          \    \n    for h_min, h_max, w_min, w_max, size in table:\n        if h_min\
+          \ <= height <= h_max and w_min <= weight <= w_max:\n            return size\n\
+          \    \n    return \"尺码未知\"\n\ndef main(arg1: str, arg2: str):\n    try:\n\
+          \        weight = float(arg1)  # 体重（kg）\n        height = float(arg2)  #\
+          \ 身高（cm）\n        \n        size = recommend_size(weight, height)  # 根据身高和体重推荐尺码\n\
+          \        return {\n            \"result\": size  # 返回推荐的尺码\n        }\n\
+          \    except ValueError:\n        return {\n            \"result\": \"无效的输入，请输入有效的体重（kg）和身高（cm）。\"\
+          \n        }\n"
+        code_language: python3
+        outputs:
+          result:
+            children: null
+            type: string
+        selected: false
+        title: 代码执行
+        type: code
+        variables:
+        - value_selector:
+          - '1761900014431'
+          - weight
+          value_type: number
+          variable: arg1
+        - value_selector:
+          - '1761900014431'
+          - height
+          value_type: number
+          variable: arg2
+      height: 52
+      id: '1761900315567'
+      position:
+        x: 1888.9623790091882
+        y: 373.4524687278617
+      positionAbsolute:
+        x: 1888.9623790091882
+        y: 373.4524687278617
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        classes:
+        - id: '1'
+          name: '商品详情咨询
+
+            顾客询问当前商品的基础信息，如面料、材质、款式、版型、配件、设计风格、清洗方式等。
+
+            多为了解商品特性、质感或做工等内容。
+
+            举例：
+
+            “这件礼服是缎面的吗？”；“这套西装有没有内衬？”；“这款玩偶衣服厚不厚？”；“这学士服是租的还是买的？”；“这件衣服容易起球吗？”'
+        - id: '2'
+          name: '价格与押金咨询
+
+            顾客询问当前商品的租金、押金、是否包邮、优惠政策、会员折扣等与价格相关的问题。
+
+            举例：
+
+            “这个多少钱一天？”；“押金多少？”；“租三天有优惠吗？”；“包邮吗？”；“VIP有折扣吗？”'
+        - id: '1762139476414'
+          name: '库存与租期咨询
+
+            顾客关注商品是否有货、能否在指定时间租、租多久、什么时候能发货等问题。
+
+            举例：
+
+            “这件礼服下周能租吗？”；“这件还有现货吗？”；“能租几天？”；“可以提前一天发吗？”；“什么时候能收到？”'
+        - id: '1762139481898'
+          name: '尺码咨询
+
+            顾客提供身高体重信息或直接询问尺码适配、穿着效果、试穿政策等。
+
+            此类包含两种典型场景：
+
+            尺码推荐（身高/体重判断）
+
+            试穿方式（到店试穿或邮寄试穿）
+
+            举例：
+
+            “我165，120斤，穿多大？”；“这件礼服有L码吗？”；“这件我合身吗”'
+        - id: '1762139487839'
+          name: '其他与当前商品相关但未归类问题
+
+            顾客提问与当前商品有关，但内容未能准确归入前述类别，例如搭配、主观评价或模糊提问。
+
+            通常需要机器人进一步澄清意图。
+
+            举例：
+
+            “你觉得这件好看吗？”；“搭什么鞋合适？”；“这个颜色会不会显胖？”；“和上一件比哪个好看？”；“有别的颜色吗？”'
+        - id: '1762331230986'
+          name: '试穿与换码咨询
+
+            顾客咨询是否能试穿、试穿方式、到店试穿、邮寄试穿、是否支持换码或到货不合适如何处理等问题。
+
+            此类往往涉及租赁服务流程，属于售前或轻售后场景。
+
+            举例：
+
+            “能试穿吗？”；“可以到店里试吗？”；“不合适能换吗？”；“到货不合适怎么办？”；“我试穿后不想要能退吗？'
+        instructions: ''
+        model:
+          completion_params:
+            temperature: 0.7
+          mode: chat
+          name: gpt-4o
+          provider: langgenius/openai/openai
+        query_variable_selector:
+        - '1761896814780'
+        - sys.query
+        selected: false
+        title: 当前商品相关咨询
+        type: question-classifier
+        vision:
+          enabled: false
+      height: 946
+      id: '1762139055232'
+      position:
+        x: 375.5743701091791
+        y: -333.70427459682486
+      positionAbsolute:
+        x: 375.5743701091791
+        y: -333.70427459682486
+      selected: true
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        cases:
+        - case_id: d605da9a-e723-4234-bc8e-b088850d60b2
+          conditions:
+          - comparison_operator: empty
+            id: e35f63ce-802e-4d33-ba79-7d04d252c3e1
+            value: ''
+            varType: number
+            variable_selector:
+            - '1761900014431'
+            - weight
+          - comparison_operator: empty
+            id: 234e5dcd-4477-40c3-a3a1-2ecd76b6c148
+            value: ''
+            varType: number
+            variable_selector:
+            - '1761900014431'
+            - height
+          id: d605da9a-e723-4234-bc8e-b088850d60b2
+          logical_operator: and
+        - case_id: 662d47c2-223c-4caa-ac05-f4f69084f065
+          conditions:
+          - comparison_operator: empty
+            id: 75df95bf-ca8b-415c-9b76-9fe4f7ec88fc
+            value: ''
+            varType: number
+            variable_selector:
+            - '1761900014431'
+            - weight
+          - comparison_operator: not empty
+            id: 329e64fb-a415-4523-b583-942c2c78318a
+            value: ''
+            varType: number
+            variable_selector:
+            - '1761900014431'
+            - height
+          id: 662d47c2-223c-4caa-ac05-f4f69084f065
+          logical_operator: and
+        - case_id: 61dd9d6d-02f8-4a5a-b9fe-adbc13a4d6f3
+          conditions:
+          - comparison_operator: not empty
+            id: 9986892c-4f46-4676-a3d6-b37b65026730
+            value: ''
+            varType: number
+            variable_selector:
+            - '1761900014431'
+            - weight
+          - comparison_operator: empty
+            id: 46fb2cf9-a84f-4da7-93e6-fdcffbe25e4f
+            value: ''
+            varType: number
+            variable_selector:
+            - '1761900014431'
+            - height
+          id: 61dd9d6d-02f8-4a5a-b9fe-adbc13a4d6f3
+          logical_operator: and
+        - case_id: 15c3bc65-2ed1-4c95-9703-74cd8641c17b
+          conditions:
+          - comparison_operator: not empty
+            id: 0bb04871-cb11-48d5-8093-14c534254b84
+            value: ''
+            varType: number
+            variable_selector:
+            - '1761900014431'
+            - weight
+          - comparison_operator: not empty
+            id: 12a9745a-2046-4470-b08d-7c3e61033ee9
+            value: ''
+            varType: number
+            variable_selector:
+            - '1761900014431'
+            - height
+          id: 15c3bc65-2ed1-4c95-9703-74cd8641c17b
+          logical_operator: and
+        selected: false
+        title: 条件分支
+        type: if-else
+      height: 372
+      id: '1762329729915'
+      position:
+        x: 1545.6479593836245
+        y: 38.0805075483205
+      positionAbsolute:
+        x: 1545.6479593836245
+        y: 38.0805075483205
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        answer: 亲，衣服码数齐全的，方便给出身高cm体重kg吗？我们给您推荐合身的尺码
+        selected: false
+        title: 直接回复 4
+        type: answer
+        variables: []
+      height: 132
+      id: '1762329898171'
+      position:
+        x: 1888.9623790091882
+        y: -45.95423688710221
+      positionAbsolute:
+        x: 1888.9623790091882
+        y: -45.95423688710221
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        answer: 亲，还缺体重(kg)数据哦，我们给您推荐合身的尺码
+        selected: false
+        title: 直接回复 5
+        type: answer
+        variables: []
+      height: 116
+      id: '1762330004888'
+      position:
+        x: 1888.9623790091882
+        y: 94.95840587706076
+      positionAbsolute:
+        x: 1888.9623790091882
+        y: 94.95840587706076
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        answer: 亲，还缺身高(cm)数据哦，我们给您推荐合身的尺码
+        selected: false
+        title: 直接回复 6
+        type: answer
+        variables: []
+      height: 116
+      id: '1762331004661'
+      position:
+        x: 1888.9623790091882
+        y: 228.03775462037123
+      positionAbsolute:
+        x: 1888.9623790091882
+        y: 228.03775462037123
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        context:
+          enabled: true
+          variable_selector:
+          - sys
+          - query
+        model:
+          completion_params:
+            temperature: 0.7
+          mode: chat
+          name: gpt-4o
+          provider: langgenius/openai/openai
+        prompt_template:
+        - id: 53e56e2a-0c93-4c9d-bbd9-7aaa2016f538
+          role: system
+
+          text: '你是服装租赁门店客服，负责回答试穿、换码、服务流程相关问题。
+
+            用户当前问题：{{#sys.query#}}
+
+            回复要求：
+
+            1. 语气温和、礼貌、简洁，不要自我介绍。
+
+            2. 优先回答用户当前问题，再补充必要说明。
+
+            3. 可以说明支持到店试穿；如果用户不方便到店，可以引导提供身高(cm)和体重(kg)做尺码推荐。
+
+            4. 可以说明线上下单后会直接寄出，寄出后视为开始出租，租期从签收当天开始计算。
+
+            5. 可以说明：若商家发错尺码或款式，可免费补发；若按推荐尺码仍不合身，可协助更换一次。
+
+            6. 不要承诺未确认的库存、档期、价格或物流时效。'
+
+
+            如果是关于试穿的问题，是支持到店试穿的。
+
+            如果不方便到店，也可以直接告诉我你的身高（cm）和体重（kg），我会根据经验帮你推荐合适的尺码。线上下单后会直接为你寄出，但线上订单不支持试穿哦，因为这是服装租赁服务，衣服一旦寄出就视为开始出租，租期从你签收当天开始计算。
+
+            关于换码这块也可以放心：
+
+            如果是我这边发错了尺码或款式，会给你免费顺丰加急补发；
+
+            如果是按照我推荐的尺码但穿着不太合身，也可以包邮帮你更换一次，尽量让你穿得合适、舒服。
+
+            有不确定的地方都可以提前问我，我会尽量帮你把尺码选稳一些。'
+        selected: false
+        title: LLM 2
+        type: llm
+        vision:
+          enabled: false
+      height: 88
+      id: '1762343556663'
+      position:
+        x: 1121.2007076428551
+        y: 653.2180457892996
+      positionAbsolute:
+        x: 1121.2007076428551
+        y: 653.2180457892996
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        answer: '{{#1762343556663.text#}}'
+        selected: false
+        title: 直接回复 6
+        type: answer
+        variables: []
+      height: 103
+      id: '1762343995368'
+      position:
+        x: 1487.3767070918916
+        y: 703.3271269437956
+      positionAbsolute:
+        x: 1487.3767070918916
+        y: 703.3271269437956
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        items:
+        - input_type: variable
+          operation: over-write
+          value:
+          - '1761896814780'
+          - sku0
+          variable_selector:
+          - conversation
+          - sku1
+          write_mode: over-write
+        selected: false
+        title: 变量赋值
+        type: assigner
+        version: '2'
+      height: 84
+      id: '1762346699869'
+      position:
+        x: -521.2447176725386
+        y: 576.6600459485996
+      positionAbsolute:
+        x: -521.2447176725386
+        y: 576.6600459485996
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        cases:
+        - case_id: 'true'
+          conditions:
+          - comparison_operator: not empty
+            id: 9a4578eb-63a3-4d22-b3fb-892313e6f3cd
+            value: ''
+            varType: array[file]
+            variable_selector:
+            - sys
+            - files
+          id: 'true'
+          logical_operator: and
+        selected: false
+        title: 条件分支 2
+        type: if-else
+      height: 124
+      id: '1762347037112'
+      position:
+        x: -1220.251002237539
+        y: 795.5930717064904
+      positionAbsolute:
+        x: -1220.251002237539
+        y: 795.5930717064904
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        instruction: 从图片左上角中提取的商品编号sku01，如果没有就赋值null
+        model:
+          completion_params:
+            temperature: 0.7
+          mode: chat
+          name: gpt-4o
+          provider: langgenius/openai/openai
+        parameters:
+        - description: 图片中的商品编号提取
+          name: sku01
+          required: false
+          type: string
+        query: []
+        reasoning_mode: prompt
+        selected: false
+        title: 参数提取器 2
+        type: parameter-extractor
+        vision:
+          configs:
+            detail: high
+            variable_selector:
+            - sys
+            - files
+          enabled: true
+      height: 88
+      id: '1762347159279'
+      position:
+        x: -952.0125866048048
+        y: 745.9001894449124
+      positionAbsolute:
+        x: -952.0125866048048
+        y: 745.9001894449124
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        items:
+        - input_type: variable
+          operation: over-write
+          value:
+          - '1762347159279'
+          - sku01
+          variable_selector:
+          - conversation
+          - sku1
+          write_mode: over-write
+        selected: false
+        title: 变量赋值 2
+        type: assigner
+        version: '2'
+      height: 84
+      id: '1762347264887'
+      position:
+        x: -691.4983169683401
+        y: 745.9001894449124
+      positionAbsolute:
+        x: -691.4983169683401
+        y: 745.9001894449124
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        output_type: string
+        selected: false
+        title: 变量聚合器
+        type: variable-aggregator
+        variables:
+        - - '1762347159279'
+          - sku01
+      height: 109
+      id: '1766215171864'
+      position:
+        x: -515.5694557839629
+        y: 925.5866951568795
+      positionAbsolute:
+        x: -515.5694557839629
+        y: 925.5866951568795
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        answer: '{{#1766215496691.text#}}'
+        selected: false
+        title: 直接回复 6
+        type: answer
+        variables: []
+      height: 103
+      id: '1766215467043'
+      position:
+        x: 1438.8036895364523
+        y: 502.3180545236037
+      positionAbsolute:
+        x: 1438.8036895364523
+        y: 502.3180545236037
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        context:
+          enabled: true
+          variable_selector:
+          - sys
+          - query
+        model:
+          completion_params:
+            temperature: 0.7
+          mode: chat
+          name: gpt-4o
+          provider: langgenius/openai/openai
+        prompt_template:
+        - id: 7c1f979b-58e4-4873-9f5f-1898d257b3cd
+          role: system
+
+          text: '你是服装租赁门店客服，负责处理找款、推荐、泛问咨询。
+
+            用户当前问题：{{#sys.query#}}
+
+            回复要求：
+
+            1. 语气自然、礼貌、简洁，不要自我介绍。
+
+            2. 如果用户需求明确，就直接给出推荐方向，例如适合的服装类型、风格、场景。
+
+            3. 如果用户需求不完整，要主动追问 1 到 2 个最关键的信息，例如使用场景、颜色偏好、尺码、预算、使用日期。
+
+            4. 不要编造具体 SKU、库存、价格和档期。
+
+            5. 目标是把用户引导到可继续推荐或可下单确认的状态。'
+
+            根据客户提出的想法进行明确的推荐'
+        selected: false
+        title: LLM 3
+        type: llm
+        vision:
+          enabled: false
+      height: 88
+      id: '1766215496691'
+      position:
+        x: 967.2763020330185
+        y: 368.54321482012483
+      positionAbsolute:
+        x: 967.2763020330185
+        y: 368.54321482012483
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        code: "\ndef main(arg1: str, arg2: str):\n    return {\n        \"result\"\
+        code: "def main(arg1: str = '', arg2: str = ''):\n    if arg1 or arg2:\n        return {\n            \"result\": f\"{arg1}{arg2}\"\n        }\n    return {\n        \"result\": \"当前没有可用的商品上下文，建议引导用户补充商品图片、商品编号或具体需求。\"\n    }\n"
+        code_language: python3
+        outputs:
+          result:
+            children: null
+            type: string
+        selected: false
+        title: 代码执行 2
+        type: code
+        variables:
+        - value_selector: []
+          variable: arg1
+        - value_selector: []
+          variable: arg2
+      height: 52
+      id: '1766215934690'
+      position:
+        x: 1090.1333944228245
+        y: -191.08712027632862
+      positionAbsolute:
+        x: 1090.1333944228245
+        y: -191.08712027632862
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        context:
+          enabled: true
+          variable_selector:
+          - sys
+          - query
+        model:
+          completion_params:
+            temperature: 0.7
+          mode: chat
+          name: gpt-4o
+          provider: langgenius/openai/openai
+        prompt_template:
+        - id: 83363a5f-41a2-4cc9-b9a4-644ce9667e95
+          role: system
+
+          text: '你是服装租赁门店客服，负责回答库存、档期、租期、发货时效相关问题。
+
+            用户当前问题：{{#sys.query#}}
+
+            回复要求：
+
+            1. 语气礼貌、简洁、像真实客服，不要自我介绍。
+
+            2. 当前这版工作流主要用于测试，如果没有接入实时库存和档期系统，不要把库存状态说死。
+
+            3. 可以说明通用租赁流程：租期通常从签收当天开始计算，到约定归还日期寄回即可。
+
+            4. 如果用户问具体哪天能租、哪天能到、是否有货，要优先引导用户提供商品编号 SKU 和使用日期，以便进一步确认。
+
+            5. 如果用户只是在了解流程，可以给出通用说明，但要避免绝对承诺。
+
+            6. 回答结构尽量是：先答复，再说明限制条件，最后引导补充信息。'
+
+
+            这件目前是有库存的，可以根据你的使用时间来安排租期。
+
+            租期是从你收到衣服当天开始计算，到约定的归还日期寄回就可以。
+
+            关于发货和收货时间，给你简单说明一下，方便你安排：
+
+            下午 15:30 之前下单，当天包邮寄出；
+
+            15:30 之后下单，一般是第二天发货；
+
+            如果 16:00–19:00 期间需要当天发出，或对时效要求比较高，可以选择顺丰到付。
+
+            物流时效这边：
+
+            江浙沪地区通常是隔天送达，多半是下午收到；
+
+            顺丰一般是隔天上午 9 点左右可以收到；
+
+            其他地区包邮一般需要 3 天左右。
+
+            如果你已经提前确定好使用日期，也可以放心安排哦～
+
+            比如你是 20 号开始租，我们可以 19 号提前寄出，你收到后直接使用，21 号再寄回就行，这样算1天租期
+
+            '
+        selected: false
+        title: LLM 4
+        type: llm
+        vision:
+          enabled: false
+      height: 88
+      id: '1766216894457'
+      position:
+        x: 929.618942785999
+        y: 46.689070392762886
+      positionAbsolute:
+        x: 929.618942785999
+        y: 46.689070392762886
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        answer: '{{#1766216894457.text#}}'
+        selected: false
+        title: 直接回复 7
+        type: answer
+        variables: []
+      height: 103
+      id: '1766216922043'
+      position:
+        x: 1226.9167764514657
+        y: -34.815146072483586
+      positionAbsolute:
+        x: 1226.9167764514657
+        y: -34.815146072483586
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    viewport:
+      x: 146.5328239096865
+      y: 138.46266259527377
+      zoom: 0.5750012218784617
+  rag_pipeline_variables: []
