@@ -1,0 +1,16 @@
+name: repair
+description: 用户说没听懂时，不推进状态机，重新澄清
+customerId: golden-repair
+productId: SUIT-001
+conversationId: golden-repair-v1
+steps:
+  - user: 我想租黑色西装
+  - user: ？
+    expect:
+      action: repair
+      contains: ["不好意思"]
+      notContains: ["身高", "下单"]
+  - user: 没听懂
+    expect:
+      action: repair
+      contains: ["不清楚", "不好意思"]

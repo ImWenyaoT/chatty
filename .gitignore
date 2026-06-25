@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.tsbuildinfo
+*.log
+.DS_Store
+.claude/
+.env
+.env.*
+!.env.example
+
+rag-service/data/memory-store.json
+rag-service/data/local-vectors.json
+rag-service/public/dashboard/
+rag-service/dashboard/node_modules/

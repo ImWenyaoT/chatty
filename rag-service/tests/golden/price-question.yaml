@@ -1,0 +1,12 @@
+name: price-question
+description: 用户直接问价格，应给出价格 + 补充下一步
+customerId: golden-price
+productId: SUIT-001
+conversationId: golden-price-v1
+steps:
+  - user: 这款多少钱一天？
+    expect:
+      action: quote_price
+      contains: ["199"]
+      notContains: ["不知道"]
+      minScore: 6

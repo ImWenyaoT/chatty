@@ -1,0 +1,33 @@
+{
+  "name": "rental-rag-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/server.js",
+    "ingest": "tsx scripts/ingest.ts",
+    "eval": "tsx scripts/eval.ts",
+    "build:dashboard": "cd dashboard && npm run build",
+    "dev:dashboard": "cd dashboard && npm run dev",
+    "dev:setup": "bash scripts/dev-setup.sh",
+    "qdrant:start": "docker run -d --name rental-qdrant -p 6333:6333 -p 6334:6334 -v qdrant_storage:/qdrant/storage qdrant/qdrant",
+    "qdrant:stop": "docker stop rental-qdrant",
+    "qdrant:rm": "docker rm -f rental-qdrant"
+  },
+  "dependencies": {
+    "@qdrant/js-client-rest": "^1.13.0",
+    "dotenv": "^16.4.7",
+    "fastify": "^5.2.1",
+    "fastify-plugin": "^5.0.1",
+    "openai": "^4.89.0",
+    "yaml": "^2.8.3",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}
