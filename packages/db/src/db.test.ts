@@ -8,6 +8,8 @@ import {
   createMemoryRepository,
   createSessionRepository,
   createTraceRepository,
+  createTraceReviewRepository,
+  createFailureCaseRepository,
 } from './index.js'
 
 function freshDb() {
@@ -135,4 +137,75 @@ test('memory repository: empty snapshot when nothing is known', () => {
   const snap = memory.snapshot({ customerId: 'ghost', conversationId: 'ghost:SUIT-001' })
   assert.equal(snap.customerMemory, undefined)
   assert.deepEqual(snap.recentMessages, [])
+})
+
+test('trace review repository: append then findByTrace round-trip', () => {
+  const db = freshDb()
+  const sessions = createSessionRepository(db)
+  const traces = createTraceRepository(db)
+  const reviews = createTraceReviewRepository(db)
+  sessions.create({ id: 'sess-r', customerId: 'cr', conversationId: 'cr:SUIT-001' })
+  traces.append({ id: 'tr-r', sessionId: 'sess-r', eventType: 'agent_reply_sent', input: {} })
+
+  const review = reviews.append({
+    id: 'rev-1',
+    traceId: 'tr-r',
+    score: 4,
+    issues: ['未回答价格', '语气生硬'],
+    suggestions: ['给出具体日租价'],
+    suggestedReply: '这件日租 199 元哦~',
+    evaluatorModel: 'gpt-4o-mini',
+    promptVersion: 'v1',
+  })
+
+  assert.equal(review.score, 4)
+  assert.deepEqual(review.issues, ['未回答价格', '语气生硬'])
+  assert.equal(review.suggestedReply, '这件日租 199 元哦~')
+
+  const byTrace = reviews.findByTrace('tr-r')
+  assert.equal(byTrace.length, 1)
+  assert.equal(byTrace[0].id, 'rev-1')
+})
+
+test('trace repository: findUnevaluated excludes reviewed traces', () => {
+  const db = freshDb()
+  const sessions = createSessionRepository(db)
+  const traces = createTraceRepository(db)
+  const reviews = createTraceReviewRepository(db)
+  sessions.create({ id: 'sess-u', customerId: 'cu', conversationId: 'cu:SUIT-001' })
+  traces.append({ id: 'tr-reviewed', sessionId: 'sess-u', eventType: 'user_message', input: {} })
+  traces.append({ id: 'tr-fresh', sessionId: 'sess-u', eventType: 'agent_reply_sent', input: {} })
+  reviews.append({ id: 'rev-2', traceId: 'tr-reviewed', score: 7, issues: [] })
+
+  const unevaluated = traces.findUnevaluated()
+  assert.equal(unevaluated.length, 1)
+  assert.equal(unevaluated[0].id, 'tr-fresh')
+})
+
+test('failure case repository: create, findOpen, markPromoted', () => {
+  const db = freshDb()
+  const sessions = createSessionRepository(db)
+  const traces = createTraceRepository(db)
+  const failures = createFailureCaseRepository(db)
+  sessions.create({ id: 'sess-f', customerId: 'cf', conversationId: 'cf:SUIT-001' })
+  traces.append({ id: 'tr-f', sessionId: 'sess-f', eventType: 'agent_reply_sent', input: { question: '多少钱' }, output: { reply: '不知道' } })
+
+  const fc = failures.create({
+    id: 'fc-1',
+    traceId: 'tr-f',
+    sessionId: 'sess-f',
+    score: 3,
+    issues: ['拒绝回答', '态度差'],
+    input: { question: '多少钱' },
+    output: { reply: '不知道' },
+  })
+  assert.equal(fc.status, 'open')
+  assert.deepEqual(fc.issues, ['拒绝回答', '态度差'])
+
+  const open = failures.findOpen()
+  assert.equal(open.length, 1)
+  assert.equal(open[0].id, 'fc-1')
+
+  failures.markPromoted('fc-1')
+  assert.equal(failures.findOpen().length, 0)
 })

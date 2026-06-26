@@ -10,6 +10,8 @@ import { nowIso } from './database.js'
 export interface TraceRepository {
   append(input: NewTrace): AgentTrace
   queryBySession(sessionId: string, limit?: number): AgentTrace[]
+  /** Traces that have no trace_reviews row yet, newest-first. Drives the eval loop (PRD §10). */
+  findUnevaluated(limit?: number): AgentTrace[]
 }
 
 export interface NewTrace {
@@ -80,6 +82,18 @@ export function createTraceRepository(db: Db): TraceRepository {
         .all(sessionId, limit) as TraceRow[]
       // newest-first from DB; return oldest-first for chronological reading.
       return rows.reverse().map(toTrace)
+    },
+
+    findUnevaluated(limit = 100) {
+      const rows = db
+        .prepare(
+          `SELECT t.* FROM agent_traces t
+           WHERE NOT EXISTS (SELECT 1 FROM trace_reviews r WHERE r.trace_id = t.id)
+           ORDER BY t.created_at DESC LIMIT ?`,
+        )
+        .all(limit) as TraceRow[]
+      // newest-first is the natural eval queue order (process recent first).
+      return rows.map(toTrace)
     },
   }
 }
