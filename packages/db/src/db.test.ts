@@ -230,3 +230,33 @@ test('failure case repository: markDismissed exits the open queue', () => {
   // dismissed is a terminal exit: not in the open queue anymore
   assert.equal(failures.findOpen().length, 0)
 })
+
+test('foreign keys: inserting a review for a non-existent trace is rejected', () => {
+  const db = freshDb()
+  const reviews = createTraceReviewRepository(db)
+  // PRAGMA foreign_keys=ON is set by openDatabase(); a trace_review whose
+  // trace_id has no matching agent_traces row must be rejected (grill #4).
+  assert.throws(() =>
+    reviews.append({
+      id: 'rev-orphan',
+      traceId: 'does-not-exist',
+      score: 5,
+      issues: [],
+    }),
+  )
+})
+
+test('foreign keys: failure_case requires a real trace AND session', () => {
+  const db = freshDb()
+  const failures = createFailureCaseRepository(db)
+  assert.throws(() =>
+    failures.create({
+      id: 'fc-orphan',
+      traceId: 'ghost-trace',
+      sessionId: 'ghost-session',
+      score: 3,
+      issues: [],
+      input: {},
+    }),
+  )
+})

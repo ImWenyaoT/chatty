@@ -53,7 +53,7 @@ CREATE INDEX IF NOT EXISTS idx_agent_traces_session
 
 CREATE TABLE IF NOT EXISTS trace_reviews (
   id TEXT PRIMARY KEY,
-  trace_id TEXT NOT NULL,
+  trace_id TEXT NOT NULL REFERENCES agent_traces(id) ON DELETE CASCADE,
   score INTEGER NOT NULL,
   issues_json TEXT NOT NULL DEFAULT '[]',
   suggestions_json TEXT NOT NULL DEFAULT '[]',
@@ -68,8 +68,8 @@ CREATE INDEX IF NOT EXISTS idx_trace_reviews_trace
 
 CREATE TABLE IF NOT EXISTS failure_cases (
   id TEXT PRIMARY KEY,
-  trace_id TEXT NOT NULL,
-  session_id TEXT NOT NULL,
+  trace_id TEXT NOT NULL REFERENCES agent_traces(id) ON DELETE CASCADE,
+  session_id TEXT NOT NULL REFERENCES agent_sessions(id) ON DELETE CASCADE,
   score INTEGER NOT NULL,
   issues_json TEXT NOT NULL DEFAULT '[]',
   input_json TEXT NOT NULL,
