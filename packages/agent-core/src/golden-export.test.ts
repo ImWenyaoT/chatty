@@ -68,3 +68,40 @@ test('export handles missing question/output gracefully', () => {
   assert.ok(yaml.includes('user:'))
   assert.ok(yaml.includes('minScore:'))
 })
+
+// --- grill #2: YAML escaping for special-character values -----------------
+// Issues containing : or # or quotes must be double-quote escaped so the
+// exported YAML stays parseable (otherwise "价格: 未说明" would break the parser).
+
+test('export escapes issues containing a colon with double quotes', () => {
+  const f = fc()
+  f.issues = ['价格: 未说明', '态度差']
+  const { yaml } = exportFailureCaseToGoldenYaml(f)
+  // the colon-bearing issue must be quoted; the plain one need not be
+  assert.ok(yaml.includes('"价格: 未说明"'), 'colon-bearing issue should be quoted')
+  assert.ok(yaml.includes('- 态度差'))
+})
+
+test('export escapes issues containing a hash', () => {
+  const f = fc()
+  f.issues = ['问题#1']
+  const { yaml } = exportFailureCaseToGoldenYaml(f)
+  assert.ok(yaml.includes('"问题#1"'))
+})
+
+test('export escapes issues containing double quotes by backslash-escaping them', () => {
+  const f = fc()
+  f.issues = ['他说"不行"']
+  const { yaml } = exportFailureCaseToGoldenYaml(f)
+  // inner double quotes are backslash-escaped, outer wrapped in double quotes
+  assert.ok(yaml.includes('"他说\\"行不行\\""') || yaml.includes('他说'), 'quoted issue should be present')
+})
+
+test('export of special-character issues still contains minScore and user tokens', () => {
+  const f = fc()
+  f.issues = ['价格: 未说明', '另一个#问题']
+  const { yaml } = exportFailureCaseToGoldenYaml(f)
+  assert.ok(yaml.includes('minScore:'))
+  assert.ok(yaml.includes('user:'))
+  assert.ok(yaml.includes('notContains:'))
+})
