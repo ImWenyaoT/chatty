@@ -1,2 +1,6 @@
-export * from './legacy-rag-service-adapter.js'
 export * from './loop-contracts.js'
+export * from './loop-runner.js'
+export * from './legacy-rag-service-adapter.js'
+export * from './action-classifier.js'
+export * from './tools/registry.js'
+export * from './tools/catalog-stubs.js'
