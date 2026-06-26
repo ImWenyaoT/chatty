@@ -1,13 +1,17 @@
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import {
+  createFailureCaseRepository,
   createMemoryRepository,
   createSessionRepository,
   createTraceRepository,
+  createTraceReviewRepository,
   openDatabase,
+  type FailureCaseRepository,
   type MemoryRepository,
   type SessionRepository,
   type TraceRepository,
+  type TraceReviewRepository,
 } from '@rental/db'
 
 // One SQLite connection per server process. The agent loop is single-process
@@ -15,6 +19,8 @@ import {
 
 let sessionRepo: SessionRepository | undefined
 let traceRepo: TraceRepository | undefined
+let reviewRepo: TraceReviewRepository | undefined
+let failureRepo: FailureCaseRepository | undefined
 let memoryRepo: MemoryRepository | undefined
 let sqliteEnabled = false
 
@@ -37,6 +43,8 @@ function ensureInitialized() {
     const db = openDatabase(dbPath)
     sessionRepo = createSessionRepository(db)
     traceRepo = createTraceRepository(db)
+    reviewRepo = createTraceReviewRepository(db)
+    failureRepo = createFailureCaseRepository(db)
     memoryRepo = createMemoryRepository(db, {
       legacyMemoryPath: path.resolve('rag-service/data/memory-store.json'),
     })
@@ -48,6 +56,8 @@ function ensureInitialized() {
   // memory reads from the legacy store.
   sessionRepo = createInMemorySessionRepo()
   traceRepo = createInMemoryTraceRepo()
+  reviewRepo = createInMemoryTraceReviewRepo()
+  failureRepo = createInMemoryFailureCaseRepo()
   memoryRepo = createMemoryRepository(openDatabase(':memory:'), {
     legacyMemoryPath: path.resolve('rag-service/data/memory-store.json'),
   })
@@ -59,6 +69,8 @@ export function getRepos() {
   return {
     sessions: sessionRepo!,
     traces: traceRepo!,
+    reviews: reviewRepo!,
+    failures: failureRepo!,
     memory: memoryRepo!,
     sqliteEnabled,
   }
@@ -133,6 +145,58 @@ function createInMemoryTraceRepo(): TraceRepository {
     queryBySession(sessionId: string) {
       return map.get(sessionId) ?? []
     },
+    // In-memory mode has no review store to join against, so nothing is
+    // "unevaluated"; the eval loop only runs when SQLite is enabled.
+    findUnevaluated() {
+      return []
+    },
   } as TraceRepository
   return base
+}
+
+function createInMemoryTraceReviewRepo(): TraceReviewRepository {
+  // Minimal no-op fallback for JSON-only mode; the async eval path checks
+  // sqliteEnabled before writing reviews, so this is only for type alignment.
+  return {
+    append(input) {
+      return {
+        id: input.id,
+        traceId: input.traceId,
+        score: input.score,
+        issues: input.issues ?? [],
+        suggestions: input.suggestions ?? [],
+        suggestedReply: input.suggestedReply,
+        evaluatorModel: input.evaluatorModel,
+        promptVersion: input.promptVersion,
+        createdAt: new Date().toISOString(),
+      }
+    },
+    findByTrace() {
+      return []
+    },
+  }
+}
+
+function createInMemoryFailureCaseRepo(): FailureCaseRepository {
+  return {
+    create(input) {
+      return {
+        id: input.id,
+        traceId: input.traceId,
+        sessionId: input.sessionId,
+        score: input.score,
+        issues: input.issues ?? [],
+        input: input.input,
+        output: input.output,
+        status: 'open',
+        createdAt: new Date().toISOString(),
+      }
+    },
+    findOpen() {
+      return []
+    },
+    markPromoted() {
+      // no-op in JSON-only mode
+    },
+  }
 }
