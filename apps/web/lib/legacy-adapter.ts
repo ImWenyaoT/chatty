@@ -2,8 +2,14 @@ import { createRequire } from 'node:module'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { LegacyChatAnswer, LegacyChatInput } from '@rental/shared'
-import { createLegacyRagServiceAdapter, type LegacyRagService } from '@rental/agent-core'
-import { createEvaluator, type Evaluator } from '@rental/agent-core'
+import {
+  createEvaluator,
+  createKnowledgeAdapter,
+  type Evaluator,
+  type KnowledgeAdapter,
+  type LegacyRagService,
+  createLegacyRagServiceAdapter,
+} from '@rental/agent-core'
 
 // Step 5 glue: wires the existing rag-service answerQuestion() into the Chatty
 // loop in-process, behind the LegacyRagService boundary the loop expects. No
@@ -37,6 +43,9 @@ interface RagModule {
     history: Array<{ role: string; content: string }>,
     reply: string,
   ) => Promise<import('@rental/agent-core').EvaluationResult>
+  searchKnowledge: (
+    question: string,
+  ) => Promise<Array<{ score: number; payload: unknown }>>
 }
 
 /**
@@ -86,6 +95,32 @@ export async function loadLegacyEvaluator(): Promise<Evaluator | undefined> {
     const mod = cachedModule
     if (!mod?.evaluateCustomerServiceReply) return undefined
     return createEvaluator((history, reply) => mod.evaluateCustomerServiceReply(history, reply))
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Loads the legacy searchKnowledge() wrapped behind the agent-core
+ * KnowledgeAdapter boundary. The legacy function does qdrant vector search with
+ * a local-vectors JSON fallback; this adapter exposes only the search() shape so
+ * the loop never depends on qdrant directly (PRD §14 / docs §5.6). Returns
+ * undefined when rag-service is unavailable.
+ */
+export async function loadLegacyKnowledgeAdapter(): Promise<KnowledgeAdapter | undefined> {
+  try {
+    if (!cachedModule) {
+      await loadLegacyRagService()
+    }
+    const mod = cachedModule
+    if (!mod?.searchKnowledge) return undefined
+    return createKnowledgeAdapter(async (query) => {
+      const hits = await mod.searchKnowledge(query.question)
+      return hits.slice(0, query.topK ?? hits.length).map((hit) => ({
+        score: hit.score,
+        payload: hit.payload as import('@rental/shared').JsonValue,
+      }))
+    })
   } catch {
     return undefined
   }
