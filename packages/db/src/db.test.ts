@@ -209,3 +209,24 @@ test('failure case repository: create, findOpen, markPromoted', () => {
   failures.markPromoted('fc-1')
   assert.equal(failures.findOpen().length, 0)
 })
+
+test('failure case repository: markDismissed exits the open queue', () => {
+  const db = freshDb()
+  const sessions = createSessionRepository(db)
+  const traces = createTraceRepository(db)
+  const failures = createFailureCaseRepository(db)
+  sessions.create({ id: 'sess-d', customerId: 'cd', conversationId: 'cd:SUIT-001' })
+  traces.append({ id: 'tr-d', sessionId: 'sess-d', eventType: 'agent_reply_sent', input: {} })
+  failures.create({
+    id: 'fc-d',
+    traceId: 'tr-d',
+    sessionId: 'sess-d',
+    score: 2,
+    issues: ['x'],
+    input: {},
+  })
+  assert.equal(failures.findOpen().length, 1)
+  failures.markDismissed('fc-d')
+  // dismissed is a terminal exit: not in the open queue anymore
+  assert.equal(failures.findOpen().length, 0)
+})

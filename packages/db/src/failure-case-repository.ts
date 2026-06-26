@@ -65,6 +65,8 @@ export interface FailureCaseRepository {
   create(input: NewFailureCase): FailureCase
   findOpen(limit?: number): FailureCase[]
   markPromoted(id: string): void
+  /** Marks a failure case as reviewed-but-not-a-regression (the dismissed exit). */
+  markDismissed(id: string): void
 }
 
 /**
@@ -105,6 +107,10 @@ export function createFailureCaseRepository(db: Db): FailureCaseRepository {
 
     markPromoted(id) {
       db.prepare('UPDATE failure_cases SET status = ? WHERE id = ?').run('promoted', id)
+    },
+
+    markDismissed(id) {
+      db.prepare('UPDATE failure_cases SET status = ? WHERE id = ?').run('dismissed', id)
     },
   }
 }

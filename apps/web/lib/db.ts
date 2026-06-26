@@ -198,5 +198,8 @@ function createInMemoryFailureCaseRepo(): FailureCaseRepository {
     markPromoted() {
       // no-op in JSON-only mode
     },
+    markDismissed() {
+      // no-op in JSON-only mode
+    },
   }
 }
