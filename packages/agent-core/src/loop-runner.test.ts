@@ -130,6 +130,52 @@ test('ask_info without legacy: LLM fallback uses product tool', async () => {
   assert.equal(result.toolCalls[0].toolName, 'get_product')
 })
 
+test('ask_info prefers agentsSdkRunner when provided (Phase 4 feature flag)', async () => {
+  const sdkRunner = {
+    async run() {
+      return {
+        sessionId: 'c:SUIT-001',
+        traceId: 'e1',
+        terminality: 'reply_and_wait' as const,
+        reply: 'sdk 路径回答',
+        toolCalls: [],
+        nextStatus: 'waiting_for_user' as const,
+      }
+    },
+  }
+  const runner = createLoopRunner({
+    llm: fakeLlm('should-not-be-used'),
+    classify: classify('ask_info'),
+    agentsSdkRunner: sdkRunner,
+  })
+  const result = await runner.runStep(ctx('这款怎么租'))
+  assert.equal(result.reply, 'sdk 路径回答')
+})
+
+test('agentsSdkRunner is skipped for non-ask_info actions', async () => {
+  let sdkCalled = false
+  const sdkRunner = {
+    async run() {
+      sdkCalled = true
+      return {
+        sessionId: 'c:SUIT-001',
+        traceId: 'e1',
+        terminality: 'reply_and_wait' as const,
+        reply: '',
+        toolCalls: [],
+        nextStatus: 'waiting_for_user' as const,
+      }
+    },
+  }
+  const runner = createLoopRunner({
+    llm: fakeLlm(),
+    classify: classify('small_talk', '你好呀'),
+    agentsSdkRunner: sdkRunner,
+  })
+  await runner.runStep(ctx('你好'))
+  assert.equal(sdkCalled, false)
+})
+
 function fakeLlm(reply = '') {
   return {
     async complete() {

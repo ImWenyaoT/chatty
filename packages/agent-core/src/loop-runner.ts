@@ -1,7 +1,9 @@
 import type {
   AgentStepResult,
+  AgentsSdkRunner,
   ConversationEvent,
   JsonValue,
+  RuntimeTool,
   RuntimeToolCall,
 } from '@rental/shared'
 import type { ChatCompletionsAdapter } from '@rental/llm'
@@ -9,6 +11,7 @@ import type { AgentContext, AgentLoopRunner } from './loop-contracts.js'
 import { MAX_STEPS, createWaitingForUserResult } from './loop-contracts.js'
 import type { LegacyRagService } from './legacy-rag-service-adapter.js'
 import { classifyAction } from './action-classifier.js'
+import type { ActionClass } from './action-classifier.js'
 import type { ToolRegistry } from './tools/registry.js'
 
 export interface CreateLoopRunnerOptions {
@@ -19,6 +22,10 @@ export interface CreateLoopRunnerOptions {
   tools?: ToolRegistry
   /** Inject a custom classifier (tests) instead of the LLM one. */
   classify?: (question: string) => Promise<{ actionClass: string; reason: string; reply?: string }>
+  /** Phase 4: OpenAI Agents SDK runner. When set, ask_info routes here first (feature flag). */
+  agentsSdkRunner?: AgentsSdkRunner
+  /** Action classes that should route through agentsSdkRunner. Defaults to ask_info. */
+  useAgentsSdkFor?: ActionClass[]
 }
 
 /**
@@ -58,7 +65,7 @@ export function createLoopRunner(options: CreateLoopRunnerOptions): AgentLoopRun
         case 'ask_info':
         default:
           // The only path that may consult the legacy answer / RAG capability.
-          return askInfoResult(event, traceId, question, decision.reason, options)
+          return askInfoResult(event, traceId, question, decision.reason, options, context.memory)
       }
     },
   }
@@ -127,7 +134,22 @@ async function askInfoResult(
   question: string,
   reason: string,
   options: CreateLoopRunnerOptions,
+  memory?: AgentContext['memory'],
 ): Promise<AgentStepResult> {
+  // Phase 4 (feature-flagged): when an Agents SDK runner is wired, route
+  // ask_info through it first — it owns tool/handoff loop semantics (docs §5.2).
+  const sdkActions = options.useAgentsSdkFor ?? ['ask_info']
+  if (options.agentsSdkRunner && sdkActions.includes('ask_info')) {
+    const exposed = options.tools?.list() ?? []
+    return options.agentsSdkRunner.run({
+      event,
+      instructions:
+        '你是 Chatty，租衣电商客服。用提供的工具查询商品/库存/订单后简短礼貌地回答；超出范围就转人工。不要编造价格。',
+      context: memory ? { memorySnapshot: memory as unknown as JsonValue } : {},
+      tools: exposed,
+    })
+  }
+
   // Prefer the legacy answer path when wired (Step 5). It already does intent
   // routing, RAG, templating and fact extraction for the rental domain.
   if (options.legacy) {
