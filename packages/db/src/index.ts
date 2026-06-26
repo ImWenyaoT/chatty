@@ -1,1 +1,5 @@
 export * from './sqlite-schema.js'
+export * from './database.js'
+export * from './session-repository.js'
+export * from './trace-repository.js'
+export * from './memory-repository.js'
