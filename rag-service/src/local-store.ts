@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
@@ -6,7 +7,11 @@ import { VectorPoint } from './types.js';
 
 function resolveStorePath() {
   const currentDir = path.dirname(fileURLToPath(import.meta.url));
-  return path.resolve(currentDir, '..', config.localVectorStorePath);
+  // In dist/ the loader sits at dist/src/, so ../data is dist/data (missing).
+  // Prefer the dist-relative path; fall back to the package-root-relative path.
+  const distPath = path.resolve(currentDir, '..', config.localVectorStorePath);
+  if (fsSync.existsSync(distPath)) return distPath;
+  return path.resolve(currentDir, '..', '..', config.localVectorStorePath);
 }
 
 export async function writeLocalVectors(points: VectorPoint[]) {
