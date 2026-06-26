@@ -4,6 +4,7 @@ dist/
 *.log
 .DS_Store
 .claude/
+*.code-workspace
 .env
 .env.*
 !.env.example
@@ -12,3 +13,8 @@ rag-service/data/memory-store.json
 rag-service/data/local-vectors.json
 rag-service/public/dashboard/
 rag-service/dashboard/node_modules/
+
+# Next.js (apps/web)
+.next/
+apps/web/out/
+next-env.d.ts
