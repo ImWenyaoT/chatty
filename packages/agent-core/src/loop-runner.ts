@@ -80,8 +80,11 @@ function readQuestion(event: ConversationEvent): string {
 }
 
 async function withStepBudget<T>(fn: () => Promise<T>): Promise<T> {
-  // Single decision call; MAX_STEPS bounds the overall loop budget for future
-  // tool-chaining phases. Kept explicit so the contract is visible.
+  // NOTE: this is currently a pass-through (single bounded decision per request).
+  // MAX_STEPS is referenced only to keep the symbol live; it does NOT enforce a
+  // budget yet. A real step counter / guardrail lands when tool-chaining is
+  // introduced (docs §5.1). Until then the bounded-step guarantee comes from
+  // runStep() making exactly one routing decision, not from this function.
   void MAX_STEPS
   return fn()
 }
