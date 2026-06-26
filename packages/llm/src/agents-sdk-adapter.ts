@@ -53,9 +53,10 @@ function toSdkTool(rt: RuntimeTool) {
 
 /**
  * Extracts the user question from a ConversationEvent payload, mirroring
- * loop-runner.readQuestion so the SDK run receives the same text.
+ * loop-runner.readQuestion so the SDK run receives the same text. Exported for
+ * unit testing the SDK lane's input mapping without a real API call.
  */
-function readQuestion(input: AgentsSdkRunInput): string {
+export function readQuestion(input: AgentsSdkRunInput): string {
   const payload = input.event.payload
   if (typeof payload === 'string') return payload
   const obj = payload as { question?: unknown } | null
@@ -65,9 +66,10 @@ function readQuestion(input: AgentsSdkRunInput): string {
 /**
  * Converts the SDK RunResult into a Chatty AgentStepResult. A handoff (the run
  * ended on a different agent than the entry agent) maps to handoff_and_wait;
- * otherwise the final text output becomes the reply.
+ * otherwise the final text output becomes the reply. Exported for unit testing
+ * the terminality mapping without driving a real run().
  */
-function toStepResult(input: AgentsSdkRunInput, finalOutput: unknown, handoffed: boolean): AgentStepResult {
+export function toStepResult(input: AgentsSdkRunInput, finalOutput: unknown, handoffed: boolean): AgentStepResult {
   const traceId = input.event.traceId ?? input.event.eventId
   const text = typeof finalOutput === 'string' ? finalOutput : ''
   if (handoffed) {

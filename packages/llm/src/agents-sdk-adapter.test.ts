@@ -1,7 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import type { AgentStepResult, AgentsSdkRunInput, ConversationEvent } from '@rental/shared'
-import { createAgentsSdkRunnerFromFunction } from './agents-sdk-adapter.js'
+import {
+  createAgentsSdkRunnerFromFunction,
+  readQuestion,
+  toStepResult,
+} from './agents-sdk-adapter.js'
 
 function userEvent(question: string): ConversationEvent {
   return {
@@ -67,4 +71,58 @@ test('injected runner can surface handoff terminality', async () => {
   const result = await runner.run(baseInput('我要投诉'))
   assert.equal(result.terminality, 'handoff_and_wait')
   assert.equal(result.nextStatus, 'waiting_for_human')
+})
+
+// --- pure-function coverage of the real SDK lane mapping (grill #1) --------
+// These exercise readQuestion()/toStepResult() without a real OpenAI call,
+// covering the mapping logic of createAgentsSdkRunner that the injection tests
+// above bypass.
+
+test('readQuestion pulls the question string out of a payload object', () => {
+  assert.equal(readQuestion(baseInput('多少钱')), '多少钱')
+})
+
+test('readQuestion handles a plain-string payload', () => {
+  const input: AgentsSdkRunInput = {
+    event: { ...userEvent(''), payload: '直接字符串问题' },
+    instructions: '',
+    context: {},
+  }
+  assert.equal(readQuestion(input), '直接字符串问题')
+})
+
+test('readQuestion returns empty string when payload has no question', () => {
+  const input: AgentsSdkRunInput = {
+    event: { ...userEvent(''), payload: { other: 'x' } },
+    instructions: '',
+    context: {},
+  }
+  assert.equal(readQuestion(input), '')
+})
+
+test('toStepResult maps a normal reply to reply_and_wait', () => {
+  const r = toStepResult(baseInput('在吗'), '在的，请问有什么可以帮您？', false)
+  assert.equal(r.terminality, 'reply_and_wait')
+  assert.equal(r.nextStatus, 'waiting_for_user')
+  assert.equal(r.reply, '在的，请问有什么可以帮您？')
+  assert.equal(r.sessionId, 'c:SUIT-001')
+  assert.equal(r.traceId, 'tr1')
+})
+
+test('toStepResult maps a handoff to handoff_and_wait', () => {
+  const r = toStepResult(baseInput('转人工'), '好的，帮您转接', true)
+  assert.equal(r.terminality, 'handoff_and_wait')
+  assert.equal(r.nextStatus, 'waiting_for_human')
+})
+
+test('toStepResult falls back to a canned handoff reply when output is empty', () => {
+  const r = toStepResult(baseInput('投诉'), '', true)
+  assert.equal(r.terminality, 'handoff_and_wait')
+  assert.ok((r.reply ?? '').length > 0, 'should fall back to a canned handoff message')
+})
+
+test('toStepResult carries an empty reply when non-handoff output is empty', () => {
+  const r = toStepResult(baseInput('hi'), '', false)
+  assert.equal(r.terminality, 'reply_and_wait')
+  assert.equal(r.reply, '')
 })
