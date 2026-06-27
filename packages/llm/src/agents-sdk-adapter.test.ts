@@ -151,6 +151,25 @@ test('sdkToolExecute refuses an approvalRequired tool without calling execute', 
   assert.equal(out.refused, true, 'should return a structured refusal')
 })
 
+test('sdkToolExecute refuses a medium-risk tool without calling execute', async () => {
+  // create_handoff is medium risk but approvalRequired:false; the boundary must
+  // still refuse it so it matches the loop-runner policy filter (low-risk only).
+  let executed = false
+  const handoffTool: RuntimeTool = {
+    name: 'create_handoff',
+    description: 'handoff',
+    risk: 'medium',
+    approvalRequired: false,
+    async execute() {
+      executed = true
+      return { ok: true }
+    },
+  }
+  const out = (await sdkToolExecute(handoffTool)({})) as unknown as { refused?: boolean }
+  assert.equal(executed, false, 'medium-risk tool must not auto-run in the SDK boundary')
+  assert.equal(out.refused, true)
+})
+
 test('sdkToolExecute runs a low-risk tool normally', async () => {
   const productTool: RuntimeTool = {
     name: 'get_product',

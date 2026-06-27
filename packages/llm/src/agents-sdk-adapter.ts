@@ -36,19 +36,24 @@ const LOOSE_PARAMS = z.object({}).passthrough()
 /**
  * Builds the execute() handler for an SDK-mapped tool, with a hard safety gate.
  *
- * Defense-in-depth: the loop-runner already withholds approval-gated tools from
- * the SDK lane via its policy filter, but createAgentsSdkRunner is a public
- * boundary that a caller could hand a high-risk RuntimeTool directly. An
- * approvalRequired tool is therefore NEVER auto-executed here; instead a
- * structured refusal is returned so the model can react (e.g. ask for human
- * approval) without any side effect firing.
+ * Defense-in-depth: the loop-runner already withholds non-low-risk tools from
+ * the SDK lane via its policy filter (createDefaultPolicy auto-allows low risk
+ * only), but createAgentsSdkRunner is a public boundary a caller could hand a
+ * higher-risk RuntimeTool directly. Anything above low risk — or any
+ * approvalRequired tool — is therefore NEVER auto-executed here; a structured
+ * refusal is returned instead so the model can react (e.g. route to a human)
+ * without any side effect firing. This mirrors the loop-runner filter so both
+ * layers withhold the same set (refund=high, handoff=medium).
  *
  * Exported so the gate can be unit-tested without driving a real SDK run().
  */
 export function sdkToolExecute(rt: RuntimeTool): (args: unknown) => Promise<string> {
   return async (args) => {
-    if (rt.approvalRequired) {
-      return { refused: true, reason: `tool ${rt.name} requires human approval` } as unknown as string
+    if (rt.approvalRequired || rt.risk !== 'low') {
+      return {
+        refused: true,
+        reason: `tool ${rt.name} (risk=${rt.risk}) is not auto-runnable in the SDK lane; needs a human`,
+      } as unknown as string
     }
     const result = await rt.execute((args ?? {}) as Record<string, JsonValue>)
     // SDK expects a serialisable return; JsonValue is already JSON-safe.
