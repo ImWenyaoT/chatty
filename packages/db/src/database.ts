@@ -1,3 +1,5 @@
+import { mkdirSync } from 'node:fs'
+import { dirname } from 'node:path'
 import Database from 'better-sqlite3'
 import { getSqliteSchemaSql } from './sqlite-schema.js'
 
@@ -11,6 +13,11 @@ export { Database }
  * in place. Migrations are idempotent (CREATE TABLE IF NOT EXISTS).
  */
 export function openDatabase(path = ':memory:'): Db {
+  // Ensure the parent directory exists for file-backed databases; better-sqlite3
+  // creates the file but not intermediate directories (e.g. CHATTY_DB_PATH=./data/chatty.db).
+  if (path !== ':memory:' && path !== '') {
+    mkdirSync(dirname(path), { recursive: true })
+  }
   const db = new Database(path)
   // Recommended pragmas for a single-process write workload.
   db.pragma('journal_mode = WAL')

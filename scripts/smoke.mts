@@ -34,7 +34,7 @@ const sessions = createSessionRepository(db)
 const traces = createTraceRepository(db)
 const reviews = createTraceReviewRepository(db)
 const failures = createFailureCaseRepository(db)
-createMemoryRepository(db) // ensure memory repo constructs (JSON fallback path)
+const memory = createMemoryRepository(db)
 
 // 1. session + trace
 const s = sessions.create({
@@ -129,6 +129,17 @@ try {
   fkRejected = true
 }
 ok('FK rejects orphan failure case', fkRejected === true)
+
+// 7. memory continuity: appended turns accumulate and a later snapshot reads
+// them back (the write path the route uses to avoid conversational amnesia).
+const memKey = { customerId: 'c', productId: 'SUIT-001', conversationId: 'c:SUIT-001' }
+memory.appendRecentMessages(memKey, [
+  { role: 'user', content: '多少钱' },
+  { role: 'assistant', content: '日租 199 元' },
+])
+memory.appendRecentMessages(memKey, [{ role: 'user', content: '尺码有 L 吗' }])
+const memSnap = memory.snapshot(memKey)
+ok('memory continuity: recentMessages accumulate across turns', memSnap.recentMessages.length === 3)
 
 console.log(`\nSmoke result: ${pass} passed, ${fail} failed`)
 process.exit(fail > 0 ? 1 : 0)

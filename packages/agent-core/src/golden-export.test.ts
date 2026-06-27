@@ -55,9 +55,12 @@ test('export with no issues still emits valid yaml', () => {
   const f = fc()
   f.issues = []
   const { yaml } = exportFailureCaseToGoldenYaml(f)
-  // no issues => notContains is an empty list
-  assert.ok(yaml.includes('notContains:'))
-  assert.ok(yaml.includes('minScore:'))
+  // no issues => notContains is an inline empty list, and minScore stays on its
+  // own indented line. The previous implementation produced "notContains:\n[]minScore: 6",
+  // a single corrupt line that breaks the golden YAML parser.
+  assert.ok(yaml.includes('notContains: []'), 'empty issues should yield an inline empty list')
+  assert.ok(!yaml.includes('[]minScore'), 'notContains and minScore must not be concatenated')
+  assert.match(yaml, /\n\s+minScore: 6/, 'minScore must be on its own indented line')
 })
 
 test('export handles missing question/output gracefully', () => {

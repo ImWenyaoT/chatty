@@ -40,3 +40,26 @@ export type EvaluateFunction = Evaluator['evaluate']
 export function createEvaluator(evaluate: EvaluateFunction): Evaluator {
   return { evaluate }
 }
+
+/**
+ * Coerces an arbitrary recentMessages value (JsonValue[] from SQLite or the
+ * legacy JSON store) into the {role, content} shape the evaluator expects.
+ *
+ * Only entries with string `role` and `content` survive; extra fields (legacy
+ * `timestamp`) are dropped and malformed entries are skipped, so a stray shape
+ * in the memory store can never feed the evaluator garbage. Returns [] for any
+ * non-array input.
+ */
+export function normalizeEvalHistory(recentMessages: unknown): EvaluationMessage[] {
+  if (!Array.isArray(recentMessages)) return []
+  const out: EvaluationMessage[] = []
+  for (const entry of recentMessages) {
+    if (entry && typeof entry === 'object') {
+      const { role, content } = entry as Record<string, unknown>
+      if (typeof role === 'string' && typeof content === 'string') {
+        out.push({ role, content })
+      }
+    }
+  }
+  return out
+}

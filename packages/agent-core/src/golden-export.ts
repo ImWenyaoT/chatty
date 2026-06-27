@@ -40,11 +40,14 @@ export function exportFailureCaseToGoldenYaml(fc: FailureCaseCandidate): GoldenE
   const safeName = fc.traceId.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase()
   const filename = `regression-${safeName}.yaml`
 
-  const notContainsBlock =
+  // Build the notContains section so it stays valid YAML in both shapes:
+  //   issues present -> a block sequence under the key
+  //   issues empty   -> an inline empty list on the key line
+  // minScore is always emitted as the next sibling key at the same indent.
+  const notContainsSection =
     fc.issues.length > 0
-      ? fc.issues.map((issue) => `      - ${yamlScalar(issue)}`).join('\n') +
-        '\n      '
-      : '[]'
+      ? ['      notContains:', ...fc.issues.map((issue) => `      - ${yamlScalar(issue)}`)].join('\n')
+      : '      notContains: []'
 
   const yaml = `name: regression-${safeName}
 description: 自动从低分 trace ${fc.traceId} 导出的回归用例（score=${fc.score}）
@@ -52,8 +55,8 @@ customerId: golden-regression-${safeName}
 steps:
   - user: ${yamlScalar(user)}
     expect:
-      notContains:
-${notContainsBlock}minScore: 6
+${notContainsSection}
+      minScore: 6
 # original reply was: ${yamlScalar(reply)}
 # original score: ${fc.score}
 `

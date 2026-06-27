@@ -26,6 +26,9 @@ jobs:
       - name: Build package skeleton
         run: npm run build:skeleton
 
+      - name: Smoke test (data path, no network)
+        run: node scripts/smoke.mts
+
       - name: Test workspaces
         run: npm test
 

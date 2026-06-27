@@ -5,6 +5,7 @@ import {
   createLoopRunner,
   createDefaultToolRegistry,
   deriveFailureCase,
+  normalizeEvalHistory,
   shouldCreateFailureCase,
 } from '@rental/agent-core'
 import { getRepos, newId } from '@/lib/db'
@@ -117,7 +118,6 @@ export async function POST(request: Request) {
       productMemory: snapshot.productMemory,
       recentMessages: snapshot.recentMessages,
     },
-    tools: [],
   })
 
   // 6. Persist trace + update session status. One trace row per user turn.
@@ -136,13 +136,29 @@ export async function POST(request: Request) {
     productId: input.productId,
   })
 
+  // 6b. Conservative continuity write (docs §6.3): append this turn's messages
+  //     to the conversation's recentMessages so the NEXT snapshot has prior
+  //     context — closing the amnesia where the loop read memory but never wrote
+  //     it. Only the message log is persisted; customer profile fields and
+  //     transient RAG evidence are NOT promoted (chatty-memory-trace-migration).
+  //     Gated on SQLite like eval: in JSON-only mode the legacy store stays
+  //     authoritative and writing to an ephemeral in-memory db is pointless.
+  if (sqliteEnabled) {
+    const turn: import('@rental/shared').JsonValue[] = [{ role: 'user', content: input.question }]
+    if (result.reply) turn.push({ role: 'assistant', content: result.reply })
+    memory.appendRecentMessages(
+      { customerId: input.customerId, productId: input.productId ?? 'general', conversationId },
+      turn,
+    )
+  }
+
   // 7. Async eval (PRD §10/§13). Fire-and-forget: score the reply, persist a
   //    trace_review, and create a failure_case when below threshold. Only runs
   //    when the evaluator and SQLite persistence are available. Never blocks or
   //    fails the request — eval errors are swallowed and logged.
   if (evaluator && result.reply && sqliteEnabled) {
     void evaluateAndRecord(evaluator, {
-      history: snapshot.recentMessages as Array<{ role: string; content: string }>,
+      history: normalizeEvalHistory(snapshot.recentMessages),
       reply: result.reply,
       traceId,
       sessionId: session.id,
