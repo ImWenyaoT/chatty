@@ -5,10 +5,12 @@
   "type": "module",
   "workspaces": [
     "packages/*",
+    "apps/*",
     "rag-service"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
+    "test": "npm test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "build:rag-service": "npm --workspace rental-rag-service run build",
     "build:skeleton": "tsc -b packages/shared packages/db packages/agent-core packages/llm --pretty false",
@@ -22,5 +24,8 @@
     "@openai/agents": "^0.12.0",
     "openai": "^6.45.0",
     "zod": "^4.0.0"
+  },
+  "allowScripts": {
+    "better-sqlite3@12.11.1": true
   }
 }

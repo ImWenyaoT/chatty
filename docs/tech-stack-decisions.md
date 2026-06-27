@@ -90,6 +90,9 @@ Runtime concepts:
 Development concepts:
 
 - `dev skills`: Codex-side skills and plugins used while developing, such as OpenAI Developers, Build Web Apps, and Superpowers.
+- Project-level Codex workflow skills live under `.agents/skills/`.
+- Non-trivial or high-risk development should include at least one read-only sub-agent grill before completion; sub-agent collaboration remains tree-shaped with the main agent as controller.
+- Open-source or external skills can be adopted or adapted only with recorded provenance, license compatibility, and local changes.
 
 Do not call customer-service runtime capabilities "skills" in product docs.
 
