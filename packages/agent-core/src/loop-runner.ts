@@ -155,6 +155,11 @@ async function askInfoResult(
     // Only auto-expose tools the safety policy allows (low-risk). Approval-gated
     // tools (refund/handoff) are withheld so an autonomous SDK run can never
     // trigger a side effect that should require an operator (docs §9 policies).
+    // NOTE: the policy's session-status dimension (deny-all on a closed session)
+    // is not threaded here yet — the loop step does not receive session status,
+    // so we evaluate against 'active'. Exposed tools are read/note stubs, so the
+    // residual risk is a low-risk tool running for a closed session; tightening
+    // this needs sessionStatus plumbed into AgentContext.
     const policy = options.policy ?? createDefaultPolicy()
     const exposed = (options.tools?.list() ?? []).filter(
       (t) =>
