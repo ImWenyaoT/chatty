@@ -179,6 +179,36 @@ test('SDK lane is exposed only policy-allowed (low-risk) tools, never approval-g
   assert.ok(!exposedNames.includes('create_handoff'), 'medium-risk tool must be withheld from auto-run')
 })
 
+test('SDK lane exposes no tools when the session is closed (policy deny-all)', async () => {
+  const { createDefaultToolRegistry } = await import('./tools/registry.js')
+  let exposedNames: string[] = ['unset']
+  const sdkRunner = {
+    async run(input: Parameters<import('@rental/shared').AgentsSdkRunner['run']>[0]) {
+      exposedNames = (input.tools ?? []).map((t) => t.name)
+      return {
+        sessionId: 'c:SUIT-001',
+        traceId: 'e1',
+        terminality: 'reply_and_wait' as const,
+        reply: 'ok',
+        toolCalls: [],
+        nextStatus: 'waiting_for_user' as const,
+      }
+    },
+  }
+  const runner = createLoopRunner({
+    llm: fakeLlm(),
+    classify: classify('ask_info'),
+    agentsSdkRunner: sdkRunner,
+    tools: createDefaultToolRegistry(),
+  })
+  await runner.runStep({
+    event: userEvent('这款多少钱'),
+    memory: emptyMemory,
+    sessionStatus: 'closed',
+  })
+  assert.deepEqual(exposedNames, [], 'a closed session must auto-expose no tools')
+})
+
 test('agentsSdkRunner is skipped for non-ask_info actions', async () => {
   let sdkCalled = false
   const sdkRunner = {

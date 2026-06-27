@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { legacyChatInputSchema } from '@rental/shared'
+import { isPlaygroundAuthorized, legacyChatInputSchema } from '@rental/shared'
 import { createChatCompletionsAdapterFromEnv } from '@rental/llm'
 import {
   createLoopRunner,
@@ -26,6 +26,13 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
 export async function POST(request: Request) {
+  // Optional shared-key gate: open when CHATTY_API_KEY is unset (zero-config dev),
+  // enforced when a deployed instance sets it. Not per-customer identity (see
+  // isPlaygroundAuthorized docs) — that needs a session/identity layer.
+  if (!isPlaygroundAuthorized(request.headers.get('x-api-key'), process.env.CHATTY_API_KEY)) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  }
+
   let body: unknown
   try {
     body = await request.json()
@@ -110,6 +117,7 @@ export async function POST(request: Request) {
   // 5. Run one bounded step.
   const result = await runner.runStep({
     event,
+    sessionStatus: session.status,
     memory: {
       customerId: input.customerId,
       conversationId,
