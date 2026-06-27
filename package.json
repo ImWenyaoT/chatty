@@ -14,7 +14,8 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "build:rag-service": "npm --workspace rental-rag-service run build",
     "build:skeleton": "tsc -b packages/shared packages/db packages/agent-core packages/llm --pretty false",
-    "typecheck:skeleton": "npm run build:skeleton && npm run typecheck --workspace @rental/agent-core && npm run typecheck --workspace @rental/llm"
+    "typecheck:skeleton": "npm run build:skeleton && npm run typecheck --workspace @rental/agent-core && npm run typecheck --workspace @rental/llm",
+    "smoke": "npm run build:skeleton && node scripts/smoke.mts"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",

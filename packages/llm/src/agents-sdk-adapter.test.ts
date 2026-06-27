@@ -1,9 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import type { AgentStepResult, AgentsSdkRunInput, ConversationEvent } from '@rental/shared'
+import type { AgentStepResult, AgentsSdkRunInput, ConversationEvent, RuntimeTool } from '@rental/shared'
 import {
   createAgentsSdkRunnerFromFunction,
   readQuestion,
+  sdkToolExecute,
   toStepResult,
 } from './agents-sdk-adapter.js'
 
@@ -125,4 +126,43 @@ test('toStepResult carries an empty reply when non-handoff output is empty', () 
   const r = toStepResult(baseInput('hi'), '', false)
   assert.equal(r.terminality, 'reply_and_wait')
   assert.equal(r.reply, '')
+})
+
+// --- defense-in-depth: the SDK tool executor never auto-runs an approval-gated
+// tool, even if one is handed to createAgentsSdkRunner directly (bypassing the
+// loop-runner's policy filter). ---------------------------------------------
+
+test('sdkToolExecute refuses an approvalRequired tool without calling execute', async () => {
+  let executed = false
+  const refundTool: RuntimeTool = {
+    name: 'issue_refund',
+    description: 'refund',
+    risk: 'high',
+    approvalRequired: true,
+    async execute() {
+      executed = true
+      return { ok: true }
+    },
+  }
+  const out = (await sdkToolExecute(refundTool)({ orderNo: 'A1', amount: 100 })) as unknown as {
+    refused?: boolean
+  }
+  assert.equal(executed, false, 'must not execute an approval-gated tool')
+  assert.equal(out.refused, true, 'should return a structured refusal')
+})
+
+test('sdkToolExecute runs a low-risk tool normally', async () => {
+  const productTool: RuntimeTool = {
+    name: 'get_product',
+    description: 'product',
+    risk: 'low',
+    approvalRequired: false,
+    async execute(args) {
+      return { found: true, echo: args }
+    },
+  }
+  const out = (await sdkToolExecute(productTool)({ productId: 'SUIT-001' })) as unknown as {
+    found?: boolean
+  }
+  assert.equal(out.found, true)
 })

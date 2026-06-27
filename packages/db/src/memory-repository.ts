@@ -21,6 +21,14 @@ export interface MemoryRepository {
   snapshot(input: SnapshotInput): MemorySnapshotRecord
   upsertCustomer(customerId: string, patch: Partial<CustomerMemoryRecord>): void
   upsertProduct(input: ProductMemoryInput, patch: Partial<ProductMemoryRecord>): void
+  /**
+   * Appends messages to a conversation's recentMessages and persists them,
+   * capped to the most recent `cap` (default 20). This is the conservative
+   * continuity write (docs §6.3 / chatty-memory-trace-migration): it touches
+   * only the running message log — never customer profile fields, and it does
+   * not promote transient RAG evidence into long-term memory.
+   */
+  appendRecentMessages(input: ProductMemoryInput, messages: JsonValue[], cap?: number): void
 }
 
 export interface CustomerMemoryRecord {
@@ -174,6 +182,15 @@ export function createMemoryRepository(
         JSON.stringify(merged.reviews),
         ts,
       )
+    },
+
+    appendRecentMessages(input, messages, cap = 20) {
+      const existing = this.getProduct(input.customerId, input.productId, input.conversationId)
+      const prior = Array.isArray(existing?.recentMessages)
+        ? (existing!.recentMessages as JsonValue[])
+        : []
+      const merged = [...prior, ...messages].slice(-cap)
+      this.upsertProduct(input, { recentMessages: merged })
     },
   }
 }

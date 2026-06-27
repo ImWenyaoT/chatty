@@ -3,13 +3,11 @@ import type {
   ConversationEvent,
   JsonValue,
   MemorySnapshot,
-  RuntimeTool,
 } from '@rental/shared'
 
 export interface AgentContext {
   event: ConversationEvent
   memory: MemorySnapshot
-  tools: RuntimeTool[]
 }
 
 export interface AgentLoopRunner {
