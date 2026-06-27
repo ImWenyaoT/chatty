@@ -42,3 +42,10 @@ No external/community skills were copied or forked in this sweep. If an external
 ## Reuse principle enforced
 
 The single most important reuse decision: **the legacy evaluator (`evaluateCustomerServiceReply`) and golden runner (`scripts/eval.ts`) are reused, not rewritten.** agent-core's `Evaluator` interface is a thin injection boundary around them; the web layer bridges via `loadLegacyEvaluator()`. No scoring logic was forked.
+
+## 2026-06-27 — Knowledge retrieval boundary
+
+Extended the same reuse pattern to knowledge retrieval (PRD §14):
+- `KnowledgeAdapter` interface in agent-core wraps legacy `searchKnowledge()` (qdrant vector search + local-vectors JSON fallback) via `apps/web/lib/legacy-adapter.ts:loadLegacyKnowledgeAdapter()`.
+- The loop depends on the boundary, never on qdrant — so the retriever can be swapped (or replaced by a media/product structured lookup) without touching product logic.
+- No new dependency introduced.
