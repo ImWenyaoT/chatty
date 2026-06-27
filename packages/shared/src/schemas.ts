@@ -90,3 +90,14 @@ export const legacyChatInputSchema = z.object({
   sessionContext: z.record(z.string(), jsonPrimitiveSchema).optional(),
   stylistPrompt: z.string().min(1).optional(),
 })
+
+/**
+ * Validates the context object handed to an Agents SDK runner. The runtimeTool
+ * array is left loose (record of name/json) since RuntimeTool.execute cannot be
+ * serialized; callers pass real RuntimeTool[] objects at runtime.
+ */
+export const agentsSdkRunInputSchema = z.object({
+  event: conversationEventSchema,
+  instructions: z.string(),
+  context: z.record(z.string(), jsonValueSchema),
+})

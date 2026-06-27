@@ -6,7 +6,13 @@ import YAML from 'yaml';
 import { config } from './config.js';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
-const configDir = path.resolve(currentDir, '..', 'config');
+// In tsx dev the loader lives at src/, so ../config resolves to the source
+// config dir. When imported from the compiled dist/src/, ../config would point
+// at dist/config (which is never populated). Fall back to the package root's
+// config dir so answerQuestion() is importable in-process from dist too.
+const distConfigDir = path.resolve(currentDir, '..', 'config');
+const sourceConfigDir = path.resolve(currentDir, '..', '..', 'config');
+const configDir = fs.existsSync(distConfigDir) ? distConfigDir : sourceConfigDir;
 
 export interface PromptsFile {
   stylistPrompt: string;
