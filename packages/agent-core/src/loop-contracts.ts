@@ -1,4 +1,5 @@
 import type {
+  AgentSessionStatus,
   AgentStepResult,
   ConversationEvent,
   JsonValue,
@@ -8,6 +9,12 @@ import type {
 export interface AgentContext {
   event: ConversationEvent
   memory: MemorySnapshot
+  /**
+   * Status of the session this step runs in. Fed to the safety policy so a
+   * closed session denies side-effecting tools (policy deny-all on closed).
+   * Defaults to 'active' when the caller does not supply it.
+   */
+  sessionStatus?: AgentSessionStatus
 }
 
 export interface AgentLoopRunner {

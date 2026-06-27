@@ -118,6 +118,21 @@ export function toStepResult(input: AgentsSdkRunInput, finalOutput: unknown, han
 }
 
 /**
+ * Decides whether an SDK run ended in a handoff to a human. Two signals count:
+ * the model called the escalate_to_human tool during the run, or the run ended
+ * on a different agent than the entry agent (SDK-native handoff). Either means
+ * handoff_and_wait. Pure + exported so the rule is unit-tested without a real run.
+ */
+export function isHandoff(
+  escalated: boolean,
+  lastAgentName: string | undefined,
+  entryAgentName: string,
+): boolean {
+  if (escalated) return true
+  return lastAgentName != null && lastAgentName !== entryAgentName
+}
+
+/**
  * Collects the RuntimeToolCall descriptors for the tools made available to the
  * run, so the trace records which capabilities were exposed. (Per-call detail
  * requires inspecting newItems; MVP records availability, not invocation.)
@@ -143,22 +158,45 @@ export function createAgentsSdkRunner(options: CreateAgentsSdkRunnerOptions): Ag
     async run(input: AgentsSdkRunInput): Promise<AgentStepResult> {
       const question = readQuestion(input)
       const exposed = input.tools ?? []
-      const sdkTools = exposed.map(toSdkTool)
       const agentName = options.agentName ?? 'ChattyAgent'
+
+      // Always give the SDK agent a way to escalate to a human. Tool-calling is
+      // the cross-provider baseline (SDK-native handoffs need a real OpenAI
+      // endpoint), so this works even when the SDK lane targets DeepSeek. The
+      // closure flag is read after the run to map onto handoff_and_wait.
+      let escalation: { triggered: boolean; reason: string } = { triggered: false, reason: '' }
+      const escalateTool = tool({
+        name: 'escalate_to_human',
+        description:
+          '当你无法回答、问题超出租衣客服范围、或客户明确要求人工/投诉/退款时调用，转接人工客服。',
+        parameters: z.object({ reason: z.string() }).passthrough(),
+        async execute(args) {
+          const reason = typeof (args as { reason?: unknown })?.reason === 'string'
+            ? (args as { reason: string }).reason
+            : ''
+          escalation = { triggered: true, reason }
+          return { ok: true, escalated: true } as unknown as string
+        },
+      })
+
       const agent = new Agent({
         name: agentName,
         instructions: input.instructions,
         model: options.model,
-        tools: sdkTools,
+        tools: [...exposed.map(toSdkTool), escalateTool],
       })
 
       const result = await run(agent, question, {
         maxTurns: options.maxTurns ?? 3,
       })
 
-      const handoffed = result.lastAgent != null && result.lastAgent.name !== agentName
+      const handoffed = isHandoff(escalation.triggered, result.lastAgent?.name, agentName)
       const stepResult = toStepResult(input, result.finalOutput, handoffed)
       stepResult.toolCalls = collectToolCalls(exposed)
+      if (escalation.triggered) {
+        // Surface why the bot escalated so the human agent has context (PRD §15).
+        stepResult.memoryPatch = { handoffReason: escalation.reason } as unknown as JsonValue
+      }
       return stepResult
     },
   }
