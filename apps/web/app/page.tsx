@@ -1,39 +1,47 @@
 'use client'
 
-import { FormEvent, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { SessionBar } from './components/SessionBar'
+import { ChatMessage } from './components/ChatMessage'
+import { Composer } from './components/Composer'
+import type { PlaygroundResponse, Turn } from './components/types'
 
-// Verification-only chat surface. Not the final product UI — it exists so a human
-// can drive the agent loop end to end and see replies + trace ids during dev.
-// A polished client can later fork openai-responses-starter-app instead.
+// Chatty concierge surface. Drives the bounded agent loop via /api/playground and
+// renders what the loop actually returns: the reply, a live session status, the
+// human-handoff state, and a per-message trace detail for debugging.
 
-type Turn = {
-  id: number
-  role: 'user' | 'agent' | 'system'
-  text: string
+const EXAMPLE_PROMPTS = [
+  '这件西装多少钱一天？',
+  '4月29到30号有货吗？',
+  '我身高180体重70，这款能穿吗？',
+  '我要退款',
+]
+
+/** A reply is a handoff when the loop escalates to a human. */
+function isHandoff(res: PlaygroundResponse): boolean {
+  return res.terminality === 'handoff_and_wait' || res.status === 'waiting_for_human'
 }
 
-const CUSTOMER_ID = 'playground-customer'
-const PRODUCT_ID = 'SUIT-001'
-
-export default function PlaygroundPage() {
-  const [turns, setTurns] = useState<Turn[]>([
-    {
-      id: 0,
-      role: 'system',
-      text: 'Chatty playground. Ask about rental, size, price, or shipping. Replies hit /api/playground.',
-    },
-  ])
+export default function ConciergePage() {
+  const [turns, setTurns] = useState<Turn[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
+  const [status, setStatus] = useState('active')
+  const [productId, setProductId] = useState('SUIT-001')
+  const [customerId, setCustomerId] = useState('playground-customer')
   const nextId = useRef(1)
+  const bottom = useRef<HTMLDivElement>(null)
 
-  async function send(event: FormEvent) {
-    event.preventDefault()
-    const question = input.trim()
-    if (!question || sending) return
+  // Keep the latest turn (and the typing indicator) in view.
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [turns, sending])
 
-    const userTurn: Turn = { id: nextId.current++, role: 'user', text: question }
-    setTurns((prev) => [...prev, userTurn])
+  async function send(question: string) {
+    const text = question.trim()
+    if (!text || sending) return
+
+    setTurns((prev) => [...prev, { id: nextId.current++, role: 'user', text }])
     setInput('')
     setSending(true)
 
@@ -41,30 +49,37 @@ export default function PlaygroundPage() {
       const res = await fetch('/api/playground', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          customerId: CUSTOMER_ID,
-          productId: PRODUCT_ID,
-          question,
-        }),
+        body: JSON.stringify({ customerId, productId, question: text }),
       })
       const data = await res.json()
+
       if (!res.ok) {
         setTurns((prev) => [
           ...prev,
           {
             id: nextId.current++,
             role: 'system',
-            text: `[${res.status}] ${data?.message ?? data?.error ?? 'request failed'}`,
+            error: true,
+            text: `[${res.status}] ${data?.error ?? data?.message ?? '请求失败'}`,
           },
         ])
         return
       }
+
+      const reply = data as PlaygroundResponse
+      const handoff = isHandoff(reply)
+      setStatus(reply.status)
       setTurns((prev) => [
         ...prev,
         {
           id: nextId.current++,
           role: 'agent',
-          text: `${data.reply ?? '(no reply)'}${data.traceId ? `\n— trace ${data.traceId}` : ''}`,
+          handoff,
+          text: reply.reply || '（无回复）',
+          traceId: reply.traceId,
+          sessionId: reply.sessionId,
+          status: reply.status,
+          terminality: reply.terminality,
         },
       ])
     } catch (err) {
@@ -73,7 +88,8 @@ export default function PlaygroundPage() {
         {
           id: nextId.current++,
           role: 'system',
-          text: `network error: ${err instanceof Error ? err.message : String(err)}`,
+          error: true,
+          text: `网络错误：${err instanceof Error ? err.message : String(err)}`,
         },
       ])
     } finally {
@@ -82,35 +98,46 @@ export default function PlaygroundPage() {
   }
 
   return (
-    <main className="playground">
-      <header>
-        <h1>Chatty</h1>
-        <p>Rental-commerce agent playground</p>
-      </header>
+    <main className="shell">
+      <SessionBar
+        status={status}
+        productId={productId}
+        customerId={customerId}
+        disabled={sending}
+        onProductId={setProductId}
+        onCustomerId={setCustomerId}
+      />
 
-      <section className="messages">
-        {turns.map((turn) => (
-          <div key={turn.id} className={`msg ${turn.role}`}>
-            {turn.text}
+      <section className="stream">
+        {turns.length === 0 && !sending ? (
+          <div className="empty">
+            <h2>在的，您想租点什么？</h2>
+            <p>问问租期、尺码、价格或物流，超出范围我会帮您转人工。</p>
+            <div className="prompts">
+              {EXAMPLE_PROMPTS.map((p) => (
+                <button key={p} type="button" onClick={() => send(p)}>
+                  {p}
+                </button>
+              ))}
+            </div>
           </div>
+        ) : null}
+
+        {turns.map((turn) => (
+          <ChatMessage key={turn.id} turn={turn} />
         ))}
-        {sending ? <div className="msg system">thinking…</div> : null}
+
+        {sending ? (
+          <div className="typing" aria-label="Chatty 正在输入">
+            <span />
+            <span />
+            <span />
+          </div>
+        ) : null}
+        <div ref={bottom} />
       </section>
 
-      <div className="composer">
-        <form onSubmit={send}>
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="输入消息，回车发送"
-            disabled={sending}
-            autoFocus
-          />
-          <button type="submit" disabled={sending || !input.trim()}>
-            发送
-          </button>
-        </form>
-      </div>
+      <Composer value={input} sending={sending} onChange={setInput} onSubmit={() => send(input)} />
     </main>
   )
 }
