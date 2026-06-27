@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import type { AgentStepResult, AgentsSdkRunInput, ConversationEvent, RuntimeTool } from '@rental/shared'
 import {
   createAgentsSdkRunnerFromFunction,
+  isHandoff,
   readQuestion,
   sdkToolExecute,
   toStepResult,
@@ -168,6 +169,20 @@ test('sdkToolExecute refuses a medium-risk tool without calling execute', async 
   const out = (await sdkToolExecute(handoffTool)({})) as unknown as { refused?: boolean }
   assert.equal(executed, false, 'medium-risk tool must not auto-run in the SDK boundary')
   assert.equal(out.refused, true)
+})
+
+test('isHandoff treats an escalation-tool call as a handoff', () => {
+  // The model called escalate_to_human during the run.
+  assert.equal(isHandoff(true, 'ChattyAgent', 'ChattyAgent'), true)
+})
+
+test('isHandoff treats a run ending on a different agent as a handoff', () => {
+  assert.equal(isHandoff(false, 'HumanAgent', 'ChattyAgent'), true)
+})
+
+test('isHandoff is false for a normal reply (same agent, no escalation)', () => {
+  assert.equal(isHandoff(false, 'ChattyAgent', 'ChattyAgent'), false)
+  assert.equal(isHandoff(false, undefined, 'ChattyAgent'), false)
 })
 
 test('sdkToolExecute runs a low-risk tool normally', async () => {

@@ -74,7 +74,7 @@ export function createLoopRunner(options: CreateLoopRunnerOptions): AgentLoopRun
         case 'ask_info':
         default:
           // The only path that may consult the legacy answer / RAG capability.
-          return askInfoResult(event, traceId, question, decision.reason, options, context.memory)
+          return askInfoResult(event, traceId, question, decision.reason, options, context.memory, context.sessionStatus)
       }
     },
   }
@@ -147,6 +147,7 @@ async function askInfoResult(
   reason: string,
   options: CreateLoopRunnerOptions,
   memory?: AgentContext['memory'],
+  sessionStatus?: AgentContext['sessionStatus'],
 ): Promise<AgentStepResult> {
   // Phase 4 (feature-flagged): when an Agents SDK runner is wired, route
   // ask_info through it first — it owns tool/handoff loop semantics (docs §5.2).
@@ -155,23 +156,20 @@ async function askInfoResult(
     // Only auto-expose tools the safety policy allows (low-risk). Approval-gated
     // tools (refund/handoff) are withheld so an autonomous SDK run can never
     // trigger a side effect that should require an operator (docs §9 policies).
-    // NOTE: the policy's session-status dimension (deny-all on a closed session)
-    // is not threaded here yet — the loop step does not receive session status,
-    // so we evaluate against 'active'. Exposed tools are read/note stubs, so the
-    // residual risk is a low-risk tool running for a closed session; tightening
-    // this needs sessionStatus plumbed into AgentContext.
+    // The policy's session-status dimension is honoured too: a closed session
+    // denies everything, so no tools are exposed.
     const policy = options.policy ?? createDefaultPolicy()
     const exposed = (options.tools?.list() ?? []).filter(
       (t) =>
         policy.check(
           { toolName: t.name, arguments: {}, risk: t.risk, approvalRequired: t.approvalRequired },
-          { sessionStatus: 'active' },
+          { sessionStatus: sessionStatus ?? 'active' },
         ).action === 'allow',
     )
     return options.agentsSdkRunner.run({
       event,
       instructions:
-        '你是 Chatty，租衣电商客服。用提供的工具查询商品/库存/订单后简短礼貌地回答；超出范围就转人工。不要编造价格。',
+        '你是 Chatty，租衣电商客服。用提供的工具查询商品/库存/订单后简短礼貌地回答；不要编造价格。当你无法回答、问题超出范围、或客户要求人工/投诉/退款时，调用 escalate_to_human 工具转接人工。',
       context: memory ? { memorySnapshot: memory as unknown as JsonValue } : {},
       tools: exposed,
     })
