@@ -16,6 +16,18 @@ function freshDb() {
   return openDatabase(':memory:')
 }
 
+test('openDatabase creates missing parent directories for a file-backed path', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'chatty-dbdir-'))
+  // The nested data/ directory does not exist yet — openDatabase must create it
+  // rather than letting better-sqlite3 throw "unable to open database file".
+  const nested = join(dir, 'data', 'nested', 'chatty.db')
+  const db = openDatabase(nested)
+  const sessions = createSessionRepository(db)
+  const created = sessions.create({ id: 'x', customerId: 'c', conversationId: 'c:p' })
+  assert.equal(created.status, 'active')
+  db.close()
+})
+
 test('session repository: create, get, update', () => {
   const db = freshDb()
   const sessions = createSessionRepository(db)
@@ -75,6 +87,35 @@ test('trace repository: append then query oldest-first', () => {
   assert.deepEqual(list[1].references, [{ text: 'price rule' }])
 })
 
+test('trace repository: append returns the inserted row directly (no re-query dependency)', () => {
+  const db = freshDb()
+  const sessions = createSessionRepository(db)
+  const traces = createTraceRepository(db)
+  sessions.create({ id: 'sess-append', customerId: 'c', conversationId: 'c:p' })
+
+  // Even past a large batch, append must return THIS row fully populated — the
+  // old implementation re-queried the newest 100 and could miss the row on a
+  // created_at tie, returning undefined behind a `!` assertion.
+  let last
+  for (let i = 0; i < 150; i++) {
+    last = traces.append({
+      id: `tr-${i}`,
+      sessionId: 'sess-append',
+      eventType: 'agent_reply_sent',
+      action: 'reply_and_wait',
+      input: { question: `q${i}` },
+      output: { reply: `r${i}` },
+    })
+  }
+  assert.ok(last, 'append must return the inserted trace')
+  assert.equal(last!.id, 'tr-149')
+  assert.equal(last!.sessionId, 'sess-append')
+  assert.deepEqual(last!.input, { question: 'q149' })
+  assert.deepEqual(last!.output, { reply: 'r149' })
+  assert.equal(last!.toolCalls.length, 0)
+  assert.ok(last!.createdAt.length > 0, 'createdAt should be populated')
+})
+
 test('memory repository: upsert + snapshot round-trip', () => {
   const db = freshDb()
   const memory = createMemoryRepository(db)
@@ -92,6 +133,42 @@ test('memory repository: upsert + snapshot round-trip', () => {
   })
   assert.deepEqual(snap.recentMessages, [{ role: 'user', content: 'hi' }])
   assert.equal((snap.customerMemory as { globalSummary: string }).globalSummary, '老客户')
+})
+
+test('memory repository: appendRecentMessages accumulates turns and snapshot reads them back', () => {
+  const db = freshDb()
+  const memory = createMemoryRepository(db)
+  const key = { customerId: 'c9', productId: 'SUIT-001', conversationId: 'c9:SUIT-001' }
+
+  memory.appendRecentMessages(key, [
+    { role: 'user', content: '多少钱' },
+    { role: 'assistant', content: '日租 199 元' },
+  ])
+  let snap = memory.snapshot({ customerId: 'c9', productId: 'SUIT-001', conversationId: 'c9:SUIT-001' })
+  assert.equal(snap.recentMessages.length, 2)
+
+  // A second turn appends rather than replacing — this is the continuity the
+  // route needs so the next snapshot sees prior messages.
+  memory.appendRecentMessages(key, [{ role: 'user', content: '尺码有 L 吗' }])
+  snap = memory.snapshot({ customerId: 'c9', productId: 'SUIT-001', conversationId: 'c9:SUIT-001' })
+  assert.equal(snap.recentMessages.length, 3)
+  assert.equal((snap.recentMessages[2] as { content: string }).content, '尺码有 L 吗')
+})
+
+test('memory repository: appendRecentMessages caps to the most recent N', () => {
+  const db = freshDb()
+  const memory = createMemoryRepository(db)
+  const key = { customerId: 'c10', productId: 'p', conversationId: 'c10:p' }
+
+  for (let i = 0; i < 25; i++) {
+    memory.appendRecentMessages(key, [{ role: 'user', content: `m${i}` }], 20)
+  }
+  const snap = memory.snapshot({ customerId: 'c10', productId: 'p', conversationId: 'c10:p' })
+  assert.equal(snap.recentMessages.length, 20, 'should keep only the most recent 20')
+  const last = snap.recentMessages[snap.recentMessages.length - 1] as { content: string }
+  assert.equal(last.content, 'm24', 'newest message retained')
+  const first = snap.recentMessages[0] as { content: string }
+  assert.equal(first.content, 'm5', 'oldest beyond the cap dropped')
 })
 
 test('memory repository: JSON fallback reads legacy memory-store.json', () => {

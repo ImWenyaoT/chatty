@@ -56,6 +56,8 @@ export function createTraceRepository(db: Db): TraceRepository {
   return {
     append(input) {
       const ts = nowIso()
+      const toolCalls = input.toolCalls ?? []
+      const references = input.references ?? []
       db.prepare(
         `INSERT INTO agent_traces (id, session_id, event_type, intent, action, input_json, output_json, tool_calls_json, references_json, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -67,11 +69,24 @@ export function createTraceRepository(db: Db): TraceRepository {
         input.action ?? null,
         JSON.stringify(input.input),
         input.output === undefined ? null : JSON.stringify(input.output),
-        JSON.stringify(input.toolCalls ?? []),
-        JSON.stringify(input.references ?? []),
+        JSON.stringify(toolCalls),
+        JSON.stringify(references),
         ts,
       )
-      return this.queryBySession(input.sessionId).find((t) => t.id === input.id)!
+      // Construct the inserted row directly instead of re-querying the session
+      // (which read the newest 100 and could miss this row on a created_at tie).
+      return {
+        id: input.id,
+        sessionId: input.sessionId,
+        eventType: input.eventType,
+        intent: input.intent,
+        action: input.action,
+        input: input.input,
+        output: input.output,
+        toolCalls,
+        references,
+        createdAt: ts,
+      }
     },
 
     queryBySession(sessionId, limit = 100) {

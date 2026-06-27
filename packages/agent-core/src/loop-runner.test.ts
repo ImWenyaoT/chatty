@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import type { ConversationEvent, RuntimeTool } from '@rental/shared'
+import type { ConversationEvent } from '@rental/shared'
 import type { AgentContext } from './loop-contracts.js'
 import { createLoopRunner } from './loop-runner.js'
 
@@ -26,7 +26,7 @@ function userEvent(question: string, extra: Partial<ConversationEvent> = {}): Co
 }
 
 function ctx(question: string, extra?: Partial<ConversationEvent>): AgentContext {
-  return { event: userEvent(question, extra), memory: emptyMemory, tools: [] as RuntimeTool[] }
+  return { event: userEvent(question, extra), memory: emptyMemory }
 }
 
 // Fake classifier injected via options.classify — no network needed.
@@ -111,7 +111,6 @@ test('non-user_message event: conservative waiting_for_user result', async () =>
   const result = await runner.runStep({
     event: { ...userEvent(''), type: 'tool_result', payload: { ok: true } },
     memory: emptyMemory,
-    tools: [],
   })
   assert.equal(result.terminality, 'reply_and_wait')
   assert.equal(result.nextStatus, 'waiting_for_user')
@@ -150,6 +149,34 @@ test('ask_info prefers agentsSdkRunner when provided (Phase 4 feature flag)', as
   })
   const result = await runner.runStep(ctx('这款怎么租'))
   assert.equal(result.reply, 'sdk 路径回答')
+})
+
+test('SDK lane is exposed only policy-allowed (low-risk) tools, never approval-gated ones', async () => {
+  const { createDefaultToolRegistry } = await import('./tools/registry.js')
+  let exposedNames: string[] = []
+  const sdkRunner = {
+    async run(input: Parameters<import('@rental/shared').AgentsSdkRunner['run']>[0]) {
+      exposedNames = (input.tools ?? []).map((t) => t.name)
+      return {
+        sessionId: 'c:SUIT-001',
+        traceId: 'e1',
+        terminality: 'reply_and_wait' as const,
+        reply: 'ok',
+        toolCalls: [],
+        nextStatus: 'waiting_for_user' as const,
+      }
+    },
+  }
+  const runner = createLoopRunner({
+    llm: fakeLlm(),
+    classify: classify('ask_info'),
+    agentsSdkRunner: sdkRunner,
+    tools: createDefaultToolRegistry(),
+  })
+  await runner.runStep(ctx('这款多少钱'))
+  assert.ok(exposedNames.includes('get_product'), 'low-risk read tool should be exposed')
+  assert.ok(!exposedNames.includes('issue_refund'), 'high-risk approval-gated tool must be withheld')
+  assert.ok(!exposedNames.includes('create_handoff'), 'medium-risk tool must be withheld from auto-run')
 })
 
 test('agentsSdkRunner is skipped for non-ask_info actions', async () => {

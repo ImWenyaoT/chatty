@@ -34,20 +34,40 @@ export interface CreateAgentsSdkRunnerOptions {
 const LOOSE_PARAMS = z.object({}).passthrough()
 
 /**
+ * Builds the execute() handler for an SDK-mapped tool, with a hard safety gate.
+ *
+ * Defense-in-depth: the loop-runner already withholds approval-gated tools from
+ * the SDK lane via its policy filter, but createAgentsSdkRunner is a public
+ * boundary that a caller could hand a high-risk RuntimeTool directly. An
+ * approvalRequired tool is therefore NEVER auto-executed here; instead a
+ * structured refusal is returned so the model can react (e.g. ask for human
+ * approval) without any side effect firing.
+ *
+ * Exported so the gate can be unit-tested without driving a real SDK run().
+ */
+export function sdkToolExecute(rt: RuntimeTool): (args: unknown) => Promise<string> {
+  return async (args) => {
+    if (rt.approvalRequired) {
+      return { refused: true, reason: `tool ${rt.name} requires human approval` } as unknown as string
+    }
+    const result = await rt.execute((args ?? {}) as Record<string, JsonValue>)
+    // SDK expects a serialisable return; JsonValue is already JSON-safe.
+    return result as unknown as string
+  }
+}
+
+/**
  * Maps a Chatty RuntimeTool onto an OpenAI Agents SDK function tool. The SDK
  * requires a schema to describe params to the model; we keep it loose and let
- * the Chatty tool's own execute() validate.
+ * the Chatty tool's own execute() validate. Execution goes through
+ * sdkToolExecute so the approval gate holds.
  */
 function toSdkTool(rt: RuntimeTool) {
   return tool({
     name: rt.name,
     description: rt.description,
     parameters: LOOSE_PARAMS,
-    async execute(args) {
-      const result = await rt.execute((args ?? {}) as Record<string, JsonValue>)
-      // SDK expects a serialisable return; JsonValue is already JSON-safe.
-      return result as unknown as string
-    },
+    execute: sdkToolExecute(rt),
   })
 }
 

@@ -13,6 +13,8 @@ import type { LegacyRagService } from './legacy-rag-service-adapter.js'
 import { classifyAction } from './action-classifier.js'
 import type { ActionClass } from './action-classifier.js'
 import type { ToolRegistry } from './tools/registry.js'
+import type { Policy } from './policies/policy.js'
+import { createDefaultPolicy } from './policies/policy.js'
 
 export interface CreateLoopRunnerOptions {
   llm: ChatCompletionsAdapter
@@ -26,6 +28,13 @@ export interface CreateLoopRunnerOptions {
   agentsSdkRunner?: AgentsSdkRunner
   /** Action classes that should route through agentsSdkRunner. Defaults to ask_info. */
   useAgentsSdkFor?: ActionClass[]
+  /**
+   * Safety policy deciding which tools may auto-run. Used to filter the tool set
+   * exposed to the SDK lane so approval-gated (medium/high risk) tools — refund,
+   * handoff — are never handed to an autonomous agent run. Defaults to
+   * createDefaultPolicy() (only low-risk read/note tools are auto-exposed).
+   */
+  policy?: Policy
 }
 
 /**
@@ -143,7 +152,17 @@ async function askInfoResult(
   // ask_info through it first — it owns tool/handoff loop semantics (docs §5.2).
   const sdkActions = options.useAgentsSdkFor ?? ['ask_info']
   if (options.agentsSdkRunner && sdkActions.includes('ask_info')) {
-    const exposed = options.tools?.list() ?? []
+    // Only auto-expose tools the safety policy allows (low-risk). Approval-gated
+    // tools (refund/handoff) are withheld so an autonomous SDK run can never
+    // trigger a side effect that should require an operator (docs §9 policies).
+    const policy = options.policy ?? createDefaultPolicy()
+    const exposed = (options.tools?.list() ?? []).filter(
+      (t) =>
+        policy.check(
+          { toolName: t.name, arguments: {}, risk: t.risk, approvalRequired: t.approvalRequired },
+          { sessionStatus: 'active' },
+        ).action === 'allow',
+    )
     return options.agentsSdkRunner.run({
       event,
       instructions:
