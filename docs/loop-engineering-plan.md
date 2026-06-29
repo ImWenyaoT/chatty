@@ -14,7 +14,7 @@ Decisions:
 - Use SQLite for MVP session/state.
 - Keep the current long-term memory shape mostly intact.
 - Use OpenAI Agents SDK TypeScript for agent runs, tools, handoffs, guardrails, and tracing.
-- Keep OpenAI Chat Completions API for extraction, evaluation, direct compatibility, and fallback paths.
+- Keep OpenAI Responses API for extraction, evaluation, direct compatibility, and fallback paths.
 - Keep the current `rag-service` running and treat `answerQuestion()` as a legacy capability.
 - Do not introduce Fastify in the new stack unless Next.js Route Handlers prove insufficient.
 - Do not introduce Temporal in MVP.
@@ -82,7 +82,7 @@ flowchart TD
   CTX --> KNOW["knowledge/media retrieval adapters"]
   LOOP --> LLM["packages/llm"]
   LLM --> AGENTS["OpenAI Agents SDK TS"]
-  LLM --> CHAT["OpenAI Chat Completions API"]
+  LLM --> CHAT["OpenAI Responses API"]
   LOOP --> TOOLS["runtime tools"]
   TOOLS --> ORDER["order/inventory/media/handoff adapters"]
   LOOP --> TRACE["agent trace"]
@@ -111,9 +111,9 @@ Use OpenAI Agents SDK TypeScript when an agent run benefits from tools, handoffs
 
 The product code depends on `packages/llm` interfaces, not SDK implementation details.
 
-### 5.3 Compatibility Lane: Chat Completions API
+### 5.3 Compatibility Lane: Responses API
 
-Use direct Chat Completions for:
+Use direct Responses API calls for:
 
 - legacy `rag-service` compatibility;
 - intent classification;
@@ -273,7 +273,7 @@ sequenceDiagram
   C->>S: read memory snapshot
   C-->>N: context
   N->>A: run bounded step
-  A->>L: optional Agents SDK / Chat Completions call
+  A->>L: optional Agents SDK / Responses API call
   A->>T: optional tool call
   T-->>A: tool result
   A-->>N: AgentStepResult
@@ -367,7 +367,7 @@ MVP should preserve the current evaluator direction but make traces first-class.
 ### Phase 4: Model Lanes
 
 - Wire OpenAI Agents SDK TS runner.
-- Keep Chat Completions direct adapter for extraction/eval/fallback.
+- Keep Responses API direct adapter for extraction/eval/fallback.
 - Route only selected actions through Agents SDK.
 
 ## 12. Open Questions
@@ -377,7 +377,7 @@ Open:
 - When should Route Handlers be split into a separate worker or API service?
 - Which package should own the first SQLite connection implementation?
 - Should the first legacy adapter call HTTP `/chat` or inject `answerQuestion()` in-process?
-- Which exact paths should use Agents SDK before direct Chat Completions?
+- Which exact paths should use Agents SDK before direct Responses API?
 - When should Qdrant be retained vs wrapped behind a media/knowledge adapter?
 
 Settled:
@@ -397,7 +397,7 @@ Settled:
 3. Add `packages/shared` for DTOs and zod schemas.
 4. Add `packages/db` for SQLite schema SQL only.
 5. Add `packages/agent-core` for loop contracts and legacy adapter boundary.
-6. Add `packages/llm` for OpenAI Agents SDK and Chat Completions adapter boundaries.
+6. Add `packages/llm` for OpenAI Agents SDK and Responses API adapter boundaries.
 7. Typecheck new packages.
 8. Build `rag-service`.
 9. Add Next.js app only after the package contracts are stable.
@@ -409,8 +409,8 @@ Settled:
 - `packages/shared` defines minimal loop DTOs.
 - `packages/db` defines SQLite MVP schema.
 - `packages/agent-core` defines loop and legacy adapter boundaries.
-- `packages/llm` defines Agents SDK and Chat Completions adapter boundaries.
-- `rag-service npm run build` still passes or its existing failures are documented.
+- `packages/llm` defines Agents SDK and Responses API adapter boundaries.
+- `pnpm --filter rental-rag-service build` still passes or its existing failures are documented.
 
 ## 15. Appendix: External Asset Links
 

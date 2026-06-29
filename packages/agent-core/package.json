@@ -7,14 +7,10 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test --import tsx \"src/**/*.test.ts\""
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@rental/llm": "0.1.0",
-    "@rental/shared": "0.1.0"
-  },
-  "devDependencies": {
-    "tsx": "^4.19.0"
+    "@rental/llm": "workspace:*",
+    "@rental/shared": "workspace:*"
   }
 }

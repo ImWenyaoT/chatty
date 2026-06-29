@@ -18,31 +18,31 @@ export interface AgentsSdkEnvConfig {
  * Reads the shared OpenAI-compatible model config from the environment.
  *
  * Names mirror rag-service/src/config.ts so a single local `.env` drives both
- * stacks. Any OpenAI-compatible endpoint (DeepSeek, OpenAI, Azure-compatible,
- * moon-bridge, etc.) is selected purely via OPENAI_BASE_URL.
+ * stacks. MiMo settings are preferred, with OPENAI_* kept as a compatibility
+ * fallback for OpenAI-compatible endpoints.
  *
- * Default model is unified with .env.example (deepseek-chat) to avoid the
- * divergence that existed between the two before the dual-provider change.
+ * Default model is unified with .env.example so all direct model lanes use MiMo.
  */
 export function readLlmEnv(env: NodeJS.ProcessEnv = process.env): LlmEnvConfig {
   return {
-    apiKey: env.OPENAI_API_KEY ?? '',
-    baseURL: env.OPENAI_BASE_URL || undefined,
-    chatModel: env.CHAT_MODEL ?? 'deepseek-chat',
+    apiKey: env.MIMO_API_KEY ?? env.OPENAI_API_KEY ?? '',
+    baseURL: env.MIMO_BASE_URL || env.OPENAI_BASE_URL || undefined,
+    chatModel: env.MIMO_MODEL ?? 'mimo-2.5',
   }
 }
 
 /**
  * Reads the OpenAI Agents SDK lane config. Falls back to the shared LLM env
- * (OPENAI_API_KEY / OPENAI_BASE_URL / CHAT_MODEL) so a single provider still
+ * (MIMO_API_KEY / MIMO_BASE_URL / MIMO_MODEL) so a single provider still
  * works in dev; set OPENAI_AGENTS_* to route the SDK lane to a different
- * endpoint (e.g. a real OpenAI endpoint when classification runs on DeepSeek).
+ * endpoint.
  */
 export function readAgentsSdkEnv(env: NodeJS.ProcessEnv = process.env): AgentsSdkEnvConfig {
+  const shared = readLlmEnv(env)
   return {
-    apiKey: env.OPENAI_AGENTS_API_KEY || env.OPENAI_API_KEY || '',
-    baseURL: env.OPENAI_AGENTS_BASE_URL || env.OPENAI_BASE_URL || undefined,
-    model: env.AGENTS_SDK_MODEL || env.CHAT_MODEL || 'deepseek-chat',
+    apiKey: env.OPENAI_AGENTS_API_KEY || shared.apiKey,
+    baseURL: env.OPENAI_AGENTS_BASE_URL || shared.baseURL,
+    model: env.AGENTS_SDK_MODEL || shared.chatModel,
   }
 }
 

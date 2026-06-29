@@ -70,7 +70,7 @@ const chatRequestSchema = z.object({
   conversationId: z.string().min(1).optional(),
   question: z.string().min(0).optional(),
   imageUrl: z.string().min(1).optional(),
-  sessionContext: z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
+  sessionContext: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
   stylistPrompt: z.string().min(1).optional(),
 }).refine((data) => (data.question && data.question.trim()) || data.imageUrl, {
   message: 'question 或 imageUrl 至少要提供一项',

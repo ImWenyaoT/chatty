@@ -20,6 +20,7 @@ import { isQdrantAvailable, qdrant } from './qdrant.js';
 import { selectAction, type ActionContext } from './rag/action-picker.js';
 import { generateText } from './rag/generate-text.js';
 import { classifyUserIntent, intentToExtractionPolicy } from './rag/intent-classifier.js';
+import { createJsonResponse } from './responses.js';
 import { ChatRequestBody, IntentClassification, KnowledgeChunk } from './types.js';
 
 // ========== 文本清洗 ==========
@@ -433,57 +434,51 @@ export async function evaluateCustomerServiceReply(
     customerServiceReply,
   });
 
-  const completion = await openai.chat.completions.create({
+  const parsed = await createJsonResponse<{
+    score?: number;
+    issues?: string[];
+    suggestions?: string[];
+    suggestedReply?: string;
+  }>({
     model: config.evaluatorModel,
     temperature: 0.0,
-    top_p: 1,
-    max_tokens: 800,
-    response_format: {
+    topP: 1,
+    maxOutputTokens: 800,
+    format: {
       type: 'json_schema',
-      json_schema: {
-        name: 'customer_service_evaluation',
-        description: '客服回复质量评分、建议与改写',
-        schema: {
-          type: 'object',
-          properties: {
-            score: { type: 'number' },
-            issues: { type: 'array', items: { type: 'string' } },
-            suggestions: { type: 'array', items: { type: 'string' } },
-            suggestedReply: { type: 'string' },
-          },
-          required: ['score', 'issues', 'suggestions'],
+      name: 'customer_service_evaluation',
+      description: '客服回复质量评分、建议与改写',
+      schema: {
+        type: 'object',
+        properties: {
+          score: { type: 'number' },
+          issues: { type: 'array', items: { type: 'string' } },
+          suggestions: { type: 'array', items: { type: 'string' } },
+          suggestedReply: { type: 'string' },
         },
-        strict: false,
+        required: ['score', 'issues', 'suggestions'],
       },
+      strict: false,
     },
-    messages: [
-      { role: 'system', content: loaded.prompts.evaluatorSystemPrompt },
-      { role: 'user', content: userPrompt },
-    ],
+    instructions: loaded.prompts.evaluatorSystemPrompt,
+    input: [{ role: 'user', content: userPrompt }],
   });
 
-  const rawText = completion.choices[0]?.message?.content ?? '';
-  const jsonText = extractJsonFromText(rawText.trim());
   const baseMeta = { evaluatorModel: config.evaluatorModel, promptVersion: loaded.promptVersion };
 
   try {
-    const parsed = JSON.parse(jsonText) as {
-      score?: number;
-      issues?: string[];
-      suggestions?: string[];
-      suggestedReply?: string;
-    };
     const score = parsed.score != null ? Math.min(10, Math.max(1, Number(parsed.score))) : 0;
     const issues = Array.isArray(parsed.issues) ? parsed.issues.map((item) => String(item)).slice(0, 3) : [];
     const suggestions = Array.isArray(parsed.suggestions) ? parsed.suggestions.map((item) => String(item)).slice(0, 3) : [];
     const suggestedReply = typeof parsed.suggestedReply === 'string' ? parsed.suggestedReply.trim() || undefined : undefined;
 
     if (score === 0) {
-      throw new Error(`无效评分结果，rawText: ${rawText.slice(0, 500)}`);
+      throw new Error(`无效评分结果，rawText: ${JSON.stringify(parsed).slice(0, 500)}`);
     }
 
     return { score, issues, suggestions, suggestedReply, ...baseMeta };
   } catch (error) {
+    const rawText = JSON.stringify(parsed);
     console.error('评价解析失败:', error, 'rawText:', rawText);
     const fallback = parseLooseEvaluation(rawText);
     if (fallback.score === 0) {

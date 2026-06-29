@@ -4,7 +4,6 @@ import { fileURLToPath } from 'node:url';
 import { queryAvailability } from './availability-service.js';
 import { deriveConversationOrchestration } from './conversation-orchestrator.js';
 import { config } from './config.js';
-import { openai } from './openai.js';
 import {
   buildCurrentMonthDate,
   buildCurrentYearMonthDate,
@@ -19,6 +18,7 @@ import {
 } from './parsers/measurements.js';
 import { findProduct, loaded, pickSizeByMeasurement } from './prompts-loader.js';
 import { evaluateCustomerServiceReply } from './rag.js';
+import { createJsonResponse } from './responses.js';
 import {
   AvailabilityCheck,
   BodyProfile,
@@ -115,17 +115,14 @@ async function extractConversationFactsWithModel(input: {
     existingProductIntent: existingProductText ?? null,
   });
 
-  const response = await openai.chat.completions.create({
+  const parsed = await createJsonResponse<Record<string, unknown>>({
     model: config.chatModel,
     temperature: 0,
-    response_format: { type: 'json_object' },
-    messages: [
+    format: { type: 'json_object' },
+    instructions: `${loaded.prompts.factExtractorSystemPrompt}\n今天日期是 ${today}。`,
+    input: [
       {
-        role: 'system',
-        content: `${loaded.prompts.factExtractorSystemPrompt}\n今天日期是 ${today}。`,
-      },
-      {
-        // 某些 provider（含 OneAPI/Azure 等）要求使用 response_format=json_object 时
+        // 某些 provider（含 OneAPI/Azure 等）要求使用 JSON 输出格式时
         // user 消息里必须含有 "json" 字眼。
         // 输出必须严格按 system prompt 定义的 { rentalPeriod, productIntent } schema，
         // 不要回显输入字段（曾经因此返回了 existingProductIntent 等字段污染输出）。
@@ -134,9 +131,6 @@ async function extractConversationFactsWithModel(input: {
       },
     ],
   });
-
-  const content = response.choices[0]?.message?.content ?? '{}';
-  const parsed = JSON.parse(content) as Record<string, unknown>;
 
   // 兼容 LLM 返回简化的字符串形式（"productIntent": "黑色西装"）
   const normalizedProductIntent = (() => {

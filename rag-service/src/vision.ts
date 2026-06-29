@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
-import { openai } from './openai.js';
+import { createTextResponse } from './responses.js';
 
 const MIME_BY_EXT: Record<string, string> = {
   png: 'image/png',
@@ -82,23 +82,22 @@ export async function describeImage(opts: CaptionOptions): Promise<string> {
       ? '请解读用户发来的这张图。'
       : '请为下面这张商品图生成 caption。';
 
-  const completion = await openai.chat.completions.create({
+  const raw = await createTextResponse({
     model: config.chatModel,
     temperature: 0.2,
-    max_tokens: 200,
-    messages: [
-      { role: 'system', content: systemPrompt },
+    maxOutputTokens: 200,
+    instructions: systemPrompt,
+    input: [
       {
         role: 'user',
         content: [
-          { type: 'text', text: userText },
-          { type: 'image_url', image_url: { url: dataUrl } },
-        ] as unknown as string,
+          { type: 'input_text', text: userText },
+          { type: 'input_image', image_url: dataUrl, detail: 'auto' },
+        ],
       },
     ],
   });
 
-  const raw = completion.choices[0]?.message?.content ?? '';
   const out = String(raw).trim().replace(/^["'「『]|["'」』]$/g, '').slice(0, 160);
   if (!out) throw new Error('vision 模型未返回有效描述');
   return out;
