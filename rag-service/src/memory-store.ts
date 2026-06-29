@@ -347,6 +347,22 @@ function extractRentalPeriodFromText(rawText: string): RentalPeriod | undefined 
     };
   }
 
+  // 同月跨日：「5月9号到10号」第二段省略月份，结束日沿用开始月份（与 rag.ts 的 fallback 保持一致）
+  const sameMonthDayRangeMatch = text.match(/([0-9]{1,2})月([0-9]{1,2})(?:日|号)?\s*(?:到|至|~|—|-|--|－)\s*([0-9]{1,2})(?:日|号)?/i);
+  if (sameMonthDayRangeMatch) {
+    const m = Number(sameMonthDayRangeMatch[1]);
+    const d1 = Number(sameMonthDayRangeMatch[2]);
+    const d2 = Number(sameMonthDayRangeMatch[3]);
+    if (d2 >= d1) {
+      return {
+        startDate: buildCurrentYearMonthDate(m, d1),
+        endDate: buildCurrentYearMonthDate(m, d2),
+        source: 'message',
+        lastMentionedAt: new Date().toISOString(),
+      };
+    }
+  }
+
   const monthDaySingleMatch = text.match(/([0-9]{1,2})月([0-9]{1,2})(?:日|号)?(?:用|穿|租|要用|需要|开始|当天)?/i);
   if (monthDaySingleMatch) {
     const date = buildCurrentYearMonthDate(Number(monthDaySingleMatch[1]), Number(monthDaySingleMatch[2]));

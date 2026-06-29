@@ -5,7 +5,7 @@
 export type Action =
   // ========== 快速路径（关键词 / 状态规则命中，不经 LLM） ==========
   | { kind: 'greet' }
-  | { kind: 'repair'; hint?: string }
+  | { kind: 'repair'; hint?: string; escalate?: boolean }
   | { kind: 'rental_howto'; productId?: string; dailyPrice?: number; renewalDailyPrice?: number; shippingPolicy?: string }
   | { kind: 'current_link_confirm'; productText?: string; productId?: string; dailyPrice?: number; renewalDailyPrice?: number }
   | { kind: 'recall_body_empty' }

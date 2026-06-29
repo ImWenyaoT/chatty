@@ -69,6 +69,20 @@ function extractProvidedPeriodFallback(questionRaw: string) {
         isUpdating: /修改|改下|改成|改为|更新|调整/.test(question),
       };
     }
+    // 同月跨日：「5月9号到10号」第二段省略月份，结束日沿用开始月份
+    const sameMonthRange = question.match(/([0-9]{1,2})月([0-9]{1,2})(?:日|号)?(?:到|至|~|—|-|--|－)([0-9]{1,2})(?:日|号)?/);
+    if (sameMonthRange) {
+      const m = Number(sameMonthRange[1]);
+      const d1 = Number(sameMonthRange[2]);
+      const d2 = Number(sameMonthRange[3]);
+      if (d2 >= d1) {
+        return {
+          startDate: buildCurrentYearMonthDate(m, d1),
+          endDate: buildCurrentYearMonthDate(m, d2),
+          isUpdating: /修改|改下|改成|改为|更新|调整/.test(question),
+        };
+      }
+    }
     return { startDate: date, endDate: date, isUpdating: /修改|改下|改成|改为|更新|调整/.test(question) };
   }
   const dayOnly = question.match(/([0-9]{1,2})(?:日|号)(?:用|穿|租|要用|需要|开始|当天)?/);
@@ -100,8 +114,32 @@ export async function embedText(input: string) {
   return response.data[0].embedding;
 }
 
+// 进程级标记：一旦确认 embedding 接口不存在（HTTP 404），后续不再发起无谓请求。
+// 典型场景：所连的 OpenAI 兼容后端（如 DeepSeek）只提供 chat completions、不提供 embeddings。
+let embeddingEndpointMissing = false;
+
+/**
+ * 检索知识库：优先 Qdrant 向量检索，无 Qdrant 时退回本地向量库。
+ * embedding 不可用时做显式降级——warn 一次并返回空结果，让上层走"无知识上下文"分支，
+ * 而不是让整条问答链路崩溃。注意这是有声降级（会打 warn），不是沉默吞错。
+ */
 export async function searchKnowledge(question: string) {
-  const vector = await embedText(question);
+  if (embeddingEndpointMissing) return [];
+  let vector: number[];
+  try {
+    vector = await embedText(question);
+  } catch (error) {
+    const status =
+      typeof error === 'object' && error !== null && 'status' in error
+        ? (error as { status?: number }).status
+        : undefined;
+    if (status === 404) embeddingEndpointMissing = true;
+    console.warn(
+      '[searchKnowledge] embedding 调用失败，本次跳过知识检索：',
+      error instanceof Error ? error.message : error,
+    );
+    return [];
+  }
   if (await isQdrantAvailable()) {
     const result = await qdrant.search(config.qdrantCollection, {
       vector,
@@ -207,17 +245,22 @@ export async function answerQuestion(body: ChatRequestBody) {
   const bodyProfiles = customerMemory?.bodyProfiles ?? [];
   const conversationProfile = productMemory?.conversationProfile;
 
-  // 只在 intent 允许抽体型时才从当前消息解析身高/体重
-  const providedBody = extractionPolicy.allowBody ? extractProvidedBody(body.question) : undefined;
-  // 件数：和 body / period 一样都属于"客户主动给信息"，沿用 allowBody 的 gate（属于客户陈述事实）
-  const providedQuantity = extractionPolicy.allowBody || extractionPolicy.allowPeriod
+  // 身高体重/档期是确定性可解析的信号，与 intent 正交：本句只要确定性命中就放行抽取，
+  // 避免单意图（如 select_product）把同一句里一并给出的体型/档期丢弃（all-in-one 一句话给全）。
+  const allowBody = extractionPolicy.allowBody || /身高|体重|cm|kg|公斤|斤/i.test(body.question);
+  const allowPeriod = extractionPolicy.allowPeriod || /[0-9]{1,2}\s*月|[0-9]{1,2}\s*[日号]/.test(body.question);
+
+  // 只在允许抽体型时才从当前消息解析身高/体重
+  const providedBody = allowBody ? extractProvidedBody(body.question) : undefined;
+  // 件数：和 body / period 一样都属于"客户主动给信息"，沿用同样的 gate（属于客户陈述事实）
+  const providedQuantity = allowBody || allowPeriod
     ? extractProvidedQuantity(body.question)
     : undefined;
 
   const nowIso = new Date().toISOString();
-  // intent 决定是否调 LLM 抽事实——意图不允许就整个跳过
+  // 意图或确定性信号允许就调 LLM 抽事实
   const needsLLMFactExtract =
-    (extractionPolicy.allowProductIntent || extractionPolicy.allowPeriod) &&
+    (extractionPolicy.allowProductIntent || allowPeriod) &&
     /[0-9]|月|日|号|想租|想要|要租|换成|改成|想换成|意向|款式|商品|年/.test(body.question);
   const structuredFacts = needsLLMFactExtract
     ? await extractStructuredConversationFacts({
@@ -228,7 +271,7 @@ export async function answerQuestion(body: ChatRequestBody) {
       })
     : { rentalPeriod: undefined, productIntent: undefined };
   // 融合 LLM 和正则 fallback：LLM 优先，缺字段正则补；最后单日租赁自动补 endDate=startDate
-  const fallbackPeriod = extractionPolicy.allowPeriod ? extractProvidedPeriodFallback(body.question) : undefined;
+  const fallbackPeriod = allowPeriod ? extractProvidedPeriodFallback(body.question) : undefined;
   const llmStart = structuredFacts.rentalPeriod?.startDate;
   const llmEnd = structuredFacts.rentalPeriod?.endDate;
   const mergedStart = llmStart ?? fallbackPeriod?.startDate;
@@ -438,24 +481,10 @@ export async function evaluateCustomerServiceReply(
     temperature: 0.0,
     top_p: 1,
     max_tokens: 800,
-    response_format: {
-      type: 'json_schema',
-      json_schema: {
-        name: 'customer_service_evaluation',
-        description: '客服回复质量评分、建议与改写',
-        schema: {
-          type: 'object',
-          properties: {
-            score: { type: 'number' },
-            issues: { type: 'array', items: { type: 'string' } },
-            suggestions: { type: 'array', items: { type: 'string' } },
-            suggestedReply: { type: 'string' },
-          },
-          required: ['score', 'issues', 'suggestions'],
-        },
-        strict: false,
-      },
-    },
+    // DeepSeek 等 OpenAI 兼容后端不支持 json_schema structured outputs，统一用 json_object（JSON mode），
+    // OpenAI 同样支持。解析端已用 extractJsonFromText + parseLooseEvaluation 兜底，不依赖 schema 强校验；
+    // 字段结构由 evaluator 的 system/user 模板用文字约定。注意 json_object 模式要求 prompt 含 "json" 字样（已满足）。
+    response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: loaded.prompts.evaluatorSystemPrompt },
       { role: 'user', content: userPrompt },
