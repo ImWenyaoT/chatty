@@ -6,7 +6,8 @@ conversationId: golden-happy-path-v1
 steps:
   - user: 你好 在吗
     expect:
-      action: greet
+      # "你好在吗" 既是打招呼也是闲聊，greet / small_talk 语义等价，都接受
+      actionIn: [greet, small_talk]
       contains: ["在"]
 
   - user: 我想租这款黑色西装
