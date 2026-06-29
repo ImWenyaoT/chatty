@@ -332,10 +332,19 @@ export async function selectAction(ctx: ActionContext): Promise<Action> {
 
   // 1. 最高优先级：repair（"没听懂"/"？"/澄清）
   if (isRepairQuestion(q)) {
-    const orderReadiness = profile?.orderReadiness;
-    const hint = profile?.orchestration?.followUpQuestion
-      || (orderReadiness?.nextStep ? `我想确认的是，${orderReadiness.nextStep}` : '');
-    return { kind: 'repair', hint: hint || undefined };
+    // hint 用「上一轮真正说过的那句话」的首句，而不是 followUpQuestion（那是"下一步该问什么"的前瞻，
+    // 含身高体重/下单，会让 repair 越界推进）。再净化掉含"下单/身高/体重"的句子，
+    // 守住 repair「不推进状态机」的契约；都被净化掉则用中性兜底。
+    const last = ctx.lastAssistantMessage ?? '';
+    // 上一轮已经是澄清(repair)句 → 客户连着没听懂，本轮升级为更具体/举例的说法，避免逐字复读。
+    const escalate = /不好意思|没说清楚|说得不清楚|没讲清楚/.test(last);
+    const lastSaid = last
+      .split(/[。！？\n]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const cleanHint = lastSaid.find((s) => !/下单|身高|体重/.test(s));
+    const hint = cleanHint || '您方才那条信息再发我一下就行';
+    return { kind: 'repair', hint, escalate };
   }
 
   // 2. 已下单 + 物流相关 → 物流回复
@@ -493,7 +502,10 @@ export async function selectAction(ctx: ActionContext): Promise<Action> {
   if (isOrderQuestion(q)) {
     const nextProfile = deriveNextProfile(ctx);
     const orderReadiness = nextProfile.orderReadiness;
-    if (orderReadiness?.readyToOrder) {
+    // 已正式复核，或三项齐全但用户主动问"能否下单"（视作隐含确认）→ 直接引导下单，
+    // 避免用户没逐句说"对的"就问"可以下单吗"时卡在 confirm_review 反复复核（guide_order 文案必含"下单"）。
+    const orderedAlready = !!orderPlacement?.orderNo;
+    if (orderReadiness?.readyToOrder || (!orderedAlready && orderReadiness?.needReviewCheck)) {
       return {
         kind: 'guide_order',
         size: nextProfile.sizeRecommendation?.recommendedSize,

@@ -115,6 +115,22 @@ export function pickSizeByMeasurement(heightCm: number, weightKg: number) {
   if (match) {
     return { size: match.size, confidence: match.confidence };
   }
+  // 超出合理人体范围才真正交人工，避免给离谱输入硬套尺码
+  if (heightCm < 140 || heightCm > 210 || weightKg < 35 || weightKg > 200) {
+    return loaded.catalog.sizeFallback;
+  }
+  // 最近邻兜底：落在尺码表空洞（如偏瘦高个 175/56）时，按到各规则矩形的欧氏距离取最近一档，
+  // 给出确定的真码（M/L/XL）+ confidence:low + isFallback，而不是返回「尺码待人工确认」让 LLM 乱编。
+  let best: { size: string; dist: number } | undefined;
+  for (const rule of loaded.catalog.sizeRules) {
+    const dh = heightCm < rule.minHeight ? rule.minHeight - heightCm : heightCm > rule.maxHeight ? heightCm - rule.maxHeight : 0;
+    const dw = weightKg < rule.minWeight ? rule.minWeight - weightKg : weightKg > rule.maxWeight ? weightKg - rule.maxWeight : 0;
+    const dist = Math.hypot(dh, dw);
+    if (!best || dist < best.dist) best = { size: rule.size, dist };
+  }
+  if (best) {
+    return { size: best.size, confidence: 'low' as const, isFallback: true };
+  }
   return loaded.catalog.sizeFallback;
 }
 

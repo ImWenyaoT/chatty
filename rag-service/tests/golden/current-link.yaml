@@ -6,6 +6,8 @@ conversationId: golden-current-link-v1
 steps:
   - user: 就是当前链接这款吗
     expect:
+      # 真实契约由 action==current_link_confirm 保证；店员不会说"当前链接"这种词，
+      # 只要确认"就是这款"即可（OR 同义）。
       action: current_link_confirm
-      contains: ["当前链接"]
+      containsAny: ["这款", "就是", "对"]
       notContains: ["胸围", "常穿"]

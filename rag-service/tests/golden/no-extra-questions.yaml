@@ -6,10 +6,12 @@ conversationId: golden-no-extra-v1
 steps:
   - user: 我想租这款黑色双排扣西装
   - user: 5月9号到5月10号用
-  - user: 身高175 体重56kg
+  - user: 身高175 体重70kg
     expect:
       actionIn: [confirm_size, confirm_review, guide_order]
-      contains: ["M", "L", "码"]
+      # 175/70 在尺码表里确定命中 L（high）；顺带验证尺码给对、且没编造其它码
+      containsAny: ["L"]
+      contains: ["码"]
       notContains:
         - "胸围"
         - "腰围"

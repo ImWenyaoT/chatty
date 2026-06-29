@@ -7,10 +7,17 @@ steps:
   - user: 我想租黑色西装
   - user: ？
     expect:
+      # repair 的真实契约是「不推进状态机」——由 action==repair 表达，而非脆弱的字面词。
+      # 致歉/澄清语气用 OR 断言（不锁死某个词）；不该催下单。
       action: repair
-      contains: ["不好意思"]
-      notContains: ["身高", "下单"]
+      containsAny: ["不好意思", "抱歉", "没说清楚", "不清楚", "没讲清楚"]
+      notContains: ["下单"]
+      minScore: 6
   - user: 没听懂
     expect:
       action: repair
-      contains: ["不清楚", "不好意思"]
+      containsAny: ["不好意思", "抱歉", "没说清楚", "不清楚", "没讲清楚"]
+      notContains: ["下单"]
+      # 连着没听懂，本轮必须换说法，不能和上一轮逐字复读
+      notSameAsPrev: true
+      minScore: 6

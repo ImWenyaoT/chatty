@@ -8,7 +8,9 @@
 // 注意：eval 会覆盖写入 tests/.tmp/memory-store.json 作为隔离的记忆库，
 //       不会污染 data/memory-store.json。
 
-process.env.MEMORY_STORE_PATH = process.env.MEMORY_STORE_PATH ?? 'tests/.tmp/memory-store.json';
+// ⚠️ 必须是第一条 import：在 src/config 被求值前把 MEMORY_STORE_PATH 设好，
+// 否则 ESM import 提升会让 config 先拿到默认值 data/，eval 误写生产库且隔离失效。
+import './eval-env.js';
 
 import 'dotenv/config';
 import fs from 'node:fs/promises';
@@ -27,7 +29,11 @@ interface ExpectProfile {
 
 interface ExpectBlock {
   contains?: string[];
+  /** OR 语义：answer 命中其中任意一个即可（用于"M 或 L"这类单值不可能同时出现的断言）。 */
+  containsAny?: string[];
   notContains?: string[];
+  /** 本轮回复不能和上一轮逐字相同（抓机器人复读，如连续 repair）。 */
+  notSameAsPrev?: boolean;
   minScore?: number;
   stage?: string;
   stageIn?: string[];
@@ -65,6 +71,12 @@ interface ScenarioResult {
   passed: boolean;
   steps: StepResult[];
   avgScore: number;
+  /** --repeat 聚合：N 次运行里通过的次数 */
+  passCount?: number;
+  /** --repeat 聚合：总运行次数 */
+  runCount?: number;
+  /** --repeat 聚合：每次运行的场景均分样本（用于看噪声幅度） */
+  scoreSamples?: number[];
 }
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -165,6 +177,17 @@ async function runScenario(scenario: Scenario): Promise<ScenarioResult> {
         }
       }
     }
+    if (expect.containsAny) {
+      if (!expect.containsAny.some((needle) => result.answer.includes(needle))) {
+        failures.push(`containsAny [${expect.containsAny.join(', ')}] none found in answer`);
+      }
+    }
+    if (expect.notSameAsPrev) {
+      const prevAnswer = stepResults[stepResults.length - 1]?.answer;
+      if (prevAnswer !== undefined && result.answer.trim() === prevAnswer.trim()) {
+        failures.push('notSameAsPrev: 本轮回复与上一轮逐字相同（机器人复读）');
+      }
+    }
     if (expect.notContains) {
       for (const needle of expect.notContains) {
         if (result.answer.includes(needle)) {
@@ -240,11 +263,51 @@ async function runScenario(scenario: Scenario): Promise<ScenarioResult> {
   };
 }
 
+// 跑一整套场景一次（跑前清空隔离记忆库，保证各 run 互不污染）。
+async function runAllScenarios(scenarios: Scenario[]): Promise<ScenarioResult[]> {
+  await fs.rm(TMP_MEMORY, { force: true }).catch(() => undefined);
+  const results: ScenarioResult[] = [];
+  for (const scenario of scenarios) {
+    try {
+      results.push(await runScenario(scenario));
+    } catch (error) {
+      console.error(`    ${scenario.name} error: ${error instanceof Error ? error.message : String(error)}`);
+      results.push({ name: scenario.name, description: scenario.description, passed: false, steps: [], avgScore: 0 });
+    }
+  }
+  return results;
+}
+
+// 把 N 次运行聚合成单份报告：avgScore 取均值、passed 记通过率，steps 取最后一次用于展示。
+// 取均值是为了抵消 LLM 评分的随机噪声（实测可达 ±2），让 prompt 改动的真实信号显出来。
+function aggregateRuns(scenarios: Scenario[], runs: ScenarioResult[][]): ScenarioResult[] {
+  return scenarios.map((scenario) => {
+    const perRun = runs.map((r) => r.find((x) => x.name === scenario.name)).filter((x): x is ScenarioResult => !!x);
+    const scoreSamples = perRun.map((r) => r.avgScore);
+    const avgScore = scoreSamples.length ? scoreSamples.reduce((a, b) => a + b, 0) / scoreSamples.length : 0;
+    const passCount = perRun.filter((r) => r.passed).length;
+    const last = perRun[perRun.length - 1];
+    return {
+      name: scenario.name,
+      description: scenario.description,
+      passed: passCount === perRun.length && perRun.length > 0, // 全过才算稳定通过
+      steps: last?.steps ?? [],
+      avgScore,
+      passCount,
+      runCount: perRun.length,
+      scoreSamples,
+    };
+  });
+}
+
 function printReport(results: ScenarioResult[]) {
   console.log('\n========== Eval Report ==========');
   for (const r of results) {
-    const badge = r.passed ? '✅ PASS' : '❌ FAIL';
-    console.log(`\n${badge}  ${r.name}  (avgScore=${r.avgScore.toFixed(2)})`);
+    const stable = (r.runCount ?? 1) > 1;
+    const passText = stable ? `pass ${r.passCount}/${r.runCount}` : r.passed ? 'PASS' : 'FAIL';
+    const badge = r.passed ? '✅' : (r.passCount ?? 0) > 0 ? '🟡' : '❌';
+    const sampleText = stable && r.scoreSamples ? ` [${r.scoreSamples.map((s) => s.toFixed(1)).join('/')}]` : '';
+    console.log(`\n${badge} ${passText}  ${r.name}  (avgScore=${r.avgScore.toFixed(2)})${sampleText}`);
     if (r.description) console.log(`        ${r.description}`);
     for (const step of r.steps) {
       const scoreText = step.score !== undefined ? ` [${step.score}/10]` : '';
@@ -302,11 +365,7 @@ async function compareBaseline(baselineTag: string, results: ScenarioResult[]) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-
-  // 清空 tmp memory
-  try {
-    await fs.rm(TMP_MEMORY, { force: true });
-  } catch {}
+  const repeat = Math.max(1, Number(args.repeat ?? 1) || 1);
 
   const scenarios = await loadScenarios(typeof args.filter === 'string' ? args.filter : undefined);
   if (scenarios.length === 0) {
@@ -314,28 +373,18 @@ async function main() {
     return;
   }
 
-  console.log(`Running ${scenarios.length} scenario(s) against promptVersion=${loaded.promptVersion}`);
+  console.log(`Running ${scenarios.length} scenario(s) × ${repeat} repeat against promptVersion=${loaded.promptVersion}`);
   console.log(`Memory store: ${TMP_MEMORY}\n`);
 
-  const results: ScenarioResult[] = [];
-  for (const scenario of scenarios) {
-    process.stdout.write(`  ${scenario.name} ... `);
-    try {
-      const result = await runScenario(scenario);
-      results.push(result);
-      process.stdout.write(result.passed ? 'ok\n' : 'fail\n');
-    } catch (error) {
-      console.error(`error\n    ${error instanceof Error ? error.message : String(error)}`);
-      results.push({
-        name: scenario.name,
-        description: scenario.description,
-        passed: false,
-        steps: [],
-        avgScore: 0,
-      });
-    }
+  const runs: ScenarioResult[][] = [];
+  for (let i = 0; i < repeat; i++) {
+    if (repeat > 1) process.stdout.write(`  run ${i + 1}/${repeat} ...`);
+    const r = await runAllScenarios(scenarios);
+    runs.push(r);
+    if (repeat > 1) process.stdout.write(` done (${r.filter((x) => x.passed).length}/${r.length} pass)\n`);
   }
 
+  const results = aggregateRuns(scenarios, runs);
   printReport(results);
 
   if (typeof args.save === 'string') {

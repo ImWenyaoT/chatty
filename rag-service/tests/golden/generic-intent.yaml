@@ -5,7 +5,8 @@ conversationId: golden-generic-v1
 steps:
   - user: 我想租个衣服
     expect:
+      # 追问款式/编号即可，不锁死字面"款式"+"编号"（"哪一款/商品号/链接"都算）。
       action: ask_product
-      contains: ["款式", "编号"]
+      containsAny: ["款式", "编号", "哪一款", "哪款", "商品号", "链接"]
       notContains: ["身高"]
       minScore: 6
