@@ -11,7 +11,8 @@ Product/agent name: Chatty
 Node.js + TypeScript
 Next.js first
 OpenAI Agents SDK TypeScript
-OpenAI Chat Completions API
+OpenAI Responses API
+MiMo model lane, defaulting to mimo-2.5
 SQLite for MVP sessions/state
 Existing memory model kept mostly intact
 Temporal deferred until the product proves it needs durable workflow guarantees
@@ -153,7 +154,7 @@ agent_traces
 
 Postgres can replace SQLite later when multi-user concurrency, deployment topology, or data volume requires it.
 
-## 7. OpenAI Agents SDK and Chat Completions
+## 7. OpenAI Agents SDK and Responses API
 
 Decision: use both.
 
@@ -166,7 +167,7 @@ OpenAI Agents SDK TypeScript:
 - Tracing.
 - Agent-level orchestration for bounded runs.
 
-OpenAI Chat Completions API:
+OpenAI Responses API:
 
 - Existing `rag-service` compatibility path.
 - Intent classification.
@@ -175,7 +176,7 @@ OpenAI Chat Completions API:
 - Evaluator judge.
 - Direct low-level model calls when an Agents SDK run is unnecessary.
 
-All model calls should go through `packages/llm` adapters so the runtime can switch between direct Chat Completions and Agents SDK runs without touching product logic.
+All model calls should go through `packages/llm` or `rag-service/src/responses.ts` adapters so the runtime can switch between direct Responses calls and Agents SDK runs without touching product logic.
 
 ## 8. AgentKit and Agent Builder
 
@@ -211,7 +212,7 @@ flowchart TD
   CTX --> RAG["Knowledge / media retrieval"]
   AC --> LLM["packages/llm"]
   LLM --> SDK["OpenAI Agents SDK TS"]
-  LLM --> CC["OpenAI Chat Completions API"]
+  LLM --> CC["OpenAI Responses API"]
   AC --> TOOLS["Runtime tools"]
   TOOLS --> ORD["Order / inventory / media / handoff adapters"]
   AC --> TRACE["Agent traces and eval records"]

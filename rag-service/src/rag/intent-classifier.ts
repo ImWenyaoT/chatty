@@ -7,7 +7,7 @@
 // 不再各自写一套关键词规则。
 
 import { config } from '../config.js';
-import { openai } from '../openai.js';
+import { createFunctionCall } from '../responses.js';
 import type { ConversationProfile, IntentClassification, MemoryMessage, UserIntent } from '../types.js';
 
 const FAST_PATH_RULES: Array<{ intent: UserIntent; pattern: RegExp; confidence: 'high' | 'medium' }> = [
@@ -111,57 +111,49 @@ export async function classifyUserIntent(input: {
   try {
     const contextLine = buildContextLine(input.profile, input.recentMessages, input.lastAssistantMessage);
     const userContent = `用户这一句：\n${question}\n\n上下文：\n${contextLine || '（空）'}`;
-    const completion = await openai.chat.completions.create({
+    const parsed = await createFunctionCall<{ intent?: UserIntent; reason?: string }>({
       model: config.chatModel,
       temperature: 0,
-      max_tokens: 120,
-      tools: [
-        {
-          type: 'function',
-          function: {
-            name: 'classify_intent',
-            description: '把用户这一句话分类成 1 个意图',
-            parameters: {
-              type: 'object',
-              properties: {
-                intent: {
-                  type: 'string',
-                  enum: [
-                    'select_product',
-                    'provide_period',
-                    'provide_body',
-                    'confirm',
-                    'ask_info',
-                    'place_order',
-                    'small_talk',
-                    'request_handoff',
-                    'update_correction',
-                    'other',
-                  ],
-                  description: '10 选 1 的意图分类',
-                },
-                reason: {
-                  type: 'string',
-                  description: '一句话解释为什么选这个（30 字以内，便于 debug）',
-                },
-              },
-              required: ['intent'],
+      maxOutputTokens: 120,
+      instructions: SYSTEM_PROMPT,
+      input: [{ role: 'user', content: userContent }],
+      tool: {
+        type: 'function',
+        name: 'classify_intent',
+        description: '把用户这一句话分类成 1 个意图',
+        strict: false,
+        parameters: {
+          type: 'object',
+          properties: {
+            intent: {
+              type: 'string',
+              enum: [
+                'select_product',
+                'provide_period',
+                'provide_body',
+                'confirm',
+                'ask_info',
+                'place_order',
+                'small_talk',
+                'request_handoff',
+                'update_correction',
+                'other',
+              ],
+              description: '10 选 1 的意图分类',
+            },
+            reason: {
+              type: 'string',
+              description: '一句话解释为什么选这个（30 字以内，便于 debug）',
             },
           },
+          required: ['intent'],
         },
-      ],
-      tool_choice: { type: 'function', function: { name: 'classify_intent' } },
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userContent },
-      ],
+      },
     });
 
-    const call = completion.choices[0]?.message?.tool_calls?.[0];
-    if (!call || call.function.name !== 'classify_intent') {
+    if (!parsed) {
       return classifyByKeywords(question, !!input.profile);
     }
-    const parsed = JSON.parse(call.function.arguments) as { intent?: UserIntent; reason?: string };
     const intent = parsed.intent;
     if (
       intent === 'select_product' ||

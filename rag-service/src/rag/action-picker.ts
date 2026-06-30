@@ -3,8 +3,8 @@
 
 import { config } from '../config.js';
 import { deriveConversationOrchestration } from '../conversation-orchestrator.js';
-import { openai } from '../openai.js';
 import { findProduct, pickSizeByMeasurement } from '../prompts-loader.js';
+import { createFunctionCall } from '../responses.js';
 import type { ConversationProfile, KnowledgeChunk, MemoryMessage } from '../types.js';
 import type { Action } from './actions.js';
 import {
@@ -259,48 +259,36 @@ async function callClassifier(ctx: ActionContext): Promise<ClassifierResult> {
 
   const userContent = `用户这句话：\n${ctx.question}\n\n上下文：\n${stageLines || '（空）'}\n\n检索到的知识：\n${referencesText || '（无命中）'}`;
 
-  const completion = await openai.chat.completions.create({
+  const parsed = await createFunctionCall<ClassifierResult>({
     model: config.chatModel,
     temperature: 0.1,
-    tools: [
-      {
-        type: 'function',
-        function: {
-          name: 'decide_reply',
-          description: '决定当前客服回复的模式',
-          parameters: {
-            type: 'object',
-            properties: {
-              mode: {
-                type: 'string',
-                enum: ['follow_flow', 'answer_faq', 'small_talk', 'handoff'],
-              },
-              faqAnswer: { type: 'string', description: '当 mode=answer_faq 时填。1-3 句直接回答，不得追问围度/常穿码/拆件。' },
-              smallTalkText: { type: 'string', description: '当 mode=small_talk 时填。3-10 字自然回应。' },
-              handoffReason: { type: 'string', description: '当 mode=handoff 时填。' },
-            },
-            required: ['mode'],
+    instructions: classifierSystemPrompt,
+    input: [{ role: 'user', content: userContent }],
+    tool: {
+      type: 'function',
+      name: 'decide_reply',
+      description: '决定当前客服回复的模式',
+      strict: false,
+      parameters: {
+        type: 'object',
+        properties: {
+          mode: {
+            type: 'string',
+            enum: ['follow_flow', 'answer_faq', 'small_talk', 'handoff'],
           },
+          faqAnswer: { type: 'string', description: '当 mode=answer_faq 时填。1-3 句直接回答，不得追问围度/常穿码/拆件。' },
+          smallTalkText: { type: 'string', description: '当 mode=small_talk 时填。3-10 字自然回应。' },
+          handoffReason: { type: 'string', description: '当 mode=handoff 时填。' },
         },
+        required: ['mode'],
       },
-    ],
-    tool_choice: { type: 'function', function: { name: 'decide_reply' } },
-    messages: [
-      { role: 'system', content: classifierSystemPrompt },
-      { role: 'user', content: userContent },
-    ],
+    },
   });
 
-  const call = completion.choices[0]?.message?.tool_calls?.[0];
-  if (!call || call.function.name !== 'decide_reply') {
+  if (!parsed) {
     return { mode: 'follow_flow' };
   }
-  try {
-    const parsed = JSON.parse(call.function.arguments) as ClassifierResult;
-    return parsed;
-  } catch {
-    return { mode: 'follow_flow' };
-  }
+  return parsed;
 }
 
 // ========== 主入口 ==========

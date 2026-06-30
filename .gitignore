@@ -1,9 +1,13 @@
 node_modules/
 dist/
+build/
+coverage/
+.turbo/
 *.tsbuildinfo
 *.log
 .DS_Store
 .claude/
+*.code-workspace
 .env
 .env.*
 !.env.example
@@ -12,3 +16,11 @@ rag-service/data/memory-store.json
 rag-service/data/local-vectors.json
 rag-service/public/dashboard/
 rag-service/dashboard/node_modules/
+
+# Frontend build output
+.next/
+**/.next/
+out/
+**/out/
+next-env.d.ts
+**/next-env.d.ts

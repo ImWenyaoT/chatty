@@ -1,0 +1,7 @@
+packages:
+  - 'packages/*'
+  - 'rag-service'
+  - 'rag-service/dashboard'
+  - 'apps/*'
+allowBuilds:
+  esbuild: true

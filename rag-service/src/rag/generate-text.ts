@@ -6,8 +6,8 @@
 // 目标：让客户感觉不到是机器人。实现：Action-scoped prompt，每个 Action 只告诉 LLM 它该做的事。
 
 import { config } from '../config.js';
-import { openai } from '../openai.js';
 import { loaded } from '../prompts-loader.js';
+import { createTextResponse } from '../responses.js';
 import type { MemoryMessage } from '../types.js';
 import type { ActionContext } from './action-picker.js';
 import { ACTION_SPECS, GLOBAL_FORBIDDEN_PATTERNS, SKIP_GENERATION_KINDS, type ActionSpec } from './action-specs.js';
@@ -129,18 +129,15 @@ export async function generateText(action: Action, ctx: ActionContext): Promise<
   }
 
   try {
-    const completion = await openai.chat.completions.create({
+    const raw = await createTextResponse({
       model: config.generationModel,
       temperature: 0.7,
-      top_p: 0.9,
-      max_tokens: 260,
-      messages: [
-        { role: 'system', content: buildSystemPrompt(spec) },
-        { role: 'user', content: buildUserPrompt(action, ctx) },
-      ],
+      topP: 0.9,
+      maxOutputTokens: 260,
+      instructions: buildSystemPrompt(spec),
+      input: [{ role: 'user', content: buildUserPrompt(action, ctx) }],
     });
 
-    const raw = completion.choices[0]?.message?.content?.trim();
     if (!raw) {
       return { text: renderAction(action), source: 'fallback' };
     }

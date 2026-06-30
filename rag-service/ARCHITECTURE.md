@@ -126,7 +126,7 @@ type Action =
 
 `src/rag/action-picker.ts` 里 `callClassifier()`：
 
-- 模型：`config.chatModel`（`gpt-5.2`）
+- 模型：`config.chatModel`（`mimo-2.5`）
 - temperature 0.1
 - 工具：单个 `decide_reply` function，必须调用
 - 参数：`mode` (enum) + 可选 `faqAnswer` / `smallTalkText` / `handoffReason`
@@ -281,7 +281,7 @@ sha1(combined yaml).slice(0, 6) → "v1-5a57d9"
    ↓
 模型: config.evaluatorModel
 prompt: loaded.prompts.evaluatorSystemPrompt + renderTemplate(evaluatorUserTemplate, ...)
-response_format: json_schema { score, issues, suggestions, suggestedReply }
+Responses text.format: json_schema { score, issues, suggestions, suggestedReply }
 temperature 0.0
    ↓
 首选: JSON.parse → 校验 score 范围 1-10
@@ -413,8 +413,8 @@ export async function queryAvailability(input: AvailabilityQueryInput) {
 ### 10.5 切换主回复模型
 
 ```env
-CHAT_MODEL=gpt-4o-mini
-EVALUATOR_MODEL=gpt-4o
+MIMO_MODEL=mimo-2.5
+MIMO_EVALUATOR_MODEL=mimo-2.5
 ```
 
 注意：如果模型不支持 OpenAI tool-calling 协议，`callClassifier` 会失败 → 整个 step 13 兜底分类器失效 → 大部分 fast-path 还能用，但 follow_flow 兜底走 ask_product。
@@ -448,4 +448,4 @@ EVALUATOR_MODEL=gpt-4o
 如果想进一步降本：
 - 把 `extractStructuredConversationFacts` 改成正则优先 + LLM 兜底（现在反过来）
 - 把 fact extract 也异步化
-- 用更小的模型（`gpt-4o-mini`）做分类器和事实抽取，主回复保留大模型（但当前架构主回复多数走模板，不需要大模型）
+- 用更小的模型（`mimo-2.5`）做分类器和事实抽取，主回复保留大模型（但当前架构主回复多数走模板，不需要大模型）

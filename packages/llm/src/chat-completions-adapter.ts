@@ -1,31 +1,17 @@
-import OpenAI from 'openai'
+import {
+  createResponsesAdapter,
+  type ResponseMessage,
+  type ResponsesAdapter,
+  type ResponsesAdapterOptions,
+} from './responses-adapter.js'
 
-export interface ChatCompletionsAdapterOptions {
-  client: OpenAI
-  model: string
-}
-
-export interface ChatCompletionMessage {
-  role: 'system' | 'user' | 'assistant'
-  content: string
-}
-
-export interface ChatCompletionsAdapter {
-  complete(messages: ChatCompletionMessage[]): Promise<string>
-}
+export type ChatCompletionsAdapterOptions = ResponsesAdapterOptions
+export type ChatCompletionMessage = ResponseMessage
+export type ChatCompletionsAdapter = ResponsesAdapter
 
 /**
- * Creates a direct Chat Completions adapter for extraction, eval, and legacy fallback paths.
+ * Preserves the old adapter name while routing calls through the Responses API.
  */
 export function createChatCompletionsAdapter(options: ChatCompletionsAdapterOptions): ChatCompletionsAdapter {
-  return {
-    async complete(messages: ChatCompletionMessage[]) {
-      const response = await options.client.chat.completions.create({
-        model: options.model,
-        messages,
-      })
-
-      return response.choices[0]?.message?.content?.trim() ?? ''
-    },
-  }
+  return createResponsesAdapter(options)
 }

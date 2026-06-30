@@ -8,7 +8,7 @@ The current repository keeps the existing `rag-service` runnable while adding a 
 - SQLite-backed session and trace state;
 - conservative migration of existing customer/product memory;
 - OpenAI Agents SDK TypeScript adapters;
-- OpenAI Chat Completions compatibility and fallback adapters;
+- OpenAI Responses API compatibility and fallback adapters;
 - documentation-first architecture decisions under `docs/`.
 
 ## Current Status
@@ -18,8 +18,9 @@ This is an early engineering prototype. The legacy `rag-service` remains the com
 ## Useful Commands
 
 ```bash
-npm run typecheck:skeleton
-npm run build:rag-service
+pnpm typecheck
+pnpm test
+pnpm build
 ```
 
 ## Docs
