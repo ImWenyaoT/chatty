@@ -2,7 +2,8 @@
 
 import { useEffect, useRef } from 'react'
 
-// Auto-growing message composer. Enter sends, Shift+Enter inserts a newline.
+// 底部 sticky Composer：48px 自增高输入框 + primary 发送按钮。
+// Enter 发送，Shift+Enter 换行。
 
 type Props = {
   value: string
@@ -11,27 +12,11 @@ type Props = {
   onSubmit: () => void
 }
 
-function SendIcon() {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.9"
-      aria-hidden="true"
-    >
-      <path d="M22 2L11 13" />
-      <path d="M22 2l-7 20-4-9-9-4 20-7z" />
-    </svg>
-  )
-}
-
+/** Composer：三段式布局的第三段，唯一的消息入口。 */
 export function Composer({ value, sending, onChange, onSubmit }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null)
 
-  // Grow the textarea to fit its content (capped by max-height in CSS).
+  // 让 textarea 随内容自增高（上限由 CSS max-height 控制）。
   useEffect(() => {
     const el = ref.current
     if (!el) return
@@ -43,35 +28,37 @@ export function Composer({ value, sending, onChange, onSubmit }: Props) {
 
   return (
     <div className="composer">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (canSend) onSubmit()
-        }}
-      >
-        <textarea
-          ref={ref}
-          value={value}
-          rows={1}
-          placeholder="问问租期、尺码、价格、物流…"
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault()
-              if (canSend) onSubmit()
-            }
+      <div className="composer-inner">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (canSend) onSubmit()
           }}
-          // biome-ignore lint/a11y/noAutofocus: 聊天台唯一输入框，进页即打字是核心交互
-          autoFocus
-          aria-label="输入消息"
-        />
-        <button className="send" type="submit" disabled={!canSend} aria-label="发送">
-          <SendIcon />
-        </button>
-      </form>
-      <p className="hint">
-        <kbd>Enter</kbd> 发送 · <kbd>Shift</kbd>+<kbd>Enter</kbd> 换行
-      </p>
+        >
+          <textarea
+            ref={ref}
+            value={value}
+            rows={1}
+            placeholder="问问租期、尺码、价格、物流…"
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                if (canSend) onSubmit()
+              }
+            }}
+            // biome-ignore lint/a11y/noAutofocus: 聊天台唯一输入框，进页即打字是核心交互
+            autoFocus
+            aria-label="输入消息"
+          />
+          <button className="send" type="submit" disabled={!canSend}>
+            发送
+          </button>
+        </form>
+        <p className="hint">
+          <kbd>Enter</kbd> 发送 · <kbd>Shift</kbd>+<kbd>Enter</kbd> 换行
+        </p>
+      </div>
     </div>
   )
 }

@@ -14,6 +14,7 @@
     "@rental/db": "workspace:*",
     "@rental/llm": "workspace:*",
     "@rental/shared": "workspace:*",
+    "geist": "^1.7.2",
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

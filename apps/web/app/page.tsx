@@ -98,7 +98,7 @@ export default function ConciergePage() {
   }
 
   return (
-    <main className="shell">
+    <div className="app">
       <SessionBar
         status={status}
         productId={productId}
@@ -108,36 +108,38 @@ export default function ConciergePage() {
         onCustomerId={setCustomerId}
       />
 
-      <section className="stream">
-        {turns.length === 0 && !sending ? (
-          <div className="empty">
-            <h2>在的，您想租点什么？</h2>
-            <p>问问租期、尺码、价格或物流，超出范围我会帮您转人工。</p>
-            <div className="prompts">
-              {EXAMPLE_PROMPTS.map((p) => (
-                <button key={p} type="button" onClick={() => send(p)}>
-                  {p}
-                </button>
-              ))}
+      <main className="stream">
+        <div className="stream-inner">
+          {turns.length === 0 && !sending ? (
+            <div className="empty">
+              <h2>发送第一条消息，观察一次有界决策</h2>
+              <p>问租期、尺码、价格或物流；超出能力边界时，loop 会转接人工客服。</p>
+              <div className="prompts">
+                {EXAMPLE_PROMPTS.map((p) => (
+                  <button key={p} type="button" onClick={() => send(p)}>
+                    {p}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        ) : null}
+          ) : null}
 
-        {turns.map((turn) => (
-          <ChatMessage key={turn.id} turn={turn} />
-        ))}
+          {turns.map((turn) => (
+            <ChatMessage key={turn.id} turn={turn} />
+          ))}
 
-        {sending ? (
-          <div className="typing" role="status" aria-label="Chatty 正在输入">
-            <span />
-            <span />
-            <span />
-          </div>
-        ) : null}
-        <div ref={bottom} />
-      </section>
+          {sending ? (
+            <div className="typing" role="status" aria-label="Chatty 正在输入">
+              <span />
+              <span />
+              <span />
+            </div>
+          ) : null}
+          <div ref={bottom} />
+        </div>
+      </main>
 
       <Composer value={input} sending={sending} onChange={setInput} onSubmit={() => send(input)} />
-    </main>
+    </div>
   )
 }

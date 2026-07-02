@@ -1,30 +1,27 @@
 import type { ReactNode } from 'react'
-import { Fraunces, Hanken_Grotesk } from 'next/font/google'
+import { GeistMono } from 'geist/font/mono'
+import { GeistSans } from 'geist/font/sans'
 import './globals.css'
 
-// Display serif (brand wordmark + headers) — characterful, editorial, a touch of
-// fashion. Body grotesque for chat/UI. Latin only; CJK falls back to the system
-// stack declared in globals.css so we don't ship a huge CJK web font.
-const display = Fraunces({
-  subsets: ['latin'],
-  variable: '--font-display',
-  display: 'swap',
-})
-
-const body = Hanken_Grotesk({
-  subsets: ['latin'],
-  variable: '--font-body',
-  display: 'swap',
-})
+// Geist Sans（UI/正文）+ Geist Mono（harness 遥测）。官方包只带 latin，
+// CJK 走 globals.css 里声明的系统字体回退，避免打包巨大的中文 web font。
 
 export const metadata = {
   title: 'Chatty · 租衣客服',
   description: 'Agentic customer-service concierge for rental commerce.',
 }
 
+export const viewport = {
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#000000' },
+  ],
+}
+
+/** 根布局：挂载 Geist 字体的 CSS 变量（--font-geist-sans / --font-geist-mono）。 */
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="zh" className={`${display.variable} ${body.variable}`}>
+    <html lang="zh" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <body>{children}</body>
     </html>
   )
