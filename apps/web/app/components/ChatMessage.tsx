@@ -2,16 +2,16 @@
 
 import type { Turn } from './types'
 
-// Renders one turn. User/agent/system each get distinct styling; an agent turn
-// flagged as a handoff shows the escalation treatment, and every agent turn
-// carries a collapsible trace detail (this is a developer playground).
+// 单条回合渲染：user 右侧灰底气泡；agent 左侧纯文本，下方跟一条 mono 遥测条
+// （loop 实际返回的 terminality / status / trace / session，不编造字段）；
+// handoff 额外挂一枚人工转接标记；system 居中 mono 行，error 走红色。
 
-/** Small icons kept inline so the bundle has no icon dependency. */
+/** 人工转接标记的内联图标（装饰性，aria-hidden，避免引入图标依赖）。 */
 function HandoffIcon() {
   return (
     <svg
-      width="16"
-      height="16"
+      width="14"
+      height="14"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -25,70 +25,44 @@ function HandoffIcon() {
   )
 }
 
-function Chevron() {
-  return (
-    <svg
-      className="chev"
-      width="11"
-      height="11"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.4"
-      aria-hidden="true"
-    >
-      <path d="M9 18l6-6-6-6" />
-    </svg>
-  )
+/** 把一次 loop 应答里实际存在的遥测字段拼成一条 mono 遥测文本。 */
+function telemetryLine(turn: Turn): string {
+  const parts: string[] = []
+  if (turn.terminality) parts.push(turn.terminality)
+  if (turn.status) parts.push(turn.status)
+  if (turn.traceId) parts.push(`trace ${turn.traceId}`)
+  if (turn.sessionId) parts.push(`session ${turn.sessionId}`)
+  return parts.join(' · ')
 }
 
+/** 渲染一条对话回合（user / agent / system）。 */
 export function ChatMessage({ turn }: { turn: Turn }) {
   if (turn.role === 'system') {
-    return (
-      <div className={`turn system${turn.error ? ' error' : ''}`}>
-        <div className="bubble">{turn.text}</div>
-      </div>
-    )
+    return <p className={`turn-system${turn.error ? ' is-error' : ''}`}>{turn.text}</p>
   }
 
   if (turn.role === 'user') {
     return (
-      <div className="turn user">
-        <span className="who">你</span>
-        <div className="bubble">{turn.text}</div>
+      <div className="turn turn-user">
+        <span className="sr-only">你：</span>
+        <div className="msg-bubble">{turn.text}</div>
       </div>
     )
   }
 
-  // agent (possibly a handoff)
+  // agent（可能带 handoff 标记）
+  const telemetry = telemetryLine(turn)
   return (
-    <div className={`turn ${turn.handoff ? 'handoff' : 'agent'}`}>
-      <span className="who">{turn.handoff ? '转接人工' : 'Chatty'}</span>
-      <div className="bubble">
-        {turn.handoff ? <HandoffIcon /> : null}
-        <span>{turn.text}</span>
-      </div>
-      {turn.traceId ? (
-        <details className="trace">
-          <summary>
-            <Chevron /> trace
-          </summary>
-          <div className="trace-body">
-            <div>
-              <b>terminality</b> {turn.terminality}
-            </div>
-            <div>
-              <b>status</b> {turn.status}
-            </div>
-            <div>
-              <b>trace</b> {turn.traceId}
-            </div>
-            <div>
-              <b>session</b> {turn.sessionId}
-            </div>
-          </div>
-        </details>
+    <div className="turn turn-agent">
+      <span className="sr-only">Chatty：</span>
+      {turn.handoff ? (
+        <span className="handoff-flag">
+          <HandoffIcon />
+          已转接人工
+        </span>
       ) : null}
+      <div className="msg-text">{turn.text}</div>
+      {telemetry ? <p className="telemetry">{telemetry}</p> : null}
     </div>
   )
 }

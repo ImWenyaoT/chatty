@@ -1,8 +1,7 @@
 'use client'
 
-// Top bar: brand wordmark, a live session-status chip, and the editable
-// conversation context (product / customer) so the playground can drive any
-// product without code changes.
+// 顶栏（64px）：品牌字标、可编辑的会话上下文（商品 / 客户），以及一枚
+// Geist 风格 status pill（8px 圆点 + label-13），实时反映 loop 的会话状态。
 
 const STATUS_LABEL: Record<string, string> = {
   active: '在线',
@@ -14,14 +13,15 @@ const STATUS_LABEL: Record<string, string> = {
   failed: '异常',
 }
 
-/** Maps a loop session status onto a chip colour tone. */
+/** 把 loop 会话状态映射为 status pill 的色调（green/amber/blue/red/gray）。 */
 function toneFor(status: string): string {
-  if (status === 'waiting_for_human') return 'human'
   if (status === 'active') return 'active'
+  if (status === 'waiting_for_human') return 'human'
+  if (status === 'failed') return 'error'
   if (status === 'waiting_for_user' || status === 'waiting_for_tool' || status === 'paused') {
     return 'wait'
   }
-  return 'idle'
+  return 'closed'
 }
 
 type Props = {
@@ -33,6 +33,7 @@ type Props = {
   onCustomerId: (v: string) => void
 }
 
+/** SessionBar：三段式布局的第一段，承载会话级信息与上下文输入。 */
 export function SessionBar({
   status,
   productId,
@@ -42,23 +43,15 @@ export function SessionBar({
   onCustomerId,
 }: Props) {
   return (
-    <>
-      <header className="bar">
-        <div className="brand">
-          <span className="mark">
-            Chat<em>ty</em>
-          </span>
-          <span className="tag">租衣客服</span>
-        </div>
-        <span className="status" data-tone={toneFor(status)}>
-          <span className="dot" />
-          {STATUS_LABEL[status] ?? status}
-        </span>
-      </header>
+    <header className="bar">
+      <div className="brand">
+        <span className="brand-mark">Chatty</span>
+        <span className="brand-tag">租衣客服 playground</span>
+      </div>
 
-      <div className="context">
-        <label>
-          <span className="k">商品</span>
+      <div className="bar-controls">
+        <label className="field">
+          <span className="field-k">商品</span>
           <input
             value={productId}
             onChange={(e) => onProductId(e.target.value)}
@@ -67,8 +60,8 @@ export function SessionBar({
             aria-label="商品 ID"
           />
         </label>
-        <label>
-          <span className="k">客户</span>
+        <label className="field">
+          <span className="field-k">客户</span>
           <input
             className="wide"
             value={customerId}
@@ -78,7 +71,11 @@ export function SessionBar({
             aria-label="客户 ID"
           />
         </label>
+        <span className="status-pill" data-tone={toneFor(status)} role="status">
+          <span className="dot" aria-hidden="true" />
+          {STATUS_LABEL[status] ?? status}
+        </span>
       </div>
-    </>
+    </header>
   )
 }
