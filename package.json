@@ -21,7 +21,8 @@
     "build:rag-service": "pnpm --filter rental-rag-service build",
     "build:skeleton": "tsc -b packages/shared packages/db packages/agent-core packages/llm --pretty false",
     "typecheck:skeleton": "pnpm build:skeleton && pnpm --filter @rental/agent-core typecheck && pnpm --filter @rental/llm typecheck",
-    "smoke": "pnpm build:skeleton && node scripts/smoke.mts"
+    "smoke": "pnpm build:skeleton && node scripts/smoke.mts",
+    "promote:failure-case": "pnpm build:skeleton && node scripts/promote-failure-case.mts"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",
