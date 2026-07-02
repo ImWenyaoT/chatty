@@ -6,6 +6,7 @@ import type {
   RuntimeTool,
   RuntimeToolCall,
 } from '@rental/shared'
+import { readQuestionFromEvent } from '@rental/shared'
 import type { ChatCompletionsAdapter } from '@rental/llm'
 import type { AgentContext, AgentLoopRunner } from './loop-contracts.js'
 import { createWaitingForUserResult } from './loop-contracts.js'
@@ -60,7 +61,7 @@ export function createLoopRunner(options: CreateLoopRunnerOptions): AgentLoopRun
         return createWaitingForUserResult(event)
       }
 
-      const question = readQuestion(event)
+      const question = readQuestionFromEvent(event)
       // 有界性由结构保证：runStep 每次请求恰好做一次路由决策就终止，
       // 不存在多步循环，因此不需要步数预算。引入 tool-chaining 时再加计数器。
       const decision = await classifier(question)
@@ -83,12 +84,6 @@ export function createLoopRunner(options: CreateLoopRunnerOptions): AgentLoopRun
 }
 
 // --- helpers ----------------------------------------------------------------
-
-function readQuestion(event: ConversationEvent): string {
-  if (typeof event.payload === 'string') return event.payload
-  const obj = event.payload as { question?: unknown } | null
-  return typeof obj?.question === 'string' ? obj.question : ''
-}
 
 function replyResult(
   event: ConversationEvent,

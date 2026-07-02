@@ -8,6 +8,7 @@ import type {
   RuntimeTool,
   RuntimeToolCall,
 } from '@rental/shared'
+import { readQuestionFromEvent } from '@rental/shared'
 
 // Re-export the shared contracts so callers that previously imported them from
 // @rental/llm still resolve. The canonical home is now @rental/shared.
@@ -85,15 +86,11 @@ function toSdkTool(rt: RuntimeTool, onCall?: (call: RuntimeToolCall) => void) {
 }
 
 /**
- * Extracts the user question from a ConversationEvent payload, mirroring
- * loop-runner.readQuestion so the SDK run receives the same text. Exported for
- * unit testing the SDK lane's input mapping without a real API call.
+ * SDK lane 的问题提取：直接委托 @rental/shared 的唯一实现，
+ * 保证与 loop-runner 读到的问题永远一致。Exported for unit tests.
  */
 export function readQuestion(input: AgentsSdkRunInput): string {
-  const payload = input.event.payload
-  if (typeof payload === 'string') return payload
-  const obj = payload as { question?: unknown } | null
-  return typeof obj?.question === 'string' ? obj.question : ''
+  return readQuestionFromEvent(input.event)
 }
 
 /**

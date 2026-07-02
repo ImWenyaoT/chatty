@@ -19,24 +19,9 @@ import { loaded, renderTemplate } from './prompts-loader.js';
 import { isQdrantAvailable, qdrant } from './qdrant.js';
 import { selectAction, type ActionContext } from './rag/action-picker.js';
 import { generateText } from './rag/generate-text.js';
+import { sanitizeAnswerText } from './rag/sanitize.js';
 import { classifyUserIntent, intentToExtractionPolicy } from './rag/intent-classifier.js';
 import { ChatRequestBody, IntentClassification, KnowledgeChunk } from './types.js';
-
-// ========== 文本清洗 ==========
-function sanitizeAnswerText(text: string) {
-  return text
-    // 去掉 Markdown 图片语法 ![alt](url)——图片走独立的 imageReferences 卡片展示，
-    // 文本里留着会让客户看到一串 "/media/xxx.jpg" 的原始路径，像暴露了后台。
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
-    // 去掉普通 Markdown 链接 [text](url) 中的 url，保留 text——链接在聊天里没意义
-    .replace(/\[([^\]]+)\]\(([^)]*)\)/g, '$1')
-    .replace(/\*/g, '')
-    // 清掉图片去除后遗留的多余空行
-    .replace(/\n{3,}/g, '\n\n')
-    .replace(/\s+([，。！？])/g, '$1')
-    .replace(/([，。！？]){2,}/g, '$1')
-    .trim();
-}
 
 // ========== 用户本轮的身高体重抽取 ==========
 function extractProvidedBody(question: string) {
@@ -383,141 +368,7 @@ export async function answerQuestion(body: ChatRequestBody) {
   };
 }
 
-// ========== 评估器（保持原接口） ==========
-function extractJsonFromText(text: string) {
-  const start = text.indexOf('{');
-  if (start < 0) return '';
-
-  let depth = 0;
-  let inString = false;
-  let escape = false;
-
-  for (let i = start; i < text.length; i++) {
-    const char = text[i];
-    if (escape) { escape = false; continue; }
-    if (char === '\\') { escape = true; continue; }
-    if (char === '"') { inString = !inString; continue; }
-    if (inString) continue;
-    if (char === '{') depth += 1;
-    else if (char === '}') {
-      depth -= 1;
-      if (depth === 0) return text.slice(start, i + 1);
-    }
-  }
-  return text.slice(start);
-}
-
-function normalizeArrayText(raw: string): string[] {
-  return raw
-    .split(/\r?\n|；|;|，|,|、|\t/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .map((item) => item.replace(/^[-*\d\.\s]*\s*/, '').trim());
-}
-
-function parseJsonArrayValue(rawText: string, key: string) {
-  const regex = new RegExp(`['\"]?${key}['\"]?\\s*:\\s*(\\[[\\s\\S]*?\\])`, 'i');
-  const match = rawText.match(regex);
-  if (!match) return [];
-  try {
-    const parsed = JSON.parse(match[1]);
-    return Array.isArray(parsed) ? parsed.map((item) => String(item)) : [];
-  } catch {
-    return normalizeArrayText(match[1].replace(/^\[|\]$/g, ''));
-  }
-}
-
-function parseLooseEvaluation(rawText: string) {
-  const normalized = rawText
-    .replace(/：/g, ':')
-    .replace(/，/g, ',')
-    .replace(/“|”/g, '"')
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n');
-
-  const scoreMatch = normalized.match(/(?:score|评分)\s*[:：]?\s*([0-9]+(?:\.[0-9]+)?)/i);
-  const issuesMatch = normalized.match(/(?:issues|问题)\s*[:：]?\s*([\s\S]*?)(?:\n\s*(?:suggestions|建议)\s*[:：]?|$)/i);
-  const suggestionsMatch = normalized.match(/(?:suggestions|建议)\s*[:：]?\s*([\s\S]*?)(?:$)/i);
-
-  const score = scoreMatch ? Number(scoreMatch[1]) : 0;
-  const issues = issuesMatch
-    ? normalizeArrayText(issuesMatch[1]).slice(0, 3)
-    : parseJsonArrayValue(normalized, 'issues').slice(0, 3);
-  const suggestions = suggestionsMatch
-    ? normalizeArrayText(suggestionsMatch[1]).slice(0, 3)
-    : parseJsonArrayValue(normalized, 'suggestions').slice(0, 3);
-
-  return {
-    score: Number.isFinite(score) ? Math.min(10, Math.max(1, score)) : 0,
-    issues,
-    suggestions,
-  };
-}
-
-export interface EvaluationResult {
-  score: number;
-  issues: string[];
-  suggestions: string[];
-  suggestedReply?: string;
-  evaluatorModel: string;
-  promptVersion: string;
-}
-
-export async function evaluateCustomerServiceReply(
-  conversationHistory: Array<{ role: string; content: string }>,
-  customerServiceReply: string,
-): Promise<EvaluationResult> {
-  const historyText = conversationHistory
-    .map((message) => `${message.role === 'user' ? '用户' : '客服'}: ${message.content}`)
-    .join('\n');
-
-  const userPrompt = renderTemplate(loaded.prompts.evaluatorUserTemplate, {
-    historyText,
-    customerServiceReply,
-  });
-
-  const completion = await openai.chat.completions.create({
-    model: config.evaluatorModel,
-    temperature: 0.0,
-    top_p: 1,
-    max_tokens: 800,
-    // DeepSeek 等 OpenAI 兼容后端不支持 json_schema structured outputs，统一用 json_object（JSON mode），
-    // OpenAI 同样支持。解析端已用 extractJsonFromText + parseLooseEvaluation 兜底，不依赖 schema 强校验；
-    // 字段结构由 evaluator 的 system/user 模板用文字约定。注意 json_object 模式要求 prompt 含 "json" 字样（已满足）。
-    response_format: { type: 'json_object' },
-    messages: [
-      { role: 'system', content: loaded.prompts.evaluatorSystemPrompt },
-      { role: 'user', content: userPrompt },
-    ],
-  });
-
-  const rawText = completion.choices[0]?.message?.content ?? '';
-  const jsonText = extractJsonFromText(rawText.trim());
-  const baseMeta = { evaluatorModel: config.evaluatorModel, promptVersion: loaded.promptVersion };
-
-  try {
-    const parsed = JSON.parse(jsonText) as {
-      score?: number;
-      issues?: string[];
-      suggestions?: string[];
-      suggestedReply?: string;
-    };
-    const score = parsed.score != null ? Math.min(10, Math.max(1, Number(parsed.score))) : 0;
-    const issues = Array.isArray(parsed.issues) ? parsed.issues.map((item) => String(item)).slice(0, 3) : [];
-    const suggestions = Array.isArray(parsed.suggestions) ? parsed.suggestions.map((item) => String(item)).slice(0, 3) : [];
-    const suggestedReply = typeof parsed.suggestedReply === 'string' ? parsed.suggestedReply.trim() || undefined : undefined;
-
-    if (score === 0) {
-      throw new Error(`无效评分结果，rawText: ${rawText.slice(0, 500)}`);
-    }
-
-    return { score, issues, suggestions, suggestedReply, ...baseMeta };
-  } catch (error) {
-    console.error('评价解析失败:', error, 'rawText:', rawText);
-    const fallback = parseLooseEvaluation(rawText);
-    if (fallback.score === 0) {
-      throw new Error(`评价解析失败且无法从原始输出恢复有效评分，rawText: ${rawText.slice(0, 500)}`);
-    }
-    return { ...fallback, ...baseMeta };
-  }
-}
+// 评估器已迁至 src/evaluator.ts（断开 memory-store ↔ rag 的循环依赖）。
+// 这里保留 re-export：apps/web 的 legacy-adapter 通过动态 import rag.js 取
+// evaluateCustomerServiceReply，接口位置不能变。
+export { evaluateCustomerServiceReply, type EvaluationResult } from './evaluator.js';
