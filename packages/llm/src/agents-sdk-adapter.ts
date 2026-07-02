@@ -46,18 +46,26 @@ const LOOSE_PARAMS = z.object({}).passthrough()
  * layers withhold the same set (refund=high, handoff=medium).
  *
  * Exported so the gate can be unit-tested without driving a real SDK run().
+ *
+ * onCall（可选）在工具真正执行时回调一次，供 run() 把「实际发生的调用」
+ * 记进 trace 的 toolCalls；被安全门拒绝的调用不产生副作用，不记录。
  */
-export function sdkToolExecute(rt: RuntimeTool): (args: unknown) => Promise<string> {
+export function sdkToolExecute(
+  rt: RuntimeTool,
+  onCall?: (call: RuntimeToolCall) => void,
+): (args: unknown) => Promise<string> {
   return async (args) => {
     if (rt.approvalRequired || rt.risk !== 'low') {
-      return {
+      return JSON.stringify({
         refused: true,
         reason: `tool ${rt.name} (risk=${rt.risk}) is not auto-runnable in the SDK lane; needs a human`,
-      } as unknown as string
+      })
     }
-    const result = await rt.execute((args ?? {}) as Record<string, JsonValue>)
-    // SDK expects a serialisable return; JsonValue is already JSON-safe.
-    return result as unknown as string
+    const input = (args ?? {}) as Record<string, JsonValue>
+    onCall?.({ toolName: rt.name, arguments: input, risk: rt.risk, approvalRequired: rt.approvalRequired })
+    const result = await rt.execute(input)
+    // SDK 的 execute 约定返回字符串：结构化结果序列化成 JSON 文本交给模型阅读
+    return typeof result === 'string' ? result : JSON.stringify(result)
   }
 }
 
@@ -65,14 +73,14 @@ export function sdkToolExecute(rt: RuntimeTool): (args: unknown) => Promise<stri
  * Maps a Chatty RuntimeTool onto an OpenAI Agents SDK function tool. The SDK
  * requires a schema to describe params to the model; we keep it loose and let
  * the Chatty tool's own execute() validate. Execution goes through
- * sdkToolExecute so the approval gate holds.
+ * sdkToolExecute so the approval gate holds and real invocations reach onCall.
  */
-function toSdkTool(rt: RuntimeTool) {
+function toSdkTool(rt: RuntimeTool, onCall?: (call: RuntimeToolCall) => void) {
   return tool({
     name: rt.name,
     description: rt.description,
     parameters: LOOSE_PARAMS,
-    execute: sdkToolExecute(rt),
+    execute: sdkToolExecute(rt, onCall),
   })
 }
 
@@ -133,20 +141,6 @@ export function isHandoff(
 }
 
 /**
- * Collects the RuntimeToolCall descriptors for the tools made available to the
- * run, so the trace records which capabilities were exposed. (Per-call detail
- * requires inspecting newItems; MVP records availability, not invocation.)
- */
-function collectToolCalls(exposed: RuntimeTool[]): RuntimeToolCall[] {
-  return exposed.map((t) => ({
-    toolName: t.name,
-    arguments: {},
-    risk: t.risk,
-    approvalRequired: t.approvalRequired,
-  }))
-}
-
-/**
  * Creates an AgentsSdkRunner that drives a real OpenAI Agents SDK Agent run.
  *
  * The runner is the only place @openai/agents is imported; product code in
@@ -175,15 +169,18 @@ export function createAgentsSdkRunner(options: CreateAgentsSdkRunnerOptions): Ag
             ? (args as { reason: string }).reason
             : ''
           escalation = { triggered: true, reason }
-          return { ok: true, escalated: true } as unknown as string
+          return JSON.stringify({ ok: true, escalated: true })
         },
       })
 
+      // 记录本次 run 中真实发生的工具调用（通过安全门、真正执行了的那些），
+      // 而不是「暴露了哪些工具」——trace 里的 toolCalls 必须名副其实。
+      const calls: RuntimeToolCall[] = []
       const agent = new Agent({
         name: agentName,
         instructions: input.instructions,
         model: options.model,
-        tools: [...exposed.map(toSdkTool), escalateTool],
+        tools: [...exposed.map((t) => toSdkTool(t, (c) => calls.push(c))), escalateTool],
       })
 
       const result = await run(agent, question, {
@@ -192,7 +189,7 @@ export function createAgentsSdkRunner(options: CreateAgentsSdkRunnerOptions): Ag
 
       const handoffed = isHandoff(escalation.triggered, result.lastAgent?.name, agentName)
       const stepResult = toStepResult(input, result.finalOutput, handoffed)
-      stepResult.toolCalls = collectToolCalls(exposed)
+      stepResult.toolCalls = calls
       if (escalation.triggered) {
         // Surface why the bot escalated so the human agent has context (PRD §15).
         stepResult.memoryPatch = { handoffReason: escalation.reason } as unknown as JsonValue

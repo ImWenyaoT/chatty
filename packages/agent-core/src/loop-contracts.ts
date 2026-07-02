@@ -37,7 +37,4 @@ export function createWaitingForUserResult(event: ConversationEvent, reply?: str
   }
 }
 
-/** Max decision iterations within a single bounded request step (PRD §8.2). */
-export const MAX_STEPS = 3
-
 export type { JsonValue }

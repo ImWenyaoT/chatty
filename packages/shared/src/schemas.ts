@@ -81,15 +81,21 @@ export const agentStepResultSchema = z.object({
   memoryPatch: jsonValueSchema.optional(),
 })
 
-export const legacyChatInputSchema = z.object({
-  customerId: z.string().min(1),
-  productId: z.string().min(1).optional(),
-  conversationId: z.string().min(1).optional(),
-  question: z.string().min(0),
-  imageUrl: z.string().min(1).optional(),
-  sessionContext: z.record(z.string(), jsonPrimitiveSchema).optional(),
-  stylistPrompt: z.string().min(1).optional(),
-})
+export const legacyChatInputSchema = z
+  .object({
+    customerId: z.string().min(1),
+    productId: z.string().min(1).optional(),
+    conversationId: z.string().min(1).optional(),
+    // 允许空字符串：用户可以只发图片不发文字，由下面的 refine 兜底
+    question: z.string(),
+    imageUrl: z.string().min(1).optional(),
+    sessionContext: z.record(z.string(), jsonPrimitiveSchema).optional(),
+    stylistPrompt: z.string().min(1).optional(),
+  })
+  // 与 legacy /chat 的校验语义保持一致：文字和图片至少要有一样
+  .refine((data) => data.question.trim().length > 0 || data.imageUrl, {
+    message: 'question 或 imageUrl 至少要提供一项',
+  })
 
 /**
  * Validates the context object handed to an Agents SDK runner. The runtimeTool

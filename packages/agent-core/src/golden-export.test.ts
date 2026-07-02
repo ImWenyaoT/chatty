@@ -96,8 +96,8 @@ test('export escapes issues containing double quotes by backslash-escaping them'
   const f = fc()
   f.issues = ['他说"不行"']
   const { yaml } = exportFailureCaseToGoldenYaml(f)
-  // inner double quotes are backslash-escaped, outer wrapped in double quotes
-  assert.ok(yaml.includes('"他说\\"行不行\\""') || yaml.includes('他说'), 'quoted issue should be present')
+  // 内层双引号必须反斜杠转义、整体用双引号包裹，否则导出的 YAML 解析会碎
+  assert.ok(yaml.includes('"他说\\"不行\\""'), 'inner quotes must be escaped and wrapped')
 })
 
 test('export of special-character issues still contains minScore and user tokens', () => {

@@ -145,11 +145,14 @@ test('sdkToolExecute refuses an approvalRequired tool without calling execute', 
       return { ok: true }
     },
   }
-  const out = (await sdkToolExecute(refundTool)({ orderNo: 'A1', amount: 100 })) as unknown as {
-    refused?: boolean
-  }
+  // 拒绝时也不触发 onCall：trace 只记录真正执行了的调用
+  const calls: unknown[] = []
+  const out = JSON.parse(
+    await sdkToolExecute(refundTool, (c) => calls.push(c))({ orderNo: 'A1', amount: 100 }),
+  ) as { refused?: boolean }
   assert.equal(executed, false, 'must not execute an approval-gated tool')
   assert.equal(out.refused, true, 'should return a structured refusal')
+  assert.equal(calls.length, 0, 'a refused call must not be recorded as a tool call')
 })
 
 test('sdkToolExecute refuses a medium-risk tool without calling execute', async () => {
@@ -166,7 +169,7 @@ test('sdkToolExecute refuses a medium-risk tool without calling execute', async 
       return { ok: true }
     },
   }
-  const out = (await sdkToolExecute(handoffTool)({})) as unknown as { refused?: boolean }
+  const out = JSON.parse(await sdkToolExecute(handoffTool)({})) as { refused?: boolean }
   assert.equal(executed, false, 'medium-risk tool must not auto-run in the SDK boundary')
   assert.equal(out.refused, true)
 })
@@ -195,8 +198,13 @@ test('sdkToolExecute runs a low-risk tool normally', async () => {
       return { found: true, echo: args }
     },
   }
-  const out = (await sdkToolExecute(productTool)({ productId: 'SUIT-001' })) as unknown as {
-    found?: boolean
-  }
+  // 真正执行的调用要带着实参回调 onCall，供 trace 记录
+  const calls: Array<{ toolName: string; arguments: Record<string, unknown> }> = []
+  const out = JSON.parse(
+    await sdkToolExecute(productTool, (c) => calls.push(c))({ productId: 'SUIT-001' }),
+  ) as { found?: boolean }
   assert.equal(out.found, true)
+  assert.equal(calls.length, 1, 'an executed call must be recorded exactly once')
+  assert.equal(calls[0].toolName, 'get_product')
+  assert.deepEqual(calls[0].arguments, { productId: 'SUIT-001' })
 })
