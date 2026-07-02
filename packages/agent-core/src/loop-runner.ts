@@ -8,7 +8,7 @@ import type {
 } from '@rental/shared'
 import type { ChatCompletionsAdapter } from '@rental/llm'
 import type { AgentContext, AgentLoopRunner } from './loop-contracts.js'
-import { MAX_STEPS, createWaitingForUserResult } from './loop-contracts.js'
+import { createWaitingForUserResult } from './loop-contracts.js'
 import type { LegacyRagService } from './legacy-rag-service-adapter.js'
 import { classifyAction } from './action-classifier.js'
 import type { ActionClass } from './action-classifier.js'
@@ -61,7 +61,9 @@ export function createLoopRunner(options: CreateLoopRunnerOptions): AgentLoopRun
       }
 
       const question = readQuestion(event)
-      const decision = await withStepBudget(async () => classifier(question))
+      // 有界性由结构保证：runStep 每次请求恰好做一次路由决策就终止，
+      // 不存在多步循环，因此不需要步数预算。引入 tool-chaining 时再加计数器。
+      const decision = await classifier(question)
 
       switch (decision.actionClass) {
         case 'handoff':
@@ -86,16 +88,6 @@ function readQuestion(event: ConversationEvent): string {
   if (typeof event.payload === 'string') return event.payload
   const obj = event.payload as { question?: unknown } | null
   return typeof obj?.question === 'string' ? obj.question : ''
-}
-
-async function withStepBudget<T>(fn: () => Promise<T>): Promise<T> {
-  // NOTE: this is currently a pass-through (single bounded decision per request).
-  // MAX_STEPS is referenced only to keep the symbol live; it does NOT enforce a
-  // budget yet. A real step counter / guardrail lands when tool-chaining is
-  // introduced (docs §5.1). Until then the bounded-step guarantee comes from
-  // runStep() making exactly one routing decision, not from this function.
-  void MAX_STEPS
-  return fn()
 }
 
 function replyResult(
