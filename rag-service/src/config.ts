@@ -24,6 +24,5 @@ export const config = {
   topK: Number(process.env.TOP_K ?? 5),
   evaluatorModel: process.env.EVALUATOR_MODEL ?? process.env.EVALUATION_MODEL ?? 'gpt-5.2',
   promptVersionName: process.env.PROMPT_VERSION ?? 'v1',
-  enableReplyPolish: process.env.ENABLE_REPLY_POLISH === 'true',
   vectorSize: Number(process.env.VECTOR_SIZE ?? (process.env.EMBEDDING_MODEL === 'text-embedding-3-large' ? 3072 : 1536)),
 };
