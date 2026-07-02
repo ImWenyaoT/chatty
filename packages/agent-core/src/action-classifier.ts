@@ -49,7 +49,11 @@ export async function classifyAction(
 ): Promise<ActionClassification> {
   const trimmed = question.trim()
   if (!trimmed) {
-    return { actionClass: 'small_talk', reason: 'empty message', reply: '您好，请问有什么可以帮您？' }
+    return {
+      actionClass: 'small_talk',
+      reason: 'empty message',
+      reply: '您好，请问有什么可以帮您？',
+    }
   }
 
   let parsed: ClassifierOutput
@@ -65,10 +69,15 @@ export async function classifyAction(
     }
   }
 
-  const actionClass: ActionClass = ALLOWED.includes(parsed.actionClass) ? parsed.actionClass : 'ask_info'
+  const actionClass: ActionClass = ALLOWED.includes(parsed.actionClass)
+    ? parsed.actionClass
+    : 'ask_info'
   return {
     actionClass,
-    reason: typeof parsed.reason === 'string' && parsed.reason ? parsed.reason : `${actionClass} (no reason)`,
+    reason:
+      typeof parsed.reason === 'string' && parsed.reason
+        ? parsed.reason
+        : `${actionClass} (no reason)`,
     reply: typeof parsed.reply === 'string' && parsed.reply ? parsed.reply : undefined,
   }
 }

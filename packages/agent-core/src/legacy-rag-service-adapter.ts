@@ -9,7 +9,9 @@ export type LegacyAnswerQuestion = (input: LegacyChatInput) => Promise<LegacyCha
 /**
  * Wraps the current rag-service answerQuestion function without moving its business logic.
  */
-export function createLegacyRagServiceAdapter(answerQuestion: LegacyAnswerQuestion): LegacyRagService {
+export function createLegacyRagServiceAdapter(
+  answerQuestion: LegacyAnswerQuestion,
+): LegacyRagService {
   return {
     async answer(input: LegacyChatInput) {
       return answerQuestion(input)

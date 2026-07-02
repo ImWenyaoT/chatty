@@ -13,7 +13,15 @@ type Props = {
 
 function SendIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden>
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      aria-hidden="true"
+    >
       <path d="M22 2L11 13" />
       <path d="M22 2l-7 20-4-9-9-4 20-7z" />
     </svg>
@@ -53,6 +61,7 @@ export function Composer({ value, sending, onChange, onSubmit }: Props) {
               if (canSend) onSubmit()
             }
           }}
+          // biome-ignore lint/a11y/noAutofocus: 聊天台唯一输入框，进页即打字是核心交互
           autoFocus
           aria-label="输入消息"
         />

@@ -33,7 +33,10 @@ export function shouldCreateFailureCase(
  * Derives a failure-case candidate from a trace and its evaluation. Pure: no id
  * generation or timestamps; the caller (web layer + repository) supplies those.
  */
-export function deriveFailureCase(trace: AgentTrace, review: EvaluationResult): FailureCaseCandidate {
+export function deriveFailureCase(
+  trace: AgentTrace,
+  review: EvaluationResult,
+): FailureCaseCandidate {
   return {
     traceId: trace.id,
     sessionId: trace.sessionId,

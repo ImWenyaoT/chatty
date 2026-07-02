@@ -96,7 +96,7 @@ test('trace repository: append returns the inserted row directly (no re-query de
   // Even past a large batch, append must return THIS row fully populated — the
   // old implementation re-queried the newest 100 and could miss the row on a
   // created_at tie, returning undefined behind a `!` assertion.
-  let last
+  let last: ReturnType<typeof traces.append> | undefined
   for (let i = 0; i < 150; i++) {
     last = traces.append({
       id: `tr-${i}`,
@@ -144,7 +144,11 @@ test('memory repository: appendRecentMessages accumulates turns and snapshot rea
     { role: 'user', content: '多少钱' },
     { role: 'assistant', content: '日租 199 元' },
   ])
-  let snap = memory.snapshot({ customerId: 'c9', productId: 'SUIT-001', conversationId: 'c9:SUIT-001' })
+  let snap = memory.snapshot({
+    customerId: 'c9',
+    productId: 'SUIT-001',
+    conversationId: 'c9:SUIT-001',
+  })
   assert.equal(snap.recentMessages.length, 2)
 
   // A second turn appends rather than replacing — this is the continuity the
@@ -177,7 +181,7 @@ test('memory repository: JSON fallback reads legacy memory-store.json', () => {
   writeFileSync(
     legacyPath,
     JSON.stringify({
-      'c4': {
+      c4: {
         customerId: 'c4',
         globalSummary: 'legacy summary',
         sessionContext: { handoffNeeded: null },
@@ -265,7 +269,13 @@ test('failure case repository: create, findOpen, markPromoted', () => {
   const traces = createTraceRepository(db)
   const failures = createFailureCaseRepository(db)
   sessions.create({ id: 'sess-f', customerId: 'cf', conversationId: 'cf:SUIT-001' })
-  traces.append({ id: 'tr-f', sessionId: 'sess-f', eventType: 'agent_reply_sent', input: { question: '多少钱' }, output: { reply: '不知道' } })
+  traces.append({
+    id: 'tr-f',
+    sessionId: 'sess-f',
+    eventType: 'agent_reply_sent',
+    input: { question: '多少钱' },
+    output: { reply: '不知道' },
+  })
 
   const fc = failures.create({
     id: 'fc-1',

@@ -26,7 +26,10 @@ export interface AgentLoopRunner {
  * tests and paths that intentionally produce no reply (e.g. tool_result events
  * processed out of band).
  */
-export function createWaitingForUserResult(event: ConversationEvent, reply?: string): AgentStepResult {
+export function createWaitingForUserResult(
+  event: ConversationEvent,
+  reply?: string,
+): AgentStepResult {
   return {
     sessionId: event.conversationId,
     traceId: event.traceId ?? event.eventId,

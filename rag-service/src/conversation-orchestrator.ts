@@ -6,57 +6,57 @@ import type {
   NextActionType,
   OrderReadiness,
   SizeRecommendation,
-} from './types.js';
+} from './types.js'
 
-const PROACTIVE_FOLLOW_UP_LIMIT = 2;
+const PROACTIVE_FOLLOW_UP_LIMIT = 2
 
 function buildCompletedSlots(profile: ConversationProfile, productId?: string) {
-  const slots: string[] = [];
+  const slots: string[] = []
   if (productId || profile.productIntent?.currentProductText) {
-    slots.push('product');
+    slots.push('product')
   }
   if (profile.rentalPeriod?.startDate && profile.rentalPeriod?.endDate) {
-    slots.push('rentalPeriod');
+    slots.push('rentalPeriod')
   }
   if (profile.heightCm !== undefined && profile.weightKg !== undefined) {
-    slots.push('bodyMeasurements');
+    slots.push('bodyMeasurements')
   }
   if (profile.sizeRecommendation?.recommendedSize) {
-    slots.push('sizeRecommendation');
+    slots.push('sizeRecommendation')
   }
   if (profile.availabilityCheck?.hasSchedule && profile.availabilityCheck?.hasSize) {
-    slots.push('availability');
+    slots.push('availability')
   }
   if (profile.reviewCheck?.completed && profile.reviewCheck?.passed) {
-    slots.push('review');
+    slots.push('review')
   }
   if (profile.orderPlacement?.orderNo) {
-    slots.push('orderPlaced');
+    slots.push('orderPlaced')
   }
-  return slots;
+  return slots
 }
 
 function buildPendingSlots(readiness: OrderReadiness) {
-  const slots: string[] = [];
+  const slots: string[] = []
   if (readiness.needProductId) {
-    slots.push('product');
+    slots.push('product')
   }
   if (readiness.needRentalPeriod) {
-    slots.push('rentalPeriod');
+    slots.push('rentalPeriod')
   }
   if (readiness.needHeightWeight) {
-    slots.push('bodyMeasurements');
+    slots.push('bodyMeasurements')
   }
   if (readiness.needSizeRecommendation) {
-    slots.push('sizeRecommendation');
+    slots.push('sizeRecommendation')
   }
   if (readiness.needAvailabilityCheck) {
-    slots.push('availability');
+    slots.push('availability')
   }
   if (readiness.needReviewCheck) {
-    slots.push('review');
+    slots.push('review')
   }
-  return slots;
+  return slots
 }
 
 function buildBlockingIssues(
@@ -64,81 +64,88 @@ function buildBlockingIssues(
   sizeRecommendation?: SizeRecommendation,
   availabilityCheck?: AvailabilityCheck,
 ) {
-  const issues: string[] = [];
+  const issues: string[] = []
   if (readiness.needProductId) {
-    issues.push('还没有锁定具体商品');
+    issues.push('还没有锁定具体商品')
   }
   if (readiness.needRentalPeriod) {
-    issues.push('还缺完整租赁日期');
+    issues.push('还缺完整租赁日期')
   }
   if (readiness.needHeightWeight) {
-    issues.push('还缺身高体重');
+    issues.push('还缺身高体重')
   }
   if (sizeRecommendation?.recommendedSize === '尺码待人工确认') {
-    issues.push('尺码需要人工复核');
+    issues.push('尺码需要人工复核')
   }
   if (readiness.needAvailabilityCheck) {
     if (!availabilityCheck?.hasSchedule) {
-      issues.push('档期还没确认完成');
+      issues.push('档期还没确认完成')
     }
     if (!availabilityCheck?.hasSize) {
-      issues.push('尺码还没确认完成');
+      issues.push('尺码还没确认完成')
     }
   }
   if (readiness.needReviewCheck) {
-    issues.push('下单前还需要和用户复核关键信息');
+    issues.push('下单前还需要和用户复核关键信息')
   }
-  return issues;
+  return issues
 }
 
-function decideStage(readiness: OrderReadiness, profile: ConversationProfile, productId?: string): ConversationStage {
+function decideStage(
+  readiness: OrderReadiness,
+  profile: ConversationProfile,
+  productId?: string,
+): ConversationStage {
   if (!productId && !profile.productIntent?.currentProductText) {
-    return 'product_locking';
+    return 'product_locking'
   }
   if (readiness.needRentalPeriod) {
-    return 'schedule_collecting';
+    return 'schedule_collecting'
   }
   if (readiness.needHeightWeight) {
-    return 'body_collecting';
+    return 'body_collecting'
   }
   if (readiness.needSizeRecommendation) {
-    return 'size_confirming';
+    return 'size_confirming'
   }
   if (readiness.needAvailabilityCheck) {
-    return 'availability_checking';
+    return 'availability_checking'
   }
   if (readiness.needReviewCheck) {
-    return 'review_confirming';
+    return 'review_confirming'
   }
   if (readiness.readyToOrder) {
-    return 'order_guiding';
+    return 'order_guiding'
   }
-  return 'intent_discovery';
+  return 'intent_discovery'
 }
 
 // 客户给信息没有先后顺序要求，凑齐 衣服 / 身高 / 体重 / 档期 / 数量(默认1) 即可。
 // 当多个 slot 都缺失时，followUp 一次性问全，避免出现"先档期再身高体重"那种割裂感。
 function buildOpenSlotPrompt(readiness: OrderReadiness): string {
-  const parts: string[] = [];
-  if (readiness.needRentalPeriod) parts.push('档期（哪天使用、哪天归还）');
-  if (readiness.needHeightWeight) parts.push('身高、体重');
-  if (readiness.needQuantity) parts.push('数量（默认 1 件，要多件麻烦也告诉我）');
+  const parts: string[] = []
+  if (readiness.needRentalPeriod) parts.push('档期（哪天使用、哪天归还）')
+  if (readiness.needHeightWeight) parts.push('身高、体重')
+  if (readiness.needQuantity) parts.push('数量（默认 1 件，要多件麻烦也告诉我）')
   if (parts.length === 0) {
-    return '我先帮您把信息再核对一下。';
+    return '我先帮您把信息再核对一下。'
   }
   if (parts.length === 1) {
-    return `您把${parts[0]}发我，我这边继续帮您安排。`;
+    return `您把${parts[0]}发我，我这边继续帮您安排。`
   }
-  return `您把${parts.join('、')}发我（顺序不限，方便先告诉我哪个都行），凑齐了我这边一次性帮您对尺码和档期。`;
+  return `您把${parts.join('、')}发我（顺序不限，方便先告诉我哪个都行），凑齐了我这边一次性帮您对尺码和档期。`
 }
 
-function decideAction(stage: ConversationStage, readiness: OrderReadiness): {
-  nextAction: NextActionType;
-  currentGoal: string;
-  followUpQuestion?: string;
-  replyTemplateKey: string;
-  shouldUseRag: boolean;
-  shouldUseBusinessTools: boolean;
+function decideAction(
+  stage: ConversationStage,
+  readiness: OrderReadiness,
+): {
+  nextAction: NextActionType
+  currentGoal: string
+  followUpQuestion?: string
+  replyTemplateKey: string
+  shouldUseRag: boolean
+  shouldUseBusinessTools: boolean
 } {
   switch (stage) {
     case 'product_locking':
@@ -149,7 +156,7 @@ function decideAction(stage: ConversationStage, readiness: OrderReadiness): {
         replyTemplateKey: 'missing_product',
         shouldUseRag: false,
         shouldUseBusinessTools: false,
-      };
+      }
     case 'schedule_collecting':
       return {
         nextAction: 'ask_rental_period',
@@ -158,7 +165,7 @@ function decideAction(stage: ConversationStage, readiness: OrderReadiness): {
         replyTemplateKey: 'missing_rental_period',
         shouldUseRag: false,
         shouldUseBusinessTools: false,
-      };
+      }
     case 'body_collecting':
       return {
         nextAction: 'ask_body_measurements',
@@ -167,7 +174,7 @@ function decideAction(stage: ConversationStage, readiness: OrderReadiness): {
         replyTemplateKey: 'missing_body_measurements',
         shouldUseRag: false,
         shouldUseBusinessTools: true,
-      };
+      }
     case 'size_confirming':
       return {
         nextAction: 'confirm_size',
@@ -176,7 +183,7 @@ function decideAction(stage: ConversationStage, readiness: OrderReadiness): {
         replyTemplateKey: 'confirm_size',
         shouldUseRag: true,
         shouldUseBusinessTools: true,
-      };
+      }
     case 'availability_checking':
       return {
         nextAction: 'check_availability',
@@ -185,7 +192,7 @@ function decideAction(stage: ConversationStage, readiness: OrderReadiness): {
         replyTemplateKey: 'check_availability',
         shouldUseRag: true,
         shouldUseBusinessTools: true,
-      };
+      }
     case 'order_guiding':
       return {
         nextAction: 'guide_order',
@@ -194,7 +201,7 @@ function decideAction(stage: ConversationStage, readiness: OrderReadiness): {
         replyTemplateKey: 'ready_to_order',
         shouldUseRag: true,
         shouldUseBusinessTools: true,
-      };
+      }
     case 'review_confirming':
       return {
         nextAction: 'confirm_review',
@@ -203,7 +210,7 @@ function decideAction(stage: ConversationStage, readiness: OrderReadiness): {
         replyTemplateKey: 'confirm_review',
         shouldUseRag: true,
         shouldUseBusinessTools: true,
-      };
+      }
     case 'post_order_followup':
       return {
         nextAction: 'close_loop',
@@ -212,7 +219,7 @@ function decideAction(stage: ConversationStage, readiness: OrderReadiness): {
         replyTemplateKey: 'post_order_followup',
         shouldUseRag: true,
         shouldUseBusinessTools: true,
-      };
+      }
     case 'intent_discovery':
     default:
       return {
@@ -221,22 +228,23 @@ function decideAction(stage: ConversationStage, readiness: OrderReadiness): {
         replyTemplateKey: 'answer_question',
         shouldUseRag: true,
         shouldUseBusinessTools: false,
-      };
+      }
   }
 }
 
 export function deriveConversationOrchestration(input: {
-  profile: ConversationProfile;
-  orderReadiness: OrderReadiness;
-  productId?: string;
-  now: string;
-}) : ConversationOrchestration {
-  const stage = decideStage(input.orderReadiness, input.profile, input.productId);
-  const action = decideAction(stage, input.orderReadiness);
-  const previous = input.profile.orchestration;
-  const previousCount = previous?.proactiveFollowUpCount ?? 0;
-  const waitingForUser = action.nextAction !== 'answer_question' && action.nextAction !== 'close_loop';
-  const paused = previousCount >= PROACTIVE_FOLLOW_UP_LIMIT;
+  profile: ConversationProfile
+  orderReadiness: OrderReadiness
+  productId?: string
+  now: string
+}): ConversationOrchestration {
+  const stage = decideStage(input.orderReadiness, input.profile, input.productId)
+  const action = decideAction(stage, input.orderReadiness)
+  const previous = input.profile.orchestration
+  const previousCount = previous?.proactiveFollowUpCount ?? 0
+  const waitingForUser =
+    action.nextAction !== 'answer_question' && action.nextAction !== 'close_loop'
+  const paused = previousCount >= PROACTIVE_FOLLOW_UP_LIMIT
 
   return {
     stage,
@@ -258,8 +266,12 @@ export function deriveConversationOrchestration(input: {
     replyTemplateKey: action.replyTemplateKey,
     shouldUseRag: action.shouldUseRag,
     shouldUseBusinessTools: action.shouldUseBusinessTools,
-    handoffNeeded: (input.profile.sizeRecommendation?.recommendedSize === '尺码待人工确认') || (input.profile.handoffStatus?.needed ?? false),
-    handoffReason: input.profile.handoffStatus?.needed ? input.profile.handoffStatus.reason : input.profile.reviewCheck?.failureReason,
+    handoffNeeded:
+      input.profile.sizeRecommendation?.recommendedSize === '尺码待人工确认' ||
+      (input.profile.handoffStatus?.needed ?? false),
+    handoffReason: input.profile.handoffStatus?.needed
+      ? input.profile.handoffStatus.reason
+      : input.profile.reviewCheck?.failureReason,
     updatedAt: input.now,
-  };
+  }
 }

@@ -1,10 +1,10 @@
-import 'dotenv/config';
+import 'dotenv/config'
 
-const required = ['OPENAI_API_KEY'] as const;
+const required = ['OPENAI_API_KEY'] as const
 
 for (const key of required) {
   if (!process.env[key]) {
-    console.warn(`[config] Missing environment variable: ${key}`);
+    console.warn(`[config] Missing environment variable: ${key}`)
   }
 }
 
@@ -24,5 +24,8 @@ export const config = {
   topK: Number(process.env.TOP_K ?? 5),
   evaluatorModel: process.env.EVALUATOR_MODEL ?? process.env.EVALUATION_MODEL ?? 'gpt-5.2',
   promptVersionName: process.env.PROMPT_VERSION ?? 'v1',
-  vectorSize: Number(process.env.VECTOR_SIZE ?? (process.env.EMBEDDING_MODEL === 'text-embedding-3-large' ? 3072 : 1536)),
-};
+  vectorSize: Number(
+    process.env.VECTOR_SIZE ??
+      (process.env.EMBEDDING_MODEL === 'text-embedding-3-large' ? 3072 : 1536),
+  ),
+}

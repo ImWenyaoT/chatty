@@ -17,7 +17,7 @@ export interface GoldenExport {
  */
 function yamlScalar(value: string): string {
   if (!value) return '""'
-  if (/[:#\-?\[\]{},&*!|>'"%@`\n]/.test(value) || /^\s|\s$/.test(value)) {
+  if (/[:#\-?[\]{},&*!|>'"%@`\n]/.test(value) || /^\s|\s$/.test(value)) {
     return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
   }
   return value
@@ -48,7 +48,9 @@ export function exportFailureCaseToGoldenYaml(fc: FailureCaseCandidate): GoldenE
   // minScore is always emitted as the next sibling key at the same indent.
   const notContainsSection =
     fc.issues.length > 0
-      ? ['      notContains:', ...fc.issues.map((issue) => `      - ${yamlScalar(issue)}`)].join('\n')
+      ? ['      notContains:', ...fc.issues.map((issue) => `      - ${yamlScalar(issue)}`)].join(
+          '\n',
+        )
       : '      notContains: []'
 
   const yaml = `name: regression-${safeName}

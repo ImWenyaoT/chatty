@@ -28,9 +28,7 @@ const ORDERS: Record<string, OrderRecord> = {
     totalAmount: 199,
     currency: 'CNY',
     createdAt: '2026-06-20T00:00:00.000Z',
-    lines: [
-      { productId: 'SUIT-001', productName: '黑色双排扣西装', dailyPrice: 199, quantity: 1 },
-    ],
+    lines: [{ productId: 'SUIT-001', productName: '黑色双排扣西装', dailyPrice: 199, quantity: 1 }],
   },
 }
 

@@ -63,7 +63,12 @@ export function sdkToolExecute(
       })
     }
     const input = (args ?? {}) as Record<string, JsonValue>
-    onCall?.({ toolName: rt.name, arguments: input, risk: rt.risk, approvalRequired: rt.approvalRequired })
+    onCall?.({
+      toolName: rt.name,
+      arguments: input,
+      risk: rt.risk,
+      approvalRequired: rt.approvalRequired,
+    })
     const result = await rt.execute(input)
     // SDK 的 execute 约定返回字符串：结构化结果序列化成 JSON 文本交给模型阅读
     return typeof result === 'string' ? result : JSON.stringify(result)
@@ -99,7 +104,11 @@ export function readQuestion(input: AgentsSdkRunInput): string {
  * otherwise the final text output becomes the reply. Exported for unit testing
  * the terminality mapping without driving a real run().
  */
-export function toStepResult(input: AgentsSdkRunInput, finalOutput: unknown, handoffed: boolean): AgentStepResult {
+export function toStepResult(
+  input: AgentsSdkRunInput,
+  finalOutput: unknown,
+  handoffed: boolean,
+): AgentStepResult {
   const traceId = input.event.traceId ?? input.event.eventId
   const text = typeof finalOutput === 'string' ? finalOutput : ''
   if (handoffed) {
@@ -162,9 +171,10 @@ export function createAgentsSdkRunner(options: CreateAgentsSdkRunnerOptions): Ag
           '当你无法回答、问题超出租衣客服范围、或客户明确要求人工/投诉/退款时调用，转接人工客服。',
         parameters: z.object({ reason: z.string() }).passthrough(),
         async execute(args) {
-          const reason = typeof (args as { reason?: unknown })?.reason === 'string'
-            ? (args as { reason: string }).reason
-            : ''
+          const reason =
+            typeof (args as { reason?: unknown })?.reason === 'string'
+              ? (args as { reason: string }).reason
+              : ''
           escalation = { triggered: true, reason }
           return JSON.stringify({ ok: true, escalated: true })
         },

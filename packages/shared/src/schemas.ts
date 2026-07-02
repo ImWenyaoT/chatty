@@ -4,11 +4,7 @@ import type { JsonValue } from './types.js'
 export const jsonPrimitiveSchema = z.union([z.string(), z.number(), z.boolean(), z.null()])
 
 export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
-  z.union([
-    jsonPrimitiveSchema,
-    z.array(jsonValueSchema),
-    z.record(z.string(), jsonValueSchema),
-  ]),
+  z.union([jsonPrimitiveSchema, z.array(jsonValueSchema), z.record(z.string(), jsonValueSchema)]),
 )
 
 export const conversationEventTypeSchema = z.enum([

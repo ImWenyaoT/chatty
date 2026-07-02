@@ -1,34 +1,34 @@
 // 每个 Action 对应的生成规格。给 generateText 用——告诉 LLM 这一轮做什么、不能做什么。
 // 安全三层：Action 选择（代码） → Action 专属硬规则（spec） → 全局禁用词 + 硬性字符上限（文本后校验）
 
-import type { ActionKind } from './actions.js';
+import type { ActionKind } from './actions.js'
 
 export interface ActionSpec {
   /** 这一轮回复要达到的目标，自然语言讲清楚 */
-  goal: string;
+  goal: string
   /** 本 Action 独有的硬规则（3-5 条，精确到场景） */
-  hardRules: string[];
+  hardRules: string[]
   /** 最大句子数（给 LLM 参考） */
-  maxSentences: number;
+  maxSentences: number
   /** 最大字符数（硬性上限，超了直接 fallback） */
-  maxChars: number;
+  maxChars: number
   /** 好的示例（会放进 system prompt 给 LLM 参考） */
-  goodExamples?: string[];
+  goodExamples?: string[]
   /** 坏的示例（禁止效仿） */
-  badExamples?: string[];
+  badExamples?: string[]
 }
 
 // 对所有 Action 都适用的禁用词/模式。命中任意一条就 fallback 到模板。
 export const GLOBAL_FORBIDDEN_PATTERNS: RegExp[] = [
   /胸围|腰围|肩宽|三围|软尺|量一下|量下/,
-  /常穿(?:的)?码|几\s*XL|[SMLXl]\s*[\/／]\s*[SMLXl]/,
+  /常穿(?:的)?码|几\s*XL|[SMLXl]\s*[/／]\s*[SMLXl]/,
   /(?:平时|平常|一般|通常)[\s\S]{0,15}穿[\s\S]{0,15}码/,
   /(?:外套|西装|衬衫|夹克)[\s\S]{0,15}(?:几|哪)[\s\S]{0,4}码/,
   /尺码号|码数(?:大概|大约|是)?(?:多少|几)/,
-  /(?:48|50|52)\s*[\/／]\s*(?:50|52|54)/,
+  /(?:48|50|52)\s*[/／]\s*(?:50|52|54)/,
   /整套还是|几件套|要不要(?:外套|裤子|衬衫|领结)|要全套吗|全套还是/,
   /作为(?:AI|人工智能|机器人|智能助手|大语言模型|智能)|我是(?:AI|机器人|助手)|我是一个.*模型/i,
-];
+]
 
 export const ACTION_SPECS: Partial<Record<ActionKind, ActionSpec>> = {
   greet: {
@@ -102,9 +102,7 @@ export const ACTION_SPECS: Partial<Record<ActionKind, ActionSpec>> = {
       '这款先给您记着了，您打算哪天用、哪天还呀？',
       '好，档期您发我一下，开始那天到结束那天',
     ],
-    badExamples: [
-      '麻烦您把租用时间发我：哪天取/收货、哪天归还？',
-    ],
+    badExamples: ['麻烦您把租用时间发我：哪天取/收货、哪天归还？'],
   },
 
   ask_body: {
@@ -130,20 +128,14 @@ export const ACTION_SPECS: Partial<Record<ActionKind, ActionSpec>> = {
 
   confirm_size: {
     goal: '告诉客户推荐尺码（size 参数），顺手说一句不合身可以免费换码。',
-    hardRules: [
-      '直接给尺码（M / L / XL）',
-      '不要再问补充测量',
-      '不要重复铺垫档期和身高体重',
-    ],
+    hardRules: ['直接给尺码（M / L / XL）', '不要再问补充测量', '不要重复铺垫档期和身高体重'],
     maxSentences: 2,
     maxChars: 70,
     goodExamples: [
       '按您这身高体重，L 码合适，到手不合身我们支持免费换码',
       '您穿 M 码就行，不合身随时换',
     ],
-    badExamples: [
-      '推荐 L 码。为了更精确，方便告诉我胸围和常穿品牌吗？',
-    ],
+    badExamples: ['推荐 L 码。为了更精确，方便告诉我胸围和常穿品牌吗？'],
   },
 
   confirm_review: {
@@ -159,27 +151,19 @@ export const ACTION_SPECS: Partial<Record<ActionKind, ActionSpec>> = {
     goodExamples: [
       '我再跟您对一下：黑色双排扣西装，5-9 到 5-10 用，尺码按 L 码，不合身免费换码。您看这几项都对吧？',
     ],
-    badExamples: [
-      '复核一下：商品、档期、尺码。另外您常穿码方便告诉我吗？',
-    ],
+    badExamples: ['复核一下：商品、档期、尺码。另外您常穿码方便告诉我吗？'],
   },
 
   guide_order: {
     goal: '告诉客户可以直接下单了，租赁时间按档期填。',
-    hardRules: [
-      '不要追加新问题',
-      '明确说"下单就行"',
-      '可以顺口说下单后继续跟进',
-    ],
+    hardRules: ['不要追加新问题', '明确说"下单就行"', '可以顺口说下单后继续跟进'],
     maxSentences: 2,
     maxChars: 80,
     goodExamples: [
       '您这边直接下单就行，租赁时间按 5-9 到 5-10 填，下单后我继续帮您盯',
       '信息都齐了，您直接下单，时间填这个档期就可以',
     ],
-    badExamples: [
-      '可以下单了！不过为了更准确，您再补充下常穿码吧',
-    ],
+    badExamples: ['可以下单了！不过为了更准确，您再补充下常穿码吧'],
   },
 
   check_availability: {
@@ -222,15 +206,10 @@ export const ACTION_SPECS: Partial<Record<ActionKind, ActionSpec>> = {
 
   current_link_confirm: {
     goal: '确认客户说的就是当前链接这款，邀请发档期和身高体重。',
-    hardRules: [
-      '简短确认商品',
-      '只问档期和身高体重',
-    ],
+    hardRules: ['简短确认商品', '只问档期和身高体重'],
     maxSentences: 2,
     maxChars: 80,
-    goodExamples: [
-      '对的，就是这款。您把档期和身高体重发我，我帮您看尺码和档期',
-    ],
+    goodExamples: ['对的，就是这款。您把档期和身高体重发我，我帮您看尺码和档期'],
   },
 
   recall_body_empty: {
@@ -251,10 +230,7 @@ export const ACTION_SPECS: Partial<Record<ActionKind, ActionSpec>> = {
 
   post_order_delivery: {
     goal: '告诉已下单客户预计送达时间。needsHandoff=true 时说要跟快递确认。',
-    hardRules: [
-      'needsHandoff=true 时不要给具体时间，只说正在跟快递核实',
-      '不要追加问题',
-    ],
+    hardRules: ['needsHandoff=true 时不要给具体时间，只说正在跟快递核实', '不要追加问题'],
     maxSentences: 2,
     maxChars: 80,
     goodExamples: [
@@ -265,17 +241,10 @@ export const ACTION_SPECS: Partial<Record<ActionKind, ActionSpec>> = {
 
   post_order_followup: {
     goal: '客户已下单，现在的问题告诉他后续有问题随时说。',
-    hardRules: [
-      '不要把流程推回前面',
-      '不要问新问题',
-      '一句话就行',
-    ],
+    hardRules: ['不要把流程推回前面', '不要问新问题', '一句话就行'],
     maxSentences: 1,
     maxChars: 50,
-    goodExamples: [
-      '订单下好了，有物流或其他问题随时说',
-      '收到，后续有啥问题我这边继续跟着',
-    ],
+    goodExamples: ['订单下好了，有物流或其他问题随时说', '收到，后续有啥问题我这边继续跟着'],
   },
 
   ack_body_measurement: {
@@ -296,18 +265,12 @@ export const ACTION_SPECS: Partial<Record<ActionKind, ActionSpec>> = {
 
   confirm_body_anomaly: {
     goal: '数据看起来不对（比如 175kg、220cm），礼貌确认是不是笔误或单位错。',
-    hardRules: [
-      '给出 1-2 种可能的解释',
-      '不直接按异常值推进',
-      '语气自然不要让客户难堪',
-    ],
+    hardRules: ['给出 1-2 种可能的解释', '不直接按异常值推进', '语气自然不要让客户难堪'],
     maxSentences: 2,
     maxChars: 90,
-    goodExamples: [
-      '175kg 这个我和您确认下，您是想说身高 175cm，还是体重 175 斤？',
-    ],
+    goodExamples: ['175kg 这个我和您确认下，您是想说身高 175cm，还是体重 175 斤？'],
   },
-};
+}
 
 // 这些 Action 的文本来自 action-picker 的 LLM 分类器或固定话术，不再二次调用 LLM
-export const SKIP_GENERATION_KINDS = new Set<ActionKind>(['answer_faq', 'small_talk', 'handoff']);
+export const SKIP_GENERATION_KINDS = new Set<ActionKind>(['answer_faq', 'small_talk', 'handoff'])

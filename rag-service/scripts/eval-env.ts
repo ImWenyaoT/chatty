@@ -3,4 +3,4 @@
 // 会晚于 import 链中 config.ts 的求值，导致 MEMORY_STORE_PATH 覆盖失效，
 // eval 退回默认值 data/memory-store.json，从而误读误写生产记忆库、且测试隔离失效。
 // 把赋值放进本模块、并让 eval.ts 第一条 import 就引入它，可保证其早于 config 执行。
-process.env.MEMORY_STORE_PATH = process.env.MEMORY_STORE_PATH ?? 'tests/.tmp/memory-store.json';
+process.env.MEMORY_STORE_PATH = process.env.MEMORY_STORE_PATH ?? 'tests/.tmp/memory-store.json'

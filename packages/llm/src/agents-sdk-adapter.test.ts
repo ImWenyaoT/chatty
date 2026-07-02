@@ -1,6 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import type { AgentStepResult, AgentsSdkRunInput, ConversationEvent, RuntimeTool } from '@rental/shared'
+import type {
+  AgentStepResult,
+  AgentsSdkRunInput,
+  ConversationEvent,
+  RuntimeTool,
+} from '@rental/shared'
 import {
   createAgentsSdkRunnerFromFunction,
   isHandoff,

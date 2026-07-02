@@ -60,7 +60,9 @@ export function createSessionRepository(db: Db): SessionRepository {
 
     findByConversation(conversationId) {
       const row = db
-        .prepare('SELECT * FROM agent_sessions WHERE conversation_id = ? ORDER BY updated_at DESC LIMIT 1')
+        .prepare(
+          'SELECT * FROM agent_sessions WHERE conversation_id = ? ORDER BY updated_at DESC LIMIT 1',
+        )
         .get(conversationId) as SessionRow | undefined
       return row ? toSession(row) : undefined
     },
