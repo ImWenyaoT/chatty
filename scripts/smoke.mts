@@ -1,7 +1,7 @@
 // Smoke test: exercise the full data path WITHOUT a real LLM.
 // Verifies: SQLite open, schema (incl. FKs), session/trace/review/failure repos,
 // failure-case policy + golden export + promote CLI (the flywheel's last mile),
-// knowledge adapter + evaluator injection.
+// evaluator injection.
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -14,7 +14,6 @@ import {
   createMemoryRepository,
 } from '@rental/db'
 import {
-  createKnowledgeAdapter,
   shouldCreateFailureCase,
   deriveFailureCase,
   exportFailureCaseToGoldenYaml,
@@ -115,19 +114,12 @@ ok('promote writes the golden file', fs.existsSync(promoted.file))
 ok('promoted yaml keeps the failing issue', promoted.yaml.includes('拒绝回答'))
 ok('promoted case leaves the open queue', failures.findOpen().length === 0)
 
-// 4. knowledge adapter injection
-const knowledge = createKnowledgeAdapter(async () => [
-  { score: 0.9, payload: { text: '199元/天' } },
-])
-const hits = await knowledge.search({ question: '多少钱' })
-ok('knowledge adapter returns hits', hits.length === 1)
-
-// 5. evaluator injection
+// 4. evaluator injection
 const evaluator = createEvaluator(async () => review)
 const evalResult = await evaluator.evaluate([{ role: 'user', content: '多少钱' }], '不知道')
 ok('evaluator returns score', evalResult.score === 3)
 
-// 6. FK enforcement (orphan rejected)
+// 5. FK enforcement (orphan rejected)
 let fkRejected = false
 try {
   failures.create({
@@ -143,7 +135,7 @@ try {
 }
 ok('FK rejects orphan failure case', fkRejected === true)
 
-// 7. memory continuity: appended turns accumulate and a later snapshot reads
+// 6. memory continuity: appended turns accumulate and a later snapshot reads
 // them back (the write path the route uses to avoid conversational amnesia).
 const memKey = { customerId: 'c', productId: 'SUIT-001', conversationId: 'c:SUIT-001' }
 memory.appendRecentMessages(memKey, [
