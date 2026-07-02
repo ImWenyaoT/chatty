@@ -1,6 +1,6 @@
 // @rental/domain 公共出口。基础层（RW-1 第一波）：类型、解析器、目录/尺码规则、
-// prompt 版本计算、显式配置加载、编排状态机、模板与生成规格、文本清洗。
-// 后续波次将补齐 ports / extraction / routing / generation / engine（见 docs/architecture.md §3）。
+// prompt 版本计算、显式配置加载、编排状态机、模板与生成规格、文本清洗、
+// 端口、事实抽取、路由、生成与对话引擎（见 docs/architecture.md §3）。
 export * from './types.js'
 export * from './parsers/date.js'
 export * from './parsers/measurements.js'
@@ -11,3 +11,10 @@ export * from './orchestrator.js'
 export * from './templates.js'
 export * from './action-specs.js'
 export * from './sanitize.js'
+export * from './ports.js'
+export * from './extraction.js'
+export * from './profile.js'
+export * from './routing/classifier.js'
+export * from './routing/rules.js'
+export * from './generation.js'
+export * from './engine.js'
