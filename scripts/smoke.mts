@@ -1,6 +1,10 @@
 // Smoke test: exercise the full data path WITHOUT a real LLM.
 // Verifies: SQLite open, schema (incl. FKs), session/trace/review/failure repos,
-// failure-case policy + golden export, knowledge adapter + evaluator injection.
+// failure-case policy + golden export + promote CLI (the flywheel's last mile),
+// knowledge adapter + evaluator injection.
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import {
   openDatabase,
   createSessionRepository,
@@ -16,6 +20,7 @@ import {
   exportFailureCaseToGoldenYaml,
   createEvaluator,
 } from '@rental/agent-core'
+import { promoteFailureCase } from './promote-failure-case.mts'
 
 let pass = 0
 let fail = 0
@@ -101,6 +106,14 @@ const golden = exportFailureCaseToGoldenYaml({
 })
 ok('golden export has name', golden.yaml.includes('name:'))
 ok('golden export has notContains', golden.yaml.includes('notContains:'))
+
+// 3b. flywheel last mile: promote the open failure case through the CLI path —
+// the golden YAML lands on disk and the case leaves the open queue.
+const goldenDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chatty-golden-'))
+const promoted = promoteFailureCase(failures, 'smoke-fc', goldenDir)
+ok('promote writes the golden file', fs.existsSync(promoted.file))
+ok('promoted yaml keeps the failing issue', promoted.yaml.includes('拒绝回答'))
+ok('promoted case leaves the open queue', failures.findOpen().length === 0)
 
 // 4. knowledge adapter injection
 const knowledge = createKnowledgeAdapter(async () => [

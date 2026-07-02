@@ -29,8 +29,10 @@ function yamlScalar(value: string): string {
  * case re-runs the original failing input and asserts the reply no longer
  * contains the issues that caused the low score, with a minScore guard.
  *
- * The caller is responsible for writing the returned yaml to
- * rag-service/tests/golden/regression/<filename>. This function is pure.
+ * The caller is responsible for writing the returned yaml into
+ * rag-service/tests/golden/ (flat — the eval runner does not recurse into
+ * subdirectories; the regression- filename prefix is the namespace). The
+ * scripts/promote-failure-case.mts CLI is the wired caller. This function is pure.
  */
 export function exportFailureCaseToGoldenYaml(fc: FailureCaseCandidate): GoldenExport {
   const inputObj = fc.input as { question?: string } | null
