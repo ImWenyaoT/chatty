@@ -8,6 +8,7 @@ dist/
 .env
 .env.*
 !.env.example
+.playwright-mcp/
 
 rag-service/data/memory-store.json
 rag-service/data/local-vectors.json

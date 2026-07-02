@@ -28,6 +28,10 @@ export interface IntentClassification {
   reason?: string
 }
 
+// 回复模式（4 类）。legacy action-picker.ts 的 decide_reply 枚举原样保留；
+// §8.2 合并分类器后与 UserIntent 由同一次 ClassifyPort 调用产出。
+export type ReplyMode = 'follow_flow' | 'answer_faq' | 'small_talk' | 'handoff'
+
 export interface BodyProfile {
   profileId: string
   label: string
