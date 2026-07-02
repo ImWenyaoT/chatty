@@ -19,6 +19,7 @@ import {
 import { loaded } from './prompts-loader.js';
 import { ensureCollection, isQdrantAvailable } from './qdrant.js';
 import { answerQuestion } from './rag.js';
+import { sanitizeAnswerText } from './rag/sanitize.js';
 
 const app = Fastify({ logger: true, bodyLimit: 10 * 1024 * 1024 });
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
@@ -40,14 +41,6 @@ function contentTypeFor(filePath: string) {
   if (filePath.endsWith('.png')) return 'image/png';
   if (filePath.endsWith('.ico')) return 'image/x-icon';
   return 'application/octet-stream';
-}
-
-function sanitizeAnswerText(text: string) {
-  return text
-    .replace(/\*/g, '')
-    .replace(/\s+([，。！？])/g, '$1')
-    .replace(/([，。！？]){2,}/g, '$1')
-    .trim();
 }
 
 function resolveProductIntentText(productId?: string) {

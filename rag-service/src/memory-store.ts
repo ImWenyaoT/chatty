@@ -18,7 +18,7 @@ import {
   normalizeNumber,
 } from './parsers/measurements.js';
 import { findProduct, loaded, pickSizeByMeasurement } from './prompts-loader.js';
-import { evaluateCustomerServiceReply } from './rag.js';
+import { evaluateCustomerServiceReply } from './evaluator.js';
 import {
   AvailabilityCheck,
   BodyProfile,
