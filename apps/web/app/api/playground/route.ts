@@ -135,7 +135,13 @@ export async function POST(request: Request) {
     eventType: 'agent_reply_sent',
     action: result.terminality,
     input: { question: input.question },
-    output: result.reply ? { reply: result.reply } : undefined,
+    // handoff 原因等 memoryPatch 随 trace 落库，人工接手时从 trace 可读（PRD §15）
+    output: result.reply || result.memoryPatch
+      ? {
+          ...(result.reply ? { reply: result.reply } : {}),
+          ...(result.memoryPatch !== undefined ? { memoryPatch: result.memoryPatch } : {}),
+        }
+      : undefined,
     toolCalls: result.toolCalls,
   })
   sessions.update(session.id, {
