@@ -521,8 +521,3 @@ export async function evaluateCustomerServiceReply(
     return { ...fallback, ...baseMeta };
   }
 }
-
-// 向后兼容（暂时保留给其它可能用到的引用）
-export function _sanitizeAnswerText(text: string) {
-  return sanitizeAnswerText(text);
-}

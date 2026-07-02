@@ -975,9 +975,9 @@ async function markOrderPlacedInternal(input: {
     summary: '',
     recentMessages: [],
     conversationProfile: {
-    reviews: [],
       updatedAt: now,
     },
+    reviews: [],
     updatedAt: now,
   };
 
@@ -1207,9 +1207,9 @@ async function appendConversationMemoryInternal(input: AppendConversationMemoryI
     summary: '',
     recentMessages: [],
     conversationProfile: {
-    reviews: [],
       updatedAt: now,
     },
+    reviews: [],
     updatedAt: now,
   };
 
