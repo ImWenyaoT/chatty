@@ -42,6 +42,9 @@ importers:
       '@rental/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      geist:
+        specifier: ^1.7.2
+        version: 1.7.2(next@15.5.19(react-dom@19.2.7(react@19.2.7))(react@19.2.7))
       next:
         specifier: ^15.1.0
         version: 15.5.19(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -90,6 +93,19 @@ importers:
       '@types/better-sqlite3':
         specifier: ^7.6.13
         version: 7.6.13
+      tsx:
+        specifier: ^4.19.0
+        version: 4.22.4
+
+  packages/domain:
+    dependencies:
+      '@rental/shared':
+        specifier: workspace:*
+        version: link:../shared
+      yaml:
+        specifier: ^2.8.3
+        version: 2.9.0
+    devDependencies:
       tsx:
         specifier: ^4.19.0
         version: 4.22.4
@@ -1428,6 +1444,11 @@ packages:
 
   function-bind@1.1.2:
     resolution: {integrity: sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==}
+
+  geist@1.7.2:
+    resolution: {integrity: sha512-Gu5lDFa3pLRyoBlBPf0QIFHVdWAnpco7fS1bJm41jyLPFoguBgiubseUN2oLXMgqZ7uxAxDoXcHMhCY/fOTTgg==}
+    peerDependencies:
+      next: '>=13.2.0'
 
   gensync@1.0.0-beta.2:
     resolution: {integrity: sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg==}
@@ -3210,6 +3231,10 @@ snapshots:
     optional: true
 
   function-bind@1.1.2: {}
+
+  geist@1.7.2(next@15.5.19(react-dom@19.2.7(react@19.2.7))(react@19.2.7)):
+    dependencies:
+      next: 15.5.19(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
 
   gensync@1.0.0-beta.2: {}
 
