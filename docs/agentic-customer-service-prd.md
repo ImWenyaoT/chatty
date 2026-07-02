@@ -1,10 +1,16 @@
 # Agentic Customer Service PRD
 
-Last updated: 2026-06-25
+Last updated: 2026-07-02
+
+> **Supersession 说明**：本 PRD 是最初的探索文档。凡与
+> [tech-stack-decisions.md](tech-stack-decisions.md) 冲突之处，以后者为准——
+> 特别是：§3 的 "Chatwoot + Agent Sidecar" 主基座方案已被否决（Chatwoot 仅作产品参考），
+> §17 M1 的 Chatwoot 集成随之作废；§18 的 dev-skills 清单对应的 .agents/skills 已移除。
+> 保留原文供决策考古。
 
 ## 1. Background
 
-Current codebase: `/Users/edward/Documents/GitHub/chatty/rag-service`.
+Current codebase: `rag-service/`（仓库内相对路径）.
 
 The current service is a vertical rental-clothing customer-service bot. It already has useful pieces:
 

@@ -1,6 +1,6 @@
 # Tech Stack Decisions
 
-Last updated: 2026-06-25
+Last updated: 2026-07-02
 
 This document records the current stack decisions for Chatty, the agentic customer-service rewrite. It supersedes earlier exploratory notes in `docs/agentic-customer-service-prd.md` where the two conflict.
 
@@ -83,7 +83,7 @@ Use separate names.
 Runtime concepts:
 
 - `tools`: executable capabilities such as order lookup, availability check, media lookup, and handoff.
-- `playbooks`: business conversation flows.
+- `playbooks`: business conversation flows.（词汇保留；曾有 schema-only 的 playbooks 模块，2026-07 简化中因无执行引擎而移除，需要时再随执行器一起引入）
 - `policies`: approval, escalation, and safety rules.
 - `knowledge`: FAQ, product, policy, and historical answer sources.
 

@@ -4,7 +4,16 @@
 
 ---
 
-## 1. 当前开发焦点（2026-04 最新）
+## 1. 当前开发焦点（2026-07 最新）
+
+**主线**：rag-service 已定位为 legacy lane（见根目录 docs/loop-engineering-plan.md）。
+当前焦点是 eval 迭代（金标 11/11 基线维护、failure_case→golden 晋升闭环）与向
+packages/* 新 loop 的保守迁移（迁移账本见 loop-engineering-plan.md §16）。
+本文档 §2-§3 的闲鱼 intel API 接入计划**已搁置**（接口验证过、未动代码），
+留作未来把真实会话数据接进来时的参考。
+
+<details>
+<summary>（已搁置）2026-04 的 intel API 接入计划原文</summary>
 
 **主线**：把外部"闲鱼 intel API"接入 rag-service，作为买家身份/订单/历史聊天的事实数据源。
 
@@ -16,9 +25,11 @@
 2. 用 intel 的 `is_repeat_buyer` + `buyer_order_history` 做"老客户回头单"豁免——绕过 MEMORY 里那条"款式未确认前不进入档期/体型流程"的硬规则（详见 §3）
 3. 用 intel 的 `quoted_text` / `main_text` 拆分结果替代当前 `parsers/measurements.ts` 里对引用回复的 ad-hoc 处理
 
+</details>
+
 ---
 
-## 2. 外部 intel API（数据源，新）
+## 2. 外部 intel API（数据源，已搁置）
 
 ### 服务定位
 

@@ -1,6 +1,6 @@
 # Loop Engineering Plan
 
-Last updated: 2026-06-25
+Last updated: 2026-07-02
 
 ## 0. Decision Snapshot
 
@@ -283,6 +283,12 @@ sequenceDiagram
 
 ## 8. Loop State Model
 
+> **实现状态（2026-07-02）**：当前代码只会产生 `active` / `waiting_for_user` /
+> `waiting_for_human` 三个状态（loop-runner 与 SDK 适配器的 `nextStatus`）；
+> `waiting_for_tool` / `paused` / `failed` / `closed` 及对应事件（`tool_result`、
+> `scheduled_followup_due` 等）是预留设计，类型与 zod schema 已定义但无 producer。
+> 引入 tool-chaining / worker 时再实现。下图为目标全集：
+
 ```mermaid
 stateDiagram-v2
   [*] --> active
@@ -307,7 +313,7 @@ Runtime vocabulary:
 ```mermaid
 flowchart TD
   RUNTIME["Runtime customer-service system"] --> TOOLS["tools: executable capabilities"]
-  RUNTIME --> PLAYBOOKS["playbooks: business flows"]
+  RUNTIME --> PLAYBOOKS["playbooks: business flows（词汇预留，模块随 2026-07 简化移除）"]
   RUNTIME --> POLICIES["policies: approval/escalation/safety"]
   RUNTIME --> ACTIONS["actions: reply or control decisions"]
   RUNTIME --> KNOW["knowledge: FAQ/product/policy/media"]
@@ -331,14 +337,14 @@ sequenceDiagram
   T->>E: evaluate latest reply
   E->>F: create low-score candidate
   F->>G: promote reviewed case
-  G->>P: guide policy/playbook patch
+  G->>P: guide policy/prompt patch
 ```
 
 MVP should preserve the current evaluator direction but make traces first-class.
 
 ## 11. Migration Strategy
 
-### Phase 0: Foundation
+### Phase 0: Foundation ✅（commit 373c11d）
 
 - Add docs.
 - Add shared contracts.
@@ -346,25 +352,25 @@ MVP should preserve the current evaluator direction but make traces first-class.
 - Add agent-core and llm adapter interfaces.
 - Keep `rag-service` unchanged.
 
-### Phase 1: Next.js Shell
+### Phase 1: Next.js Shell ✅（commit 373c11d / 3f304c5）
 
 - Add `apps/web` with App Router.
 - Add simple health and playground routes.
 - Link existing `rag-service` test page/dashboard rather than rewriting them.
 
-### Phase 2: SQLite Adapter
+### Phase 2: SQLite Adapter ✅（CHATTY_SQLITE 开关，commit b464c18）
 
 - Add SQLite connection and repository.
 - Add JSON fallback reader from `rag-service/data/memory-store.json`.
 - Add feature flag for SQLite write path.
 
-### Phase 3: Agent Loop v0
+### Phase 3: Agent Loop v0 ✅（commit 373c11d，legacy adapter 为 in-process 注入）
 
 - Implement bounded step runner.
 - Use `LegacyRagServiceAdapter.answer()` as the first answer path.
 - Persist `AgentTrace`.
 
-### Phase 4: Model Lanes
+### Phase 4: Model Lanes ✅（CHATTY_AGENTS_SDK 开关仅路由 ask_info，commit 4e3a5bc）
 
 - Wire OpenAI Agents SDK TS runner.
 - Keep Chat Completions direct adapter for extraction/eval/fallback.
@@ -375,12 +381,17 @@ MVP should preserve the current evaluator direction but make traces first-class.
 Open:
 
 - When should Route Handlers be split into a separate worker or API service?
-- Which package should own the first SQLite connection implementation?
-- Should the first legacy adapter call HTTP `/chat` or inject `answerQuestion()` in-process?
-- Which exact paths should use Agents SDK before direct Chat Completions?
 - When should Qdrant be retained vs wrapped behind a media/knowledge adapter?
+- PRD §8.1 的 durable ConversationEvent 表：当前只持久化 trace，事件对象用后即弃。
+  M2 的这条承诺显式推迟——单机 MVP 里 trace 已够回放；引入 worker/重试语义时再建表。
 
 Settled:
+
+- SQLite connection lives in `packages/db` (`database.ts`), repositories are factories over it.
+- The legacy adapter injects `answerQuestion()` in-process (`apps/web/lib/legacy-adapter.ts`),
+  not HTTP — Next marks rag-service a server external and dynamic-imports its dist.
+- Agents SDK routes only `ask_info` (feature flag `CHATTY_AGENTS_SDK=1`); everything else
+  stays on direct Chat Completions.
 
 - MVP uses Next.js first.
 - MVP uses SQLite.
@@ -415,3 +426,22 @@ Settled:
 ## 15. Appendix: External Asset Links
 
 No Figma or Canva links have been added yet.
+
+## 16. Legacy Migration Ledger
+
+「保持好 specs/test/interface，随时可重写」的进度账本。五项 legacy 能力的接管状态：
+
+| 能力 | 边界接口 | 状态 | 下一步 |
+|---|---|---|---|
+| 回答路径 answerQuestion | `LegacyRagService`（in-process 注入） | ✅ 已接线，loop 的 ask_info 默认走它 | 被 SDK lane 逐步替代（按 action 灰度） |
+| 评估器 LLM-judge | `Evaluator`（`loadLegacyEvaluator`） | ✅ 已接线，异步评分 → failure_case → golden 晋升 CLI 闭环 | 换 judge 交叉复评（防同源过拟合） |
+| 知识检索 searchKnowledge | 曾有 `KnowledgeAdapter` | ⚪ 边界已删（零消费方）；检索仍在 legacy answerQuestion 内部 | 若把检索提出 loop，再随消费方重建边界 |
+| 会话记忆 | `MemoryRepository`（SQLite + JSON 只读回退） | 🟡 仅 recentMessages 双写；profile 字段仍由 legacy 写 JSON | profile 写路径迁 SQLite JSON 列 |
+| 事实抽取 + 阶段状态机 | 无边界（legacy 内部） | 🔴 完全在 legacy（extractStructuredConversationFacts + orchestrator） | 状态机已有 22 个单测钉行为，可安全搬迁 |
+
+已知缺口（测试钉住待修）：`post_order_followup` stage 在 `decideStage` 中不可达，
+`close_loop` 动作是死代码——修复属于行为变更，需跑金标 eval 验证后再动。
+
+金标 harness 目前直连 legacy `answerQuestion()`，断言词汇（stage/action）是 legacy 专有；
+重写验收前需要把 eval.ts 的被测面抽象为可切换目标（legacy / /api/playground），
+让 11 个金标场景成为两线共享的验收闸门。
