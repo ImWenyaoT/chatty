@@ -46,11 +46,15 @@ export function coerceToIsoDate(input?: string | null): string | undefined {
 
 /**
  * 从自由字符串里提取日期范围 "5月10日到5月12日" / "5-10~5-12" 等。
+ * 先按强分隔符（到/至/~/破折号）切分，避免和 "2026-05-10" 这类
+ * 连字符日期里的 "-" 冲突；强分隔符不命中时才把单个 "-" 当范围分隔符
+ * （兼容 "5月10日-5月12日" 写法）。
  */
 export function coerceToIsoDateRange(input?: string | null): { startDate?: string; endDate?: string } {
   if (!input) return {};
   const raw = String(input).trim();
-  const rangeSplit = raw.split(/\s*(?:到|至|~|—|--|-|\u2013|\u2014)\s*/);
+  const strongSplit = raw.split(/\s*(?:到|至|~|—|--|\u2013|\u2014)\s*/);
+  const rangeSplit = strongSplit.length === 2 ? strongSplit : raw.split(/\s*-\s*/);
   if (rangeSplit.length === 2) {
     const s = coerceToIsoDate(rangeSplit[0]);
     const e = coerceToIsoDate(rangeSplit[1]);

@@ -68,6 +68,26 @@ export function extractHeightWeightFromText(text: string) {
     ? inferWeightUnit(weightMatch[1], weightMatch[2])
     : undefined;
 
+  // "181.70公斤" 这类用句号拼接的「身高.体重」写法（真实会话观察，见 CLAUDE.md §3）。
+  // 保护条件：整数部分 >=140 才拆（140 以下可能是 "65.5公斤" 这种真小数体重），
+  // 且小数部分按体重解析必须落在合理区间，否则回落到常规解析路径。
+  if (!hasHeightLabel && !hasWeightLabel && !hasDateContext && heightCm === undefined && weightKg === undefined) {
+    const compact = normalized.replace(/\s+/g, '');
+    const dottedPair = compact.match(/^([0-9]{3})\.([0-9]{2,3})(kg|斤)?$/i);
+    if (dottedPair) {
+      const pairedHeight = parseMetricValue(dottedPair[1]);
+      const pairedWeight = parseWeightValue(dottedPair[2], dottedPair[3]);
+      if (
+        pairedHeight !== undefined && pairedHeight >= 140 && isReasonableHeight(pairedHeight)
+        && isReasonableWeight(pairedWeight)
+      ) {
+        heightCm = pairedHeight;
+        weightKg = pairedWeight;
+        inferredWeightUnit = inferWeightUnit(dottedPair[2], dottedPair[3]);
+      }
+    }
+  }
+
   if (!hasHeightLabel && !hasWeightLabel && !hasDateContext && (heightCm === undefined || weightKg === undefined)) {
     const compact = normalized.replace(/\s+/g, '');
     const pairMatch = compact.match(/([0-9]+(?:\.[0-9]+)?)(cm)?[^0-9]{0,6}([0-9]+(?:\.[0-9]+)?)(kg|斤)?/i);
