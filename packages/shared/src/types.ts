@@ -84,7 +84,10 @@ export interface AgentTrace {
   createdAt: string
 }
 
-export interface RuntimeTool<TInput extends Record<string, JsonValue> = Record<string, JsonValue>, TOutput extends JsonValue = JsonValue> {
+export interface RuntimeTool<
+  TInput extends Record<string, JsonValue> = Record<string, JsonValue>,
+  TOutput extends JsonValue = JsonValue,
+> {
   name: string
   description: string
   risk: RuntimeToolRisk

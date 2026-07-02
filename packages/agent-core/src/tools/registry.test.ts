@@ -1,10 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import {
-  createDefaultToolRegistry,
-  ApprovalRequiredError,
-  ToolNotFoundError,
-} from './registry.js'
+import { createDefaultToolRegistry, ApprovalRequiredError, ToolNotFoundError } from './registry.js'
 
 // PRD §11 MVP tool set. The 3 original stubs + 7 new tools + 1 high-risk stub.
 const EXPECTED_TOOLS = [
@@ -26,7 +22,10 @@ function registry() {
 }
 
 test('default registry registers all 11 PRD tools', () => {
-  const names = registry().list().map((t) => t.name).sort()
+  const names = registry()
+    .list()
+    .map((t) => t.name)
+    .sort()
   for (const expected of EXPECTED_TOOLS) {
     assert.ok(names.includes(expected), `missing tool: ${expected}`)
   }
@@ -35,7 +34,10 @@ test('default registry registers all 11 PRD tools', () => {
 test('search_products returns matches for a known keyword', async () => {
   const out = await registry().invoke('search_products', { query: '西装' })
   const r = out as { matches: { id: string }[] }
-  assert.deepEqual(r.matches.map((m) => m.id), ['SUIT-001'])
+  assert.deepEqual(
+    r.matches.map((m) => m.id),
+    ['SUIT-001'],
+  )
 })
 
 test('calculate_price quotes day1 full + renewals half', async () => {
@@ -54,7 +56,10 @@ test('get_order_history returns customer orders', async () => {
   const out = await registry().invoke('get_order_history', { customerId: 'c' })
   const r = out as { found: boolean; orders: { orderNo: string }[] }
   assert.equal(r.found, true)
-  assert.deepEqual(r.orders.map((o) => o.orderNo), ['ORD-1001'])
+  assert.deepEqual(
+    r.orders.map((o) => o.orderNo),
+    ['ORD-1001'],
+  )
 })
 
 test('get_order_status returns a single order', async () => {

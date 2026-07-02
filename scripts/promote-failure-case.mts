@@ -59,9 +59,13 @@ function listOpen(failures: FailureCaseRepository): void {
     return
   }
   for (const fc of open) {
-    console.log(`${fc.id}  score=${fc.score}  trace=${fc.traceId}  issues=${fc.issues.join('、') || '(无)'}`)
+    console.log(
+      `${fc.id}  score=${fc.score}  trace=${fc.traceId}  issues=${fc.issues.join('、') || '(无)'}`,
+    )
   }
-  console.log(`\n共 ${open.length} 条。晋升：node scripts/promote-failure-case.mts <id>；驳回：<id> --dismiss`)
+  console.log(
+    `\n共 ${open.length} 条。晋升：node scripts/promote-failure-case.mts <id>；驳回：<id> --dismiss`,
+  )
 }
 
 /** CLI 入口：解析参数并分派到 list / promote / dismiss。 */

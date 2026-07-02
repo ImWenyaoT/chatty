@@ -7,7 +7,9 @@ import type { ChatCompletionMessage, ChatCompletionsAdapter } from '@rental/llm'
 import { classifyAction, type ActionClass } from './action-classifier.js'
 
 // 构造只实现 completeJson 的假 LLM 适配器，隔离真实网络调用
-function fakeAdapter(impl: (messages: ChatCompletionMessage[]) => Promise<unknown>): ChatCompletionsAdapter {
+function fakeAdapter(
+  impl: (messages: ChatCompletionMessage[]) => Promise<unknown>,
+): ChatCompletionsAdapter {
   return {
     async complete() {
       throw new Error('classifyAction 不应调用 complete')
@@ -21,7 +23,11 @@ function fakeAdapter(impl: (messages: ChatCompletionMessage[]) => Promise<unknow
 test('四类合法 actionClass 原样透传，reason/reply 一并带回', async () => {
   const classes: ActionClass[] = ['small_talk', 'ask_info', 'provide_info', 'handoff']
   for (const cls of classes) {
-    const llm = fakeAdapter(async () => ({ actionClass: cls, reason: '模型给的理由', reply: '好的' }))
+    const llm = fakeAdapter(async () => ({
+      actionClass: cls,
+      reason: '模型给的理由',
+      reply: '好的',
+    }))
     const result = await classifyAction(llm, '随便一句话')
     assert.equal(result.actionClass, cls)
     assert.equal(result.reason, '模型给的理由')

@@ -9,11 +9,7 @@ import {
   shouldCreateFailureCase,
 } from '@rental/agent-core'
 import { getRepos, newId } from '@/lib/db'
-import {
-  isLegacyAvailable,
-  loadLegacyEvaluator,
-  loadLegacyRagService,
-} from '@/lib/legacy-adapter'
+import { isLegacyAvailable, loadLegacyEvaluator, loadLegacyRagService } from '@/lib/legacy-adapter'
 
 // Playground endpoint: drives one bounded Chatty step end to end.
 // Request:  POST { customerId, productId?, conversationId?, question, imageUrl? }
@@ -93,15 +89,15 @@ export async function POST(request: Request) {
   // 4. Build the loop runner. Legacy path is wired only if rag-service is
   //    importable; otherwise the LLM-only fallback is used.
   const llm = createChatCompletionsAdapterFromEnv()
-  let legacy
-  let evaluator
+  let legacy: Awaited<ReturnType<typeof loadLegacyRagService>> | undefined
+  let evaluator: Awaited<ReturnType<typeof loadLegacyEvaluator>>
   if (await isLegacyAvailable()) {
     legacy = await loadLegacyRagService()
     evaluator = await loadLegacyEvaluator()
   }
   // Phase 4 (feature-flagged): wire the Agents SDK runner when
   // CHATTY_AGENTS_SDK=1, targeting a dedicated OpenAI endpoint if configured.
-  let agentsSdkRunner
+  let agentsSdkRunner: import('@rental/shared').AgentsSdkRunner | undefined
   if (process.env.CHATTY_AGENTS_SDK === '1') {
     const { readAgentsSdkEnv, createAgentsSdkRunner } = await import('@rental/llm')
     const sdkEnv = readAgentsSdkEnv()
@@ -136,12 +132,13 @@ export async function POST(request: Request) {
     action: result.terminality,
     input: { question: input.question },
     // handoff 原因等 memoryPatch 随 trace 落库，人工接手时从 trace 可读（PRD §15）
-    output: result.reply || result.memoryPatch
-      ? {
-          ...(result.reply ? { reply: result.reply } : {}),
-          ...(result.memoryPatch !== undefined ? { memoryPatch: result.memoryPatch } : {}),
-        }
-      : undefined,
+    output:
+      result.reply || result.memoryPatch
+        ? {
+            ...(result.reply ? { reply: result.reply } : {}),
+            ...(result.memoryPatch !== undefined ? { memoryPatch: result.memoryPatch } : {}),
+          }
+        : undefined,
     toolCalls: result.toolCalls,
   })
   sessions.update(session.id, {

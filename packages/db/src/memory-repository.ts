@@ -13,7 +13,11 @@ import { nowIso } from './database.js'
  */
 export interface MemoryRepository {
   getCustomer(customerId: string): CustomerMemoryRecord | undefined
-  getProduct(customerId: string, productId: string, conversationId: string): ProductMemoryRecord | undefined
+  getProduct(
+    customerId: string,
+    productId: string,
+    conversationId: string,
+  ): ProductMemoryRecord | undefined
   /**
    * Loads a MemorySnapshot, preferring SQLite and falling back to the legacy
    * JSON store. Returns a minimal snapshot when nothing is known yet.

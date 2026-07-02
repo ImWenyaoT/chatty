@@ -9,7 +9,15 @@ import type { Turn } from './types'
 /** Small icons kept inline so the bundle has no icon dependency. */
 function HandoffIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden="true"
+    >
       <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
       <circle cx="9" cy="7" r="4" />
       <path d="M19 8v6M22 11h-6" />
@@ -19,7 +27,16 @@ function HandoffIcon() {
 
 function Chevron() {
   return (
-    <svg className="chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden>
+    <svg
+      className="chev"
+      width="11"
+      height="11"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      aria-hidden="true"
+    >
       <path d="M9 18l6-6-6-6" />
     </svg>
   )

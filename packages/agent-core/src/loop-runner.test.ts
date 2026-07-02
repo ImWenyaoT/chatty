@@ -30,7 +30,11 @@ function ctx(question: string, extra?: Partial<ConversationEvent>): AgentContext
 }
 
 // Fake classifier injected via options.classify — no network needed.
-const classify = (actionClass: string, reply?: string) => async () => ({ actionClass, reason: 'test', reply })
+const classify = (actionClass: string, reply?: string) => async () => ({
+  actionClass,
+  reason: 'test',
+  reply,
+})
 
 test('small_talk: direct reply, no tools, waiting_for_user', async () => {
   const runner = createLoopRunner({
@@ -175,8 +179,14 @@ test('SDK lane is exposed only policy-allowed (low-risk) tools, never approval-g
   })
   await runner.runStep(ctx('这款多少钱'))
   assert.ok(exposedNames.includes('get_product'), 'low-risk read tool should be exposed')
-  assert.ok(!exposedNames.includes('issue_refund'), 'high-risk approval-gated tool must be withheld')
-  assert.ok(!exposedNames.includes('create_handoff'), 'medium-risk tool must be withheld from auto-run')
+  assert.ok(
+    !exposedNames.includes('issue_refund'),
+    'high-risk approval-gated tool must be withheld',
+  )
+  assert.ok(
+    !exposedNames.includes('create_handoff'),
+    'medium-risk tool must be withheld from auto-run',
+  )
 })
 
 test('SDK lane exposes no tools when the session is closed (policy deny-all)', async () => {

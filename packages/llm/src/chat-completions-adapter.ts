@@ -1,4 +1,4 @@
-import OpenAI from 'openai'
+import type OpenAI from 'openai'
 import { createOpenAiClientFromEnv, readLlmEnv } from './client-from-env.js'
 
 export interface ChatCompletionsAdapterOptions {
@@ -24,7 +24,9 @@ export interface ChatCompletionsAdapter {
 /**
  * Creates a direct Chat Completions adapter for extraction, eval, and legacy fallback paths.
  */
-export function createChatCompletionsAdapter(options: ChatCompletionsAdapterOptions): ChatCompletionsAdapter {
+export function createChatCompletionsAdapter(
+  options: ChatCompletionsAdapterOptions,
+): ChatCompletionsAdapter {
   return {
     async complete(messages: ChatCompletionMessage[]) {
       const response = await options.client.chat.completions.create({

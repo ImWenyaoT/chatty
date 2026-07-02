@@ -128,7 +128,7 @@ export default function ConciergePage() {
         ))}
 
         {sending ? (
-          <div className="typing" aria-label="Chatty 正在输入">
+          <div className="typing" role="status" aria-label="Chatty 正在输入">
             <span />
             <span />
             <span />

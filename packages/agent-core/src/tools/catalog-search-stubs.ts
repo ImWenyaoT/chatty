@@ -39,7 +39,9 @@ export const searchProductsTool: RuntimeTool<Record<string, JsonValue>, JsonValu
   risk: 'low',
   approvalRequired: false,
   async execute(input) {
-    const query = String(input.query ?? '').toLowerCase().trim()
+    const query = String(input.query ?? '')
+      .toLowerCase()
+      .trim()
     if (!query) return { query, matches: [] }
     const matches = PRODUCTS.filter((p) =>
       [p.id, p.name, ...p.keywords].some((k) => k.toLowerCase().includes(query)),

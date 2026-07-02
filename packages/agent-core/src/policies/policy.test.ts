@@ -13,7 +13,11 @@ const policy = createDefaultPolicy()
 /**
  * Builds a RuntimeToolCall descriptor for policy assertions.
  */
-function call(name: string, risk: 'low' | 'medium' | 'high', approvalRequired = false): RuntimeToolCall {
+function call(
+  name: string,
+  risk: 'low' | 'medium' | 'high',
+  approvalRequired = false,
+): RuntimeToolCall {
   return { toolName: name, arguments: {}, risk, approvalRequired }
 }
 

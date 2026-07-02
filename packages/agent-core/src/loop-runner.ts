@@ -3,7 +3,6 @@ import type {
   AgentsSdkRunner,
   ConversationEvent,
   JsonValue,
-  RuntimeTool,
   RuntimeToolCall,
 } from '@rental/shared'
 import { readQuestionFromEvent } from '@rental/shared'
@@ -72,12 +71,26 @@ export function createLoopRunner(options: CreateLoopRunnerOptions): AgentLoopRun
 
         case 'small_talk':
         case 'provide_info':
-          return replyResult(event, traceId, decision.reply ?? defaultAckReply(decision.actionClass), [], decision.reason)
+          return replyResult(
+            event,
+            traceId,
+            decision.reply ?? defaultAckReply(decision.actionClass),
+            [],
+            decision.reason,
+          )
 
         case 'ask_info':
         default:
           // The only path that may consult the legacy answer / RAG capability.
-          return askInfoResult(event, traceId, question, decision.reason, options, context.memory, context.sessionStatus)
+          return askInfoResult(
+            event,
+            traceId,
+            question,
+            decision.reason,
+            options,
+            context.memory,
+            context.sessionStatus,
+          )
       }
     },
   }
@@ -208,9 +221,19 @@ async function llmFallbackResult(
   if (event.productId && options.tools) {
     try {
       const product = await options.tools.invoke('get_product', { productId: event.productId })
-      const p = product as { found?: boolean; name?: string; dailyPrice?: number; pricingNote?: string }
+      const p = product as {
+        found?: boolean
+        name?: string
+        dailyPrice?: number
+        pricingNote?: string
+      }
       if (p?.found) {
-        toolCalls.push({ toolName: 'get_product', arguments: { productId: event.productId }, risk: 'low', approvalRequired: false })
+        toolCalls.push({
+          toolName: 'get_product',
+          arguments: { productId: event.productId },
+          risk: 'low',
+          approvalRequired: false,
+        })
         productContext = `\n\n[商品参考] ${p.name}，日租 ${p.dailyPrice}。${p.pricingNote ?? ''}`
       }
     } catch {
@@ -227,5 +250,11 @@ async function llmFallbackResult(
     { role: 'user', content: question + productContext },
   ])
 
-  return replyResult(event, traceId, reply || defaultAckReply('ask_info'), toolCalls, 'llm_fallback')
+  return replyResult(
+    event,
+    traceId,
+    reply || defaultAckReply('ask_info'),
+    toolCalls,
+    'llm_fallback',
+  )
 }

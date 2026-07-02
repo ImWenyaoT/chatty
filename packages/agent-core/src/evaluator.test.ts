@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createEvaluator, normalizeEvalHistory, type EvaluationResult } from './evaluator.js'
+import { normalizeEvalHistory } from './evaluator.js'
 
 // --- normalizeEvalHistory: defensive coercion of arbitrary recentMessages ---
 // recentMessages comes from SQLite or the legacy JSON store as JsonValue[]; the

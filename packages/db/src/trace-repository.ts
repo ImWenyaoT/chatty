@@ -91,9 +91,7 @@ export function createTraceRepository(db: Db): TraceRepository {
 
     queryBySession(sessionId, limit = 100) {
       const rows = db
-        .prepare(
-          `SELECT * FROM agent_traces WHERE session_id = ? ORDER BY created_at DESC LIMIT ?`,
-        )
+        .prepare(`SELECT * FROM agent_traces WHERE session_id = ? ORDER BY created_at DESC LIMIT ?`)
         .all(sessionId, limit) as TraceRow[]
       // newest-first from DB; return oldest-first for chronological reading.
       return rows.reverse().map(toTrace)
