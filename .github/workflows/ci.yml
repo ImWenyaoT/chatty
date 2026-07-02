@@ -6,24 +6,33 @@ on:
     branches:
       - main
 
+# 同一分支连推时取消旧 run，省额度也省排队
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # pnpm 版本从 package.json 的 packageManager 字段读取，避免两处漂移
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 11.9.0
           run_install: false
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: pnpm
 
       - name: Install dependencies
@@ -32,7 +41,10 @@ jobs:
       - name: Build package skeleton
         run: pnpm build:skeleton
 
-      - name: Smoke test (data path, no network)
+      - name: Lint (biome)
+        run: pnpm lint
+
+      - name: Smoke test (data path incl. flywheel promotion, no network)
         run: node scripts/smoke.mts
 
       - name: Test workspaces
@@ -41,11 +53,7 @@ jobs:
       - name: Typecheck workspaces
         run: pnpm typecheck
 
+      # pnpm -r build 已覆盖全部 workspace 包（含 rental-rag-service 与 rental-dashboard），
+      # 此前单独重复构建两者的步骤已删除
       - name: Build workspaces
         run: pnpm build
-
-      - name: Build legacy rag-service
-        run: pnpm build:rag-service
-
-      - name: Build legacy dashboard
-        run: pnpm --filter rental-dashboard build
