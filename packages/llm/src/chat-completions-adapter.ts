@@ -61,7 +61,12 @@ export function createChatCompletionsAdapterFromEnv(): ChatCompletionsAdapter {
   })
 }
 
-function parseJsonObject<T>(raw: string): T {
+/**
+ * 把模型回复解析成 JSON 对象：优先整体 JSON.parse；失败后回退到正则提取
+ * 首个 { 到最后一个 } 的块（兼容回复里夹杂说明文字 / markdown 代码块的
+ * 非严格 provider）；仍不可解析时抛错并附上回复片段便于排查。
+ */
+export function parseJsonObject<T>(raw: string): T {
   try {
     return JSON.parse(raw) as T
   } catch {
