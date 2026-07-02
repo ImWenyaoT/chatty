@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { fetchConfig, fetchCustomers, fetchSummary, triggerReEvaluate } from './api';
-import KnowledgePage from './KnowledgePage';
 import type { ConfigInfo, CustomerListItem, ProductMemory, Review, ReviewSummary } from './types';
 
 function useAsync<T>(fn: () => Promise<T>, deps: unknown[] = []) {
@@ -27,14 +26,7 @@ function useAsync<T>(fn: () => Promise<T>, deps: unknown[] = []) {
   return { data, error, loading, lastUpdated, reload };
 }
 
-function useTicker(intervalMs = 1000) {
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), intervalMs);
-    return () => clearInterval(id);
-  }, [intervalMs]);
-}
-
+// 渲染一次静态相对时间（不再随秒级 ticker 刷新，随数据刷新重渲染时更新）
 function formatRelative(ts: number): string {
   if (!ts) return '—';
   const diff = Math.max(0, Math.floor((Date.now() - ts) / 1000));
@@ -51,34 +43,6 @@ function scoreColor(score: number) {
   if (score < 6) return '#f87171';
   if (score < 8) return '#fbbf24';
   return '#34d399';
-}
-
-function useCountUp(target: number, duration = 900) {
-  const [value, setValue] = useState(0);
-  useEffect(() => {
-    const start = performance.now();
-    const from = 0;
-    let raf = 0;
-    const tick = (now: number) => {
-      const elapsed = Math.min(1, (now - start) / duration);
-      const eased = 1 - Math.pow(1 - elapsed, 3);
-      setValue(from + (target - from) * eased);
-      if (elapsed < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [target, duration]);
-  return value;
-}
-
-function CountUpInt({ value }: { value: number }) {
-  const v = useCountUp(value);
-  return <>{Math.round(v)}</>;
-}
-
-function CountUpFloat({ value, digits = 2 }: { value: number; digits?: number }) {
-  const v = useCountUp(value);
-  return <>{v.toFixed(digits)}</>;
 }
 
 interface ReviewPoint {
@@ -478,13 +442,13 @@ function SummaryCards({ config, summary }: { config?: ConfigInfo; summary?: Revi
       </TiltCard>
       <TiltCard>
         <div className="card-label">评价总数</div>
-        <div className="card-value"><CountUpInt value={summary?.totalReviews ?? 0} /></div>
+        <div className="card-value">{summary?.totalReviews ?? 0}</div>
         <div className="card-sub">{summary?.totalConversations ?? 0} 个对话</div>
       </TiltCard>
       <TiltCard>
         <div className="card-label">当前版本平均分</div>
         <div className="card-value" style={{ WebkitTextFillColor: scoreColor(avgScore), color: scoreColor(avgScore) }}>
-          <CountUpFloat value={avgScore} />
+          {avgScore.toFixed(2)}
         </div>
         <div className="card-sub">基于 {current?.count ?? 0} 条评估</div>
         {versionScores.length > 1 && <MiniSpark values={versionScores} color={scoreColor(avgScore)} />}
@@ -492,9 +456,9 @@ function SummaryCards({ config, summary }: { config?: ConfigInfo; summary?: Revi
       <TiltCard>
         <div className="card-label">低分率 / 错误率</div>
         <div className="card-value">
-          <span style={{ color: '#f87171' }}><CountUpFloat value={lowRate} digits={0} />%</span>
+          <span style={{ color: '#f87171' }}>{lowRate.toFixed(0)}%</span>
           <span className="sep"> · </span>
-          <span style={{ color: '#a78bfa' }}><CountUpFloat value={errRate} digits={0} />%</span>
+          <span style={{ color: '#a78bfa' }}>{errRate.toFixed(0)}%</span>
         </div>
         <div className="card-sub">分数&lt;6 / 评估失败</div>
       </TiltCard>
@@ -738,32 +702,8 @@ function ConversationDetail({
   );
 }
 
-type TabKey = 'reviews' | 'knowledge';
-
+// 评测中枢单页应用（知识库后台已移除，dashboard 只保留 eval 观测能力）
 export default function App() {
-  const [tab, setTab] = useState<TabKey>(() => {
-    if (typeof window === 'undefined') return 'reviews';
-    const hash = window.location.hash.replace(/^#/, '');
-    return hash === 'knowledge' ? 'knowledge' : 'reviews';
-  });
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const onHashChange = () => {
-      const hash = window.location.hash.replace(/^#/, '');
-      setTab(hash === 'knowledge' ? 'knowledge' : 'reviews');
-    };
-    window.addEventListener('hashchange', onHashChange);
-    return () => window.removeEventListener('hashchange', onHashChange);
-  }, []);
-
-  const switchTab = (next: TabKey) => {
-    setTab(next);
-    if (typeof window !== 'undefined') {
-      window.location.hash = next === 'knowledge' ? '#knowledge' : '';
-    }
-  };
-
   const { data: config } = useAsync(fetchConfig, []);
   const { data: summary, reload: reloadSummary, lastUpdated: summaryUpdated, loading: summaryLoading } = useAsync(fetchSummary, []);
   const { data: customersResp, reload: reloadCustomers, loading: customersLoading } = useAsync(() => fetchCustomers(1, 200), []);
@@ -771,7 +711,6 @@ export default function App() {
   const [versionFilter, setVersionFilter] = useState<string>('');
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  useTicker(1000);
 
   const customers = customersResp?.customers ?? [];
   const selectedCustomer = customers.find((c) => c.customerId === selected?.customerId);
@@ -787,11 +726,11 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!autoRefresh || tab !== 'reviews') return;
+    if (!autoRefresh) return;
     const id = setInterval(doRefresh, 20000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoRefresh, tab]);
+  }, [autoRefresh]);
 
   const onReEvaluate = async () => {
     if (!selectedPm || !selectedCustomer) return;
@@ -817,109 +756,84 @@ export default function App() {
               </svg>
               对话推理
             </a>
-            <button
-              type="button"
-              className={`top-nav-item ${tab === 'reviews' ? 'active' : ''}`}
-              onClick={() => switchTab('reviews')}
-            >
+            <span className="top-nav-item active" aria-current="page">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M3 3v18h18" />
                 <path d="M7 15l4-4 4 4 5-5" />
               </svg>
               评测中枢
-            </button>
-            <button
-              type="button"
-              className={`top-nav-item ${tab === 'knowledge' ? 'active' : ''}`}
-              onClick={() => switchTab('knowledge')}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-              </svg>
-              知识库
-            </button>
+            </span>
           </nav>
-          {tab === 'reviews' && (
-            <>
-              <div className="live-status">
-                <span className={`live-dot ${autoRefresh ? 'on' : 'off'}`} />
-                <span className="live-text">
-                  {autoRefresh ? 'LIVE · 自动刷新' : 'PAUSED · 手动刷新'}
-                </span>
-                <span className="live-sep">·</span>
-                <span className="live-updated">{formatRelative(summaryUpdated)}</span>
-              </div>
-              <button
-                type="button"
-                className="btn-ghost"
-                onClick={() => setAutoRefresh((v) => !v)}
-                title={autoRefresh ? '点击暂停自动刷新' : '点击开启自动刷新'}
-              >
-                {autoRefresh ? '⏸ 暂停' : '▶ 实时'}
-              </button>
-              <button onClick={doRefresh} className={isLoading ? 'btn-spin' : ''}>
-                <span className="refresh-icon">⟳</span>
-                <span>{isLoading ? '同步中' : '刷新数据'}</span>
-              </button>
-            </>
-          )}
+          <div className="live-status">
+            <span className={`live-dot ${autoRefresh ? 'on' : 'off'}`} />
+            <span className="live-text">
+              {autoRefresh ? 'LIVE · 自动刷新' : 'PAUSED · 手动刷新'}
+            </span>
+            <span className="live-sep">·</span>
+            <span className="live-updated">{formatRelative(summaryUpdated)}</span>
+          </div>
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => setAutoRefresh((v) => !v)}
+            title={autoRefresh ? '点击暂停自动刷新' : '点击开启自动刷新'}
+          >
+            {autoRefresh ? '⏸ 暂停' : '▶ 实时'}
+          </button>
+          <button onClick={doRefresh} className={isLoading ? 'btn-spin' : ''}>
+            <span className="refresh-icon">⟳</span>
+            <span>{isLoading ? '同步中' : '刷新数据'}</span>
+          </button>
         </div>
       </header>
 
-      {tab === 'reviews' && (
-        <>
-          <SummaryCards config={config} summary={summary} />
-          <TrendSection customers={customers} />
-          <VersionTable summary={summary} />
+      <SummaryCards config={config} summary={summary} />
+      <TrendSection customers={customers} />
+      <VersionTable summary={summary} />
 
-          {summary && summary.promptVersions.length > 1 && (
-            <div className="filter-bar">
-              <label>过滤 · Filter</label>
-              <div className="chip-row">
-                <button
-                  type="button"
-                  className={`chip ${versionFilter === '' ? 'active' : ''}`}
-                  onClick={() => setVersionFilter('')}
-                >
-                  全部<em>{summary.totalReviews}</em>
-                </button>
-                {summary.promptVersions.map((v) => (
-                  <button
-                    key={v.version}
-                    type="button"
-                    className={`chip ${versionFilter === v.version ? 'active' : ''}`}
-                    onClick={() => setVersionFilter(v.version)}
-                  >
-                    <span className="mono">{v.version}</span><em>{v.count}</em>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="two-col">
-            <div className="sidebar">
-              <ConversationList
-                customers={customers}
-                selected={selected}
-                onSelect={(c, pm) => setSelected({ customerId: c.customerId, conversationId: pm.conversationId })}
-                versionFilter={versionFilter || undefined}
-              />
-            </div>
-            <div className="main">
-              <ConversationDetail customer={selectedCustomer} pm={selectedPm} onReEvaluate={onReEvaluate} />
-            </div>
+      {summary && summary.promptVersions.length > 1 && (
+        <div className="filter-bar">
+          <label>过滤 · Filter</label>
+          <div className="chip-row">
+            <button
+              type="button"
+              className={`chip ${versionFilter === '' ? 'active' : ''}`}
+              onClick={() => setVersionFilter('')}
+            >
+              全部<em>{summary.totalReviews}</em>
+            </button>
+            {summary.promptVersions.map((v) => (
+              <button
+                key={v.version}
+                type="button"
+                className={`chip ${versionFilter === v.version ? 'active' : ''}`}
+                onClick={() => setVersionFilter(v.version)}
+              >
+                <span className="mono">{v.version}</span><em>{v.count}</em>
+              </button>
+            ))}
           </div>
-
-          <div className="two-col">
-            <FrequencyList title="高频问题 Top 10" items={summary?.topIssues ?? []} />
-            <FrequencyList title="高频建议 Top 10" items={summary?.topSuggestions ?? []} />
-          </div>
-        </>
+        </div>
       )}
 
-      {tab === 'knowledge' && <KnowledgePage />}
+      <div className="two-col">
+        <div className="sidebar">
+          <ConversationList
+            customers={customers}
+            selected={selected}
+            onSelect={(c, pm) => setSelected({ customerId: c.customerId, conversationId: pm.conversationId })}
+            versionFilter={versionFilter || undefined}
+          />
+        </div>
+        <div className="main">
+          <ConversationDetail customer={selectedCustomer} pm={selectedPm} onReEvaluate={onReEvaluate} />
+        </div>
+      </div>
+
+      <div className="two-col">
+        <FrequencyList title="高频问题 Top 10" items={summary?.topIssues ?? []} />
+        <FrequencyList title="高频建议 Top 10" items={summary?.topSuggestions ?? []} />
+      </div>
     </div>
   );
 }

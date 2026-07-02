@@ -2549,10 +2549,6 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18" /><path d="M7 15l4-4 4 4 5-5" /></svg>
               评测中枢
             </a>
-            <a class="top-nav-item" href="/history#knowledge" title="知识库管理">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg>
-              知识库
-            </a>
           </nav>
           <div class="version" id="pageVersion" style="display:none;"></div>
         </div>
@@ -2776,7 +2772,7 @@
               };
               r.readAsDataURL(file);
             });
-            var resp = await fetch('/knowledge/media/upload', {
+            var resp = await fetch('/media/upload', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ filename: file.name, mimeType: file.type || 'image/png', base64: base64 })
