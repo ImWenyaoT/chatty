@@ -18,8 +18,10 @@ This is an early engineering prototype. The legacy `rag-service` remains the com
 ## Useful Commands
 
 ```bash
-npm run typecheck:skeleton
-npm run build:rag-service
+pnpm install --frozen-lockfile
+pnpm dev
+pnpm typecheck:skeleton
+pnpm build:rag-service
 ```
 
 ## Docs

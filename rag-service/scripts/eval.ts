@@ -1,9 +1,9 @@
 // 金标回归测试运行器。
 // 用法：
-//   npm run eval                                 # 跑全部场景
-//   npm run eval -- --filter happy-path          # 只跑匹配的场景
-//   npm run eval -- --save v1                    # 跑完把结果存到 tests/reports/v1.json
-//   npm run eval -- --baseline v1                # 跑完和 tests/reports/v1.json 对比
+//   pnpm eval                                    # 跑全部场景
+//   pnpm eval -- --filter happy-path             # 只跑匹配的场景
+//   pnpm eval -- --save v1                       # 跑完把结果存到 tests/reports/v1.json
+//   pnpm eval -- --baseline v1                   # 跑完和 tests/reports/v1.json 对比
 //
 // 注意：eval 会覆盖写入 tests/.tmp/memory-store.json 作为隔离的记忆库，
 //       不会污染 data/memory-store.json。

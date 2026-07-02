@@ -10,10 +10,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@rental/agent-core": "0.1.0",
-    "@rental/db": "0.1.0",
-    "@rental/llm": "0.1.0",
-    "@rental/shared": "0.1.0",
+    "@rental/agent-core": "workspace:*",
+    "@rental/db": "workspace:*",
+    "@rental/llm": "workspace:*",
+    "@rental/shared": "workspace:*",
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

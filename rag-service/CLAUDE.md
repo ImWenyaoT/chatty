@@ -171,7 +171,7 @@ curl -s "http://localhost:8000/api/ui/sessions/63/intel?messages_limit=10" \
 |---|---|---|---|
 | 3001 | rag-service (Fastify) | 本仓库 | `/chat` + Dashboard |
 | 8000 | tamperfish backend (uvicorn) | `tamperfish_bundle_v2/backend/` | intel API + 静态截图 |
-| 5173 | dashboard dev (Vite) | `dashboard/` | 仅 `npm run dev:dashboard` |
+| 5173 | dashboard dev (Vite) | `dashboard/` | 仅 `pnpm dev:dashboard` |
 | 6333 | Qdrant | docker | 向量库（可选） |
 | 5000 | macOS ControlCenter | 系统 | **占用注意**，rag-service 不要选 5000 |
 
@@ -184,7 +184,7 @@ curl -s "http://localhost:8000/api/ui/sessions/63/intel?messages_limit=10" \
 1. `lsof -i :8000 -P | grep LISTEN` 确认 intel 服务在跑
 2. `cat config/prompts/v1.yaml | head -50` 确认硬规则版本
 3. `git log --oneline -10`（如果在 git 仓内）看最近改动
-4. 跑 `npm run eval` 看金标基线没崩
+4. 跑 `pnpm eval` 看金标基线没崩
 5. 读 [README.md §11.2](./README.md) 看待办遗留项
 
 新会话头一句话要做的事，**不在这个文档里写死**——按用户当次需求执行。这个文档只解决"上下文丢失"问题。
