@@ -1,0 +1,57 @@
+# 金标回归 eval（需要真实 LLM，故不进每次 push 的 CI）。
+# 手动触发：Actions → eval → Run workflow。
+# 需要配置 repo secrets：OPENAI_API_KEY、OPENAI_BASE_URL（OpenAI 兼容端点）、
+# 可选 CHAT_MODEL / EVALUATOR_MODEL / EMBEDDING_MODEL。
+# 知识入库走本地向量库回退（ingest.ts 在 Qdrant 不可用时自动降级），无需服务容器。
+name: eval
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eval-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  golden-eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+      CHAT_MODEL: ${{ secrets.CHAT_MODEL }}
+      EVALUATOR_MODEL: ${{ secrets.EVALUATOR_MODEL }}
+      EMBEDDING_MODEL: ${{ secrets.EMBEDDING_MODEL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Ingest knowledge (local vector fallback, no Qdrant)
+        run: pnpm --filter rental-rag-service ingest
+
+      # --repeat 3 聚合抵消 LLM judge 的评分噪声；--baseline iter4 与仓库里
+      # 提交的 11/11 基线对比，任何场景回归都会让本步骤失败。
+      - name: Golden regression vs committed baseline
+        run: pnpm --filter rental-rag-service eval -- --repeat 3 --baseline iter4 --save ci-latest
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report
+          path: rag-service/tests/reports/ci-latest.json
