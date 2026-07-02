@@ -112,7 +112,6 @@ QDRANT_COLLECTION=rental_knowledge
 LOCAL_VECTOR_STORE_PATH=data/local-vectors.json
 MEMORY_STORE_PATH=data/memory-store.json
 VECTOR_SIZE=3072                  # text-embedding-3-large 用 3072，3-small 用 1536
-ENABLE_REPLY_POLISH=false         # true 则对模板输出做一次 LLM 口吻润色，+200-500ms 延迟
 ```
 
 ---
@@ -340,7 +339,6 @@ pnpm build:dashboard             # 生产构建，输出到 public/dashboard/
 | A | post_order_delivery 恢复日期推算 + diffDays<2 触发人工 | `action-picker.ts: evaluateDeliveryUrgency` + `templates.ts: parseIsoDate/formatMonthDay` |
 | B | deriveNextProfile 补齐 availabilityCheck 推断 | `action-picker.ts: deriveNextProfile` |
 | C | answer_faq + orchestrationFollowUp 内容去重 | `templates.ts: case 'answer_faq'` |
-| D | ENABLE_REPLY_POLISH 可选口吻润色通道 | `config.ts` + `rag.ts: polishReply` |
 | E | 事实抽取 LLM 调用去重（答问 → 记忆写入透传） | `rag.ts` 返回 `extractedFacts` → `server.ts` 透传 → `memory-store.ts: preExtractedFacts` |
 | F | 金标断言新增 `expect.action` / `expect.actionIn` | `scripts/eval.ts` + 全部现有 golden YAML |
 | H (部分) | 新增金标场景覆盖更多 Action | `tests/golden/{rental-period-provide,current-link,all-in-one,post-order-delivery}.yaml` |
@@ -355,14 +353,6 @@ pnpm build:dashboard             # 生产构建，输出到 public/dashboard/
 **H. 剩余 Action 的真实话术 review**
 - `recall_body_ambiguous`、`handoff`、`check_availability`、`confirm_size` 空 size 分支等还没在真实对话中跑过
 - 修复路径：手动触发每一个 Action 看输出，必要时调 `templates.ts` 里对应 case 的话术
-
-### 11.3 润色通道使用（D 的详解）
-
-- 设 `.env` 里 `ENABLE_REPLY_POLISH=true` 启用
-- 只对**非短 action**（排除 `greet` / `repair` / `small_talk` / `recall_body_empty` / `handoff`）调 LLM 做口吻自然化
-- system prompt 约束：不增删信息、不改数字日期、不加新问题、不用 Markdown
-- 失败自动 fallback 到模板原文
-- 代价：每条 +200-500ms + 一份 token；默认关闭
 
 ---
 

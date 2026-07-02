@@ -1,6 +1,6 @@
 # Open-Source Adoption Decisions
 
-> Per AGENTS.md: external/open-source/coped skills and dependencies must record
+> Repo convention: external/open-source/copied skills and dependencies must record
 > source, license, compatibility, and local modifications. This file is the
 > changelog for adoption decisions. Update it whenever a dependency or skill is
 > adopted, upgraded, or rejected.
@@ -49,3 +49,12 @@ Extended the same reuse pattern to knowledge retrieval (PRD §14):
 - `KnowledgeAdapter` interface in agent-core wraps legacy `searchKnowledge()` (qdrant vector search + local-vectors JSON fallback) via `apps/web/lib/legacy-adapter.ts:loadLegacyKnowledgeAdapter()`.
 - The loop depends on the boundary, never on qdrant — so the retriever can be swapped (or replaced by a media/product structured lookup) without touching product logic.
 - No new dependency introduced.
+
+## 2026-07-02 — Simplification sweep
+
+- The `.agents/skills/` dev-skill files and `AGENTS.md` referenced above were removed
+  from `main`（内部产物，非外部采纳；历史保留在 `legacy-extras` 分支）。
+- The `playbooks` module（zod schema + loader，无执行引擎）was removed with them; the
+  `@xstate/fsm` rejection rationale above is kept as a historical record.
+- Earlier table entries in this file are a changelog and are intentionally left as
+  written at the time of each decision.
