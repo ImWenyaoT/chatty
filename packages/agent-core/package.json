@@ -11,8 +11,8 @@
     "test": "node --test --import tsx \"src/**/*.test.ts\""
   },
   "dependencies": {
-    "@rental/llm": "0.1.0",
-    "@rental/shared": "0.1.0"
+    "@rental/llm": "workspace:*",
+    "@rental/shared": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.19.0"

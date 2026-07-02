@@ -20,5 +20,5 @@ for _ in {1..20}; do
   sleep 1
 done
 
-npm run ingest
-exec npm run dev
+pnpm ingest
+exec pnpm dev

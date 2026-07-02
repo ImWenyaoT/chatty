@@ -14,35 +14,38 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+          run_install: false
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
+          cache: pnpm
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Build package skeleton
-        run: npm run build:skeleton
+        run: pnpm build:skeleton
 
       - name: Smoke test (data path, no network)
         run: node scripts/smoke.mts
 
       - name: Test workspaces
-        run: npm test
+        run: pnpm test
 
       - name: Typecheck workspaces
-        run: npm run typecheck
+        run: pnpm typecheck
 
       - name: Build workspaces
-        run: npm run build
+        run: pnpm build
 
       - name: Build legacy rag-service
-        run: npm run build:rag-service
-
-      - name: Install dashboard dependencies
-        run: npm --prefix rag-service/dashboard ci
+        run: pnpm build:rag-service
 
       - name: Build legacy dashboard
-        run: npm --prefix rag-service/dashboard run build
+        run: pnpm --filter rental-dashboard build

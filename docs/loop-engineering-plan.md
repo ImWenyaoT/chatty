@@ -410,7 +410,7 @@ Settled:
 - `packages/db` defines SQLite MVP schema.
 - `packages/agent-core` defines loop and legacy adapter boundaries.
 - `packages/llm` defines Agents SDK and Chat Completions adapter boundaries.
-- `rag-service npm run build` still passes or its existing failures are documented.
+- `pnpm build:rag-service` still passes or its existing failures are documented.
 
 ## 15. Appendix: External Asset Links
 
