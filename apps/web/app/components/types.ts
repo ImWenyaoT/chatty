@@ -16,6 +16,32 @@ export type Turn = {
   sessionId?: string
   status?: string
   terminality?: string
+  harnessTrace?: HarnessTrace
+}
+
+export type HarnessTrace = {
+  task?: {
+    kind?: string
+    goal?: string
+    terminality?: string
+  }
+  action?: {
+    action?: string
+    toolName?: string
+  }
+  context?: {
+    fragments?: Array<{
+      kind?: string
+      label?: string
+      content?: string
+    }>
+  }
+  toolCalls?: Array<{
+    toolName?: string
+    risk?: string
+    approvalRequired?: boolean
+  }>
+  toolResults?: unknown[]
 }
 
 /** Shape returned by POST /api/playground. */
@@ -25,4 +51,5 @@ export type PlaygroundResponse = {
   sessionId: string
   status: string
   terminality: string
+  harnessTrace?: HarnessTrace
 }

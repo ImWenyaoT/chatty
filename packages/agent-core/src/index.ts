@@ -1,5 +1,6 @@
 export * from './loop-contracts.js'
 export * from './loop-runner.js'
+export * from './customer-harness.js'
 export * from './legacy-rag-service-adapter.js'
 export * from './action-classifier.js'
 export * from './evaluator.js'

@@ -14,5 +14,8 @@
     "@openai/agents": "^0.12.0",
     "@rental/shared": "workspace:*",
     "openai": "^6.45.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0"
   }
 }

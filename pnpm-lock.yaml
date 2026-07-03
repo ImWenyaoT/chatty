@@ -18,6 +18,12 @@ importers:
         specifier: ^4.0.0
         version: 4.4.3
     devDependencies:
+      '@rental/agent-core':
+        specifier: workspace:*
+        version: link:packages/agent-core
+      '@rental/db':
+        specifier: workspace:*
+        version: link:packages/db
       '@biomejs/biome':
         specifier: ^2.5.2
         version: 2.5.2
@@ -121,6 +127,10 @@ importers:
       openai:
         specifier: ^6.45.0
         version: 6.45.0(ws@8.21.0)(zod@4.4.3)
+    devDependencies:
+      tsx:
+        specifier: ^4.19.0
+        version: 4.22.4
 
   packages/shared:
     dependencies:

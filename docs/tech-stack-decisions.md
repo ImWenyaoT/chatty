@@ -1,6 +1,6 @@
 # Tech Stack Decisions
 
-Last updated: 2026-07-02
+Last updated: 2026-07-03
 
 This document records the current stack decisions for Chatty, the agentic customer-service rewrite. It supersedes earlier exploratory notes in `docs/agentic-customer-service-prd.md` where the two conflict.
 
@@ -10,6 +10,7 @@ This document records the current stack decisions for Chatty, the agentic custom
 Product/agent name: Chatty
 Node.js + TypeScript
 Next.js first
+Customer-service Harness Core drives /api/playground
 OpenAI Agents SDK TypeScript
 OpenAI Chat Completions API
 SQLite for MVP sessions/state
@@ -38,7 +39,7 @@ Use Fastify later only if:
 - Next.js route runtime becomes awkward for streaming, large uploads, or long-lived connections.
 - The API surface must be consumed by multiple external services independent of the web app.
 
-Rule: the agent loop must not run inside long-lived Next.js request handlers. Next.js can accept the event and enqueue/run a bounded local step, but background work belongs in a worker process.
+Rule: the agent loop must not run as an unbounded long-lived Next.js request handler. Next.js can run one bounded local harness step for playground usage, but background work belongs in a worker process.
 
 ## 3. Existing Frontend
 
@@ -156,7 +157,23 @@ agent_traces
 
 Postgres can replace SQLite later when multi-user concurrency, deployment topology, or data volume requires it.
 
-## 7. OpenAI Agents SDK and Chat Completions
+## 7. Harness Core, OpenAI Agents SDK, and Chat Completions
+
+Decision: keep product orchestration in `packages/agent-core`, with model providers
+behind adapter boundaries.
+
+The first live path is the customer-service Harness Core:
+
+- `scheduleCustomerServiceTask`: maps a customer utterance into a narrow service task.
+- `buildCustomerServiceContext`: assembles customer, product, memory, policy, and retrieved context fragments.
+- `parseCustomerServiceOutput`: parses strict JSON action output with a deterministic fallback.
+- `executeCustomerServiceAction`: runs low-risk tools through policy-aware executors and escalates sensitive actions.
+- `runCustomerServiceHarnessStep`: returns reply, terminality, tool calls, memory patch, and trace.
+
+This keeps Chatty scoped to a rental customer-service project instead of a
+general-purpose agent runtime. LLM/SDK usage can replace the model-output
+composer later without changing task scheduling, executor policy, or trace
+contracts.
 
 Decision: use both.
 

@@ -1,145 +1,62 @@
-'use client'
+import Link from 'next/link'
+import { SellerNavigation } from './components/seller/SellerNavigation'
+import { SELLER_ORDERS } from './components/seller/orderData'
 
-import { useEffect, useRef, useState } from 'react'
-import { SessionBar } from './components/SessionBar'
-import { ChatMessage } from './components/ChatMessage'
-import { Composer } from './components/Composer'
-import type { PlaygroundResponse, Turn } from './components/types'
-
-// Chatty concierge surface. Drives the bounded agent loop via /api/playground and
-// renders what the loop actually returns: the reply, a live session status, the
-// human-handoff state, and a per-message trace detail for debugging.
-
-const EXAMPLE_PROMPTS = [
-  '这件西装多少钱一天？',
-  '4月29到30号有货吗？',
-  '我身高180体重70，这款能穿吗？',
-  '我要退款',
-]
-
-/** A reply is a handoff when the loop escalates to a human. */
-function isHandoff(res: PlaygroundResponse): boolean {
-  return res.terminality === 'handoff_and_wait' || res.status === 'waiting_for_human'
-}
-
-export default function ConciergePage() {
-  const [turns, setTurns] = useState<Turn[]>([])
-  const [input, setInput] = useState('')
-  const [sending, setSending] = useState(false)
-  const [status, setStatus] = useState('active')
-  const [productId, setProductId] = useState('SUIT-001')
-  const [customerId, setCustomerId] = useState('playground-customer')
-  const nextId = useRef(1)
-  const bottom = useRef<HTMLDivElement>(null)
-
-  // Keep the latest turn (and the typing indicator) in view.
-  useEffect(() => {
-    bottom.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [turns, sending])
-
-  async function send(question: string) {
-    const text = question.trim()
-    if (!text || sending) return
-
-    setTurns((prev) => [...prev, { id: nextId.current++, role: 'user', text }])
-    setInput('')
-    setSending(true)
-
-    try {
-      const res = await fetch('/api/playground', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ customerId, productId, question: text }),
-      })
-      const data = await res.json()
-
-      if (!res.ok) {
-        setTurns((prev) => [
-          ...prev,
-          {
-            id: nextId.current++,
-            role: 'system',
-            error: true,
-            text: `[${res.status}] ${data?.error ?? data?.message ?? '请求失败'}`,
-          },
-        ])
-        return
-      }
-
-      const reply = data as PlaygroundResponse
-      const handoff = isHandoff(reply)
-      setStatus(reply.status)
-      setTurns((prev) => [
-        ...prev,
-        {
-          id: nextId.current++,
-          role: 'agent',
-          handoff,
-          text: reply.reply || '（无回复）',
-          traceId: reply.traceId,
-          sessionId: reply.sessionId,
-          status: reply.status,
-          terminality: reply.terminality,
-        },
-      ])
-    } catch (err) {
-      setTurns((prev) => [
-        ...prev,
-        {
-          id: nextId.current++,
-          role: 'system',
-          error: true,
-          text: `网络错误：${err instanceof Error ? err.message : String(err)}`,
-        },
-      ])
-    } finally {
-      setSending(false)
-    }
-  }
+/** Shows the seller-side home console instead of dropping users into a one-page chat demo. */
+export default function SellerHomePage() {
+  const activeOrders = SELLER_ORDERS.filter((order) => order.status !== '租赁中').length
+  const riskOrders = SELLER_ORDERS.filter((order) => order.risk !== '无').length
 
   return (
-    <div className="app">
-      <SessionBar
-        status={status}
-        productId={productId}
-        customerId={customerId}
-        disabled={sending}
-        onProductId={setProductId}
-        onCustomerId={setCustomerId}
-      />
-
-      <main className="stream">
-        <div className="stream-inner">
-          {turns.length === 0 && !sending ? (
-            <div className="empty">
-              <h2>发送第一条消息，观察一次有界决策</h2>
-              <p>问租期、尺码、价格或物流；超出能力边界时，loop 会转接人工客服。</p>
-              <div className="prompts">
-                {EXAMPLE_PROMPTS.map((p) => (
-                  <button key={p} type="button" onClick={() => send(p)}>
-                    {p}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {turns.map((turn) => (
-            <ChatMessage key={turn.id} turn={turn} />
-          ))}
-
-          {sending ? (
-            <div className="typing" role="status" aria-label="Chatty 正在输入">
-              <span />
-              <span />
-              <span />
-            </div>
-          ) : null}
-          <div ref={bottom} />
+    <main className="seller-home">
+      <SellerNavigation active="home" />
+      <section className="seller-home-hero">
+        <div>
+          <p>卖家工作台</p>
+          <h1>Chatty 是卖家端客服后台，不是买家聊天页。</h1>
+          <span>先恢复旧行为：客服会话、客户资料、订单管理、后台观察分开进入。</span>
         </div>
-      </main>
+        <div className="seller-home-actions">
+          <Link href="/playground">进入客服会话</Link>
+          <Link href="/orders">查看订单</Link>
+        </div>
+      </section>
 
-      <Composer value={input} sending={sending} onChange={setInput} onSubmit={() => send(input)} />
-    </div>
+      <section className="seller-home-grid">
+        <article>
+          <span>今日待处理订单</span>
+          <strong>{activeOrders}</strong>
+          <p>待复核 / 待发货优先处理</p>
+        </article>
+        <article>
+          <span>需要人工注意</span>
+          <strong>{riskOrders}</strong>
+          <p>尺码复核、归还提醒、地址补全</p>
+        </article>
+        <article>
+          <span>对话入口</span>
+          <strong>客服会话</strong>
+          <p>卖家处理客户咨询、查看客户资料、推进订单。</p>
+        </article>
+      </section>
+
+      <section className="seller-home-routes">
+        <Link href="/playground">
+          <span>实时会话</span>
+          <strong>客服会话</strong>
+          <p>客户信息、会话记录、订单状态和手动录单放在同一工作流里。</p>
+        </Link>
+        <Link href="/orders">
+          <span>订单运营</span>
+          <strong>订单管理</strong>
+          <p>订单列表、订单详情、履约进度、手动录单表单。</p>
+        </Link>
+        <Link href="/dashboard">
+          <span>后台观察</span>
+          <strong>评测 / 客户视图</strong>
+          <p>恢复旧 dashboard 的后台入口感，后续再接真实评测数据。</p>
+        </Link>
+      </section>
+    </main>
   )
 }

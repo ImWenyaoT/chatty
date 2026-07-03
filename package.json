@@ -27,6 +27,8 @@
     "promote:failure-case": "pnpm build:skeleton && node scripts/promote-failure-case.mts"
   },
   "devDependencies": {
+    "@rental/agent-core": "workspace:*",
+    "@rental/db": "workspace:*",
     "@biomejs/biome": "^2.5.2",
     "@types/node": "^22.13.10",
     "typescript": "^5.8.2"

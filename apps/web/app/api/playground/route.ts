@@ -1,23 +1,20 @@
 import { NextResponse } from 'next/server'
 import { isPlaygroundAuthorized, legacyChatInputSchema } from '@rental/shared'
-import { createChatCompletionsAdapterFromEnv } from '@rental/llm'
 import {
-  createLoopRunner,
   createDefaultToolRegistry,
-  deriveFailureCase,
-  normalizeEvalHistory,
-  shouldCreateFailureCase,
+  createCustomerServiceModelOutput,
+  runCustomerServiceHarnessStep,
+  scheduleCustomerServiceTask,
 } from '@rental/agent-core'
 import { getRepos, newId } from '@/lib/db'
-import { isLegacyAvailable, loadLegacyEvaluator, loadLegacyRagService } from '@/lib/legacy-adapter'
 
-// Playground endpoint: drives one bounded Chatty step end to end.
+// Playground endpoint: drives one bounded customer-service Harness step end to end.
 // Request:  POST { customerId, productId?, conversationId?, question, imageUrl? }
-// Response: { reply, traceId, status, sessionId }
+// Response: { reply, traceId, status, sessionId, harnessTrace }
 //
 // Implements the docs §4 sequence: load/create session -> build memory snapshot
-// -> runStep -> persist trace + update session -> return. Runs a single bounded
-// step per request (docs tech-stack §2: no long loops in the handler).
+// -> schedule/build context/parse/execute -> persist trace + update session -> return.
+// Runs a single bounded step per request (docs tech-stack §2: no long loops in the handler).
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
@@ -45,7 +42,7 @@ export async function POST(request: Request) {
   }
   const input = parsed.data
 
-  const { sessions, traces, reviews, failures, memory, sqliteEnabled } = getRepos()
+  const { sessions, traces, memory, sqliteEnabled } = getRepos()
   const conversationId =
     input.conversationId ?? `${input.customerId}:${input.productId ?? 'general'}`
 
@@ -79,67 +76,64 @@ export async function POST(request: Request) {
   }
 
   // 3. Lazy memory snapshot (JSON fallback reads the legacy store until SQLite
-  //    is populated). The loop decides whether to consult RAG (lazy, PRD §9).
+  //    is populated). The harness context builder turns this into inspectable fragments.
   const snapshot = memory.snapshot({
     customerId: input.customerId,
     conversationId,
     productId: input.productId,
   })
 
-  // 4. Build the loop runner. Legacy path is wired only if rag-service is
-  //    importable; otherwise the LLM-only fallback is used.
-  const llm = createChatCompletionsAdapterFromEnv()
-  let legacy: Awaited<ReturnType<typeof loadLegacyRagService>> | undefined
-  let evaluator: Awaited<ReturnType<typeof loadLegacyEvaluator>>
-  if (await isLegacyAvailable()) {
-    legacy = await loadLegacyRagService()
-    evaluator = await loadLegacyEvaluator()
+  // 4. Run one bounded customer-service Harness step. The temporary composer is
+  // deterministic; later LLM prompting can replace createCustomerServiceModelOutput
+  // without changing scheduler/context/executor/trace contracts.
+  const harnessMemory = {
+    customerId: input.customerId,
+    conversationId,
+    productId: input.productId,
+    customerMemory: snapshot.customerMemory,
+    productMemory: snapshot.productMemory,
+    recentMessages: snapshot.recentMessages,
   }
-  // Phase 4 (feature-flagged): wire the Agents SDK runner when
-  // CHATTY_AGENTS_SDK=1, targeting a dedicated OpenAI endpoint if configured.
-  let agentsSdkRunner: import('@rental/shared').AgentsSdkRunner | undefined
-  if (process.env.CHATTY_AGENTS_SDK === '1') {
-    const { readAgentsSdkEnv, createAgentsSdkRunner } = await import('@rental/llm')
-    const sdkEnv = readAgentsSdkEnv()
-    agentsSdkRunner = createAgentsSdkRunner({ model: sdkEnv.model })
-  }
-  const runner = createLoopRunner({
-    llm,
-    legacy,
-    tools: createDefaultToolRegistry(),
-    agentsSdkRunner,
-  })
-
-  // 5. Run one bounded step.
-  const result = await runner.runStep({
+  const task = scheduleCustomerServiceTask({
     event,
-    sessionStatus: session.status,
-    memory: {
-      customerId: input.customerId,
-      conversationId,
-      productId: input.productId,
-      customerMemory: snapshot.customerMemory,
-      productMemory: snapshot.productMemory,
-      recentMessages: snapshot.recentMessages,
-    },
+    memory: harnessMemory,
   })
+  const harness = await runCustomerServiceHarnessStep({
+    event,
+    memory: harnessMemory,
+    registry: createDefaultToolRegistry(),
+    sessionStatus: session.status,
+    modelOutput: createCustomerServiceModelOutput({
+      event,
+      memory: harnessMemory,
+      task,
+    }),
+  })
+  const result = harness.step
 
-  // 6. Persist trace + update session status. One trace row per user turn.
+  // 5. Persist trace + update session status. One trace row per user turn.
   traces.append({
     id: traceId,
     sessionId: session.id,
     eventType: 'agent_reply_sent',
-    action: result.terminality,
-    input: { question: input.question },
+    intent: harness.trace.task.kind,
+    action: harness.trace.action.action,
+    input: {
+      question: input.question,
+      harnessContext: harness.trace.context
+        .fragments as unknown as import('@rental/shared').JsonValue,
+    },
     // handoff 原因等 memoryPatch 随 trace 落库，人工接手时从 trace 可读（PRD §15）
     output:
       result.reply || result.memoryPatch
         ? {
             ...(result.reply ? { reply: result.reply } : {}),
             ...(result.memoryPatch !== undefined ? { memoryPatch: result.memoryPatch } : {}),
+            harnessTrace: harness.trace as unknown as import('@rental/shared').JsonValue,
           }
         : undefined,
     toolCalls: result.toolCalls,
+    references: harness.trace.context.fragments as unknown as import('@rental/shared').JsonValue[],
   })
   sessions.update(session.id, {
     status: result.nextStatus,
@@ -147,7 +141,7 @@ export async function POST(request: Request) {
     productId: input.productId,
   })
 
-  // 6b. Conservative continuity write (docs §6.3): append this turn's messages
+  // 5b. Conservative continuity write (docs §6.3): append this turn's messages
   //     to the conversation's recentMessages so the NEXT snapshot has prior
   //     context — closing the amnesia where the loop read memory but never wrote
   //     it. Only the message log is persisted; customer profile fields and
@@ -163,76 +157,12 @@ export async function POST(request: Request) {
     )
   }
 
-  // 7. Async eval (PRD §10/§13). Fire-and-forget: score the reply, persist a
-  //    trace_review, and create a failure_case when below threshold. Only runs
-  //    when the evaluator and SQLite persistence are available. Never blocks or
-  //    fails the request — eval errors are swallowed and logged.
-  if (evaluator && result.reply && sqliteEnabled) {
-    void evaluateAndRecord(evaluator, {
-      history: normalizeEvalHistory(snapshot.recentMessages),
-      reply: result.reply,
-      traceId,
-      sessionId: session.id,
-      traces,
-      reviews,
-      failures,
-    }).catch((err) => {
-      console.error('[chatty] async eval failed', err)
-    })
-  }
-
   return NextResponse.json({
     reply: result.reply ?? '',
     traceId,
     sessionId: session.id,
     status: result.nextStatus,
     terminality: result.terminality,
+    harnessTrace: harness.trace,
   })
-}
-
-/**
- * Scores a reply via the legacy evaluator, persists a trace_review, and — when
- * the score is below the failure threshold — creates a failure_case candidate
- * (PRD §13). Runs detached from the request so it never blocks the user turn.
- */
-async function evaluateAndRecord(
-  evaluator: import('@rental/agent-core').Evaluator,
-  args: {
-    history: Array<{ role: string; content: string }>
-    reply: string
-    traceId: string
-    sessionId: string
-    traces: import('@rental/db').TraceRepository
-    reviews: import('@rental/db').TraceReviewRepository
-    failures: import('@rental/db').FailureCaseRepository
-  },
-): Promise<void> {
-  const { history, reply, traceId, sessionId, traces, reviews, failures } = args
-  const result = await evaluator.evaluate(history, reply)
-  reviews.append({
-    id: newId('rev'),
-    traceId,
-    score: result.score,
-    issues: result.issues,
-    suggestions: result.suggestions,
-    suggestedReply: result.suggestedReply,
-    evaluatorModel: result.evaluatorModel,
-    promptVersion: result.promptVersion,
-  })
-
-  if (shouldCreateFailureCase(result.score)) {
-    const trace = traces.queryBySession(sessionId).find((t) => t.id === traceId)
-    if (trace) {
-      const candidate = deriveFailureCase(trace, result)
-      failures.create({
-        id: newId('fc'),
-        traceId: candidate.traceId,
-        sessionId: candidate.sessionId,
-        score: candidate.score,
-        issues: candidate.issues,
-        input: candidate.input,
-        output: candidate.output,
-      })
-    }
-  }
 }
