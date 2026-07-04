@@ -22,7 +22,7 @@ function call(
 }
 
 test('low risk tool => allow', () => {
-  const d = policy.check(call('add_internal_note', 'low'), { sessionStatus: 'active' })
+  const d = policy.check(call('schedule_followup', 'low'), { sessionStatus: 'active' })
   assert.deepEqual(d, { action: 'allow' })
 })
 
@@ -37,14 +37,14 @@ test('high risk tool => require_approval', () => {
 })
 
 test('closed session => deny regardless of risk', () => {
-  const d = policy.check(call('add_internal_note', 'low'), { sessionStatus: 'closed' })
+  const d = policy.check(call('schedule_followup', 'low'), { sessionStatus: 'closed' })
   assert.equal(d.action, 'deny')
 })
 
 test('invokeWithPolicy allows low-risk tool to execute', async () => {
   const out = await createDefaultToolRegistry().invokeWithPolicy(
-    'add_internal_note',
-    { conversationId: 'c:SUIT-001', note: 'x' },
+    'schedule_followup',
+    { conversationId: 'c:SUIT-001', dueAt: 'next_business_day', reason: 'x' },
     policy,
     { sessionStatus: 'active' },
   )
@@ -68,8 +68,8 @@ test('invokeWithPolicy throws PolicyDenyError on closed session', async () => {
   await assert.rejects(
     () =>
       createDefaultToolRegistry().invokeWithPolicy(
-        'add_internal_note',
-        { conversationId: 'c:SUIT-001', note: 'x' },
+        'schedule_followup',
+        { conversationId: 'c:SUIT-001', dueAt: 'next_business_day', reason: 'x' },
         policy,
         { sessionStatus: 'closed' },
       ),

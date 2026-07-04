@@ -2,18 +2,13 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createDefaultToolRegistry, ApprovalRequiredError, ToolNotFoundError } from './registry.js'
 
-// PRD §11 MVP tool set. The 3 original stubs + 7 new tools + 1 high-risk stub.
+// MVP tool set: the 3 actions the harness scheduler dispatches + get_product
+// catalog lookup + the schema-only high-risk refund stub.
 const EXPECTED_TOOLS = [
   'get_product',
   'check_availability',
-  'get_media',
-  'search_products',
-  'calculate_price',
-  'get_order_history',
-  'get_order_status',
   'create_handoff',
   'schedule_followup',
-  'add_internal_note',
   'issue_refund',
 ]
 
@@ -21,53 +16,27 @@ function registry() {
   return createDefaultToolRegistry()
 }
 
-test('default registry registers all 11 PRD tools', () => {
+test('default registry registers exactly the 5 MVP tools', () => {
   const names = registry()
     .list()
     .map((t) => t.name)
     .sort()
-  for (const expected of EXPECTED_TOOLS) {
-    assert.ok(names.includes(expected), `missing tool: ${expected}`)
-  }
+  assert.deepEqual(names, [...EXPECTED_TOOLS].sort())
 })
 
-test('search_products returns matches for a known keyword', async () => {
-  const out = await registry().invoke('search_products', { query: '西装' })
-  const r = out as { matches: { id: string }[] }
-  assert.deepEqual(
-    r.matches.map((m) => m.id),
-    ['SUIT-001'],
-  )
-})
-
-test('calculate_price quotes day1 full + renewals half', async () => {
-  const out = await registry().invoke('calculate_price', {
-    productId: 'SUIT-001',
-    rentalPeriod: 3,
-    quantity: 2,
-  })
-  const r = out as { total: number; perUnit: number }
-  // 199 + 2*99.5 = 398 per unit ; *2 = 796
-  assert.equal(r.perUnit, 398)
-  assert.equal(r.total, 796)
-})
-
-test('get_order_history returns customer orders', async () => {
-  const out = await registry().invoke('get_order_history', { customerId: 'c' })
-  const r = out as { found: boolean; orders: { orderNo: string }[] }
+test('get_product returns the seeded catalog entry', async () => {
+  const out = await registry().invoke('get_product', { productId: 'suit-001' })
+  const r = out as { found: boolean; id: string; dailyPrice: number }
   assert.equal(r.found, true)
-  assert.deepEqual(
-    r.orders.map((o) => o.orderNo),
-    ['ORD-1001'],
-  )
+  assert.equal(r.id, 'SUIT-001')
+  assert.equal(r.dailyPrice, 199)
 })
 
-test('get_order_status returns a single order', async () => {
-  const out = await registry().invoke('get_order_status', { orderNo: 'ord-1001' })
-  const r = out as { found: boolean; orderNo: string; status: string }
-  assert.equal(r.found, true)
-  assert.equal(r.orderNo, 'ORD-1001')
-  assert.equal(r.status, 'shipped')
+test('check_availability answers for a known product', async () => {
+  const out = await registry().invoke('check_availability', { productId: 'SUIT-001', size: 'L' })
+  const r = out as { available: boolean; productId: string }
+  assert.equal(r.available, true)
+  assert.equal(r.productId, 'SUIT-001')
 })
 
 test('create_handoff is medium risk but runs without hard approval gate', async () => {
@@ -88,14 +57,6 @@ test('schedule_followup echoes a deterministic receipt', async () => {
     reason: '物流跟进',
   })
   assert.equal((out as { followupId: string }).followupId, 'FU-c:SUIT-001')
-})
-
-test('add_internal_note echoes a deterministic receipt', async () => {
-  const out = await registry().invoke('add_internal_note', {
-    conversationId: 'c:SUIT-001',
-    note: '客户为高价值用户',
-  })
-  assert.equal((out as { noteId: string }).noteId, 'NOTE-c:SUIT-001')
 })
 
 test('issue_refund is high risk + approvalRequired => invoke throws ApprovalRequiredError', async () => {

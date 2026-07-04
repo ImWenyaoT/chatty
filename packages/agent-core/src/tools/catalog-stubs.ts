@@ -70,30 +70,3 @@ export const checkAvailabilityTool: RuntimeTool<Record<string, JsonValue>, JsonV
     return jsonResult({ available: true, productId, size, suggestedSize: 'L' })
   },
 }
-
-// --- get_media(productId, mediaKind) ---------------------------------------
-
-export const getMediaTool: RuntimeTool<Record<string, JsonValue>, JsonValue> = {
-  name: 'get_media',
-  description: 'Lookup media (style images / size chart) for a product.',
-  risk: 'low',
-  approvalRequired: false,
-  async execute(input) {
-    const productId = String(input.productId ?? '')
-    const mediaKind = String(input.mediaKind ?? 'style')
-    const product = getProduct(productId)
-    if (!product) {
-      return jsonResult({ found: false, productId })
-    }
-    return jsonResult({
-      found: true,
-      productId,
-      mediaKind,
-      // Placeholder hrefs that resolve via the legacy /media route later.
-      media:
-        mediaKind === 'size_chart'
-          ? [{ kind: 'size_chart', href: `/media/${productId}/size-chart.png` }]
-          : [{ kind: 'style', href: `/media/${productId}/style-1.jpg` }],
-    })
-  },
-}

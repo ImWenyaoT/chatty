@@ -3,7 +3,6 @@ import type { JsonValue, RuntimeTool } from '@rental/shared'
 // Write/workflow tools. Risk follows PRD §11 Tool Safety:
 //   create_handoff      -> medium (customer-facing escalation)
 //   schedule_followup   -> low (PRD lists follow-up schedule as low risk)
-//   add_internal_note   -> low (PRD lists internal note as low risk)
 // These are stubs that echo a deterministic receipt; real Chatwoot/scheduler
 // adapters replace them behind the same interface.
 
@@ -52,26 +51,6 @@ export const scheduleFollowupTool: RuntimeTool<Record<string, JsonValue>, JsonVa
       conversationId,
       dueAt,
       reason,
-      createdAt: nowIso(),
-    }
-  },
-}
-
-// --- add_internal_note(conversationId, note) --------------------------------
-
-export const addInternalNoteTool: RuntimeTool<Record<string, JsonValue>, JsonValue> = {
-  name: 'add_internal_note',
-  description: 'Append an internal (operator-only) note to a conversation.',
-  risk: 'low',
-  approvalRequired: false,
-  async execute(input) {
-    const conversationId = String(input.conversationId ?? '')
-    const note = String(input.note ?? '')
-    return {
-      ok: true,
-      noteId: `NOTE-${conversationId || 'unknown'}`,
-      conversationId,
-      note,
       createdAt: nowIso(),
     }
   },

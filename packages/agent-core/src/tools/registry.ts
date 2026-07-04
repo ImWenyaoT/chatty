@@ -1,16 +1,14 @@
 import type { RuntimeTool, JsonValue } from '@rental/shared'
-import { getProductTool, checkAvailabilityTool, getMediaTool } from './catalog-stubs.js'
-import { searchProductsTool, calculatePriceTool } from './catalog-search-stubs.js'
-import { getOrderHistoryTool, getOrderStatusTool } from './order-stubs.js'
-import { createHandoffTool, scheduleFollowupTool, addInternalNoteTool } from './workflow-stubs.js'
+import { getProductTool, checkAvailabilityTool } from './catalog-stubs.js'
+import { createHandoffTool, scheduleFollowupTool } from './workflow-stubs.js'
 import { issueRefundTool } from './refund-stub.js'
 import type { Policy, PolicyContext } from '../policies/policy.js'
 
 /**
- * Registry of runtime tools the agent loop can dispatch. Mirrors the MVP tool
- * list in PRD §11. Read-only stubs return deterministic data; high-risk tools
- * are schema-only with approvalRequired gating. A later step swaps in real
- * inventory/order/finance adapters behind the same RuntimeTool interface.
+ * Registry of runtime tools the agent loop can dispatch. Read-only stubs
+ * return deterministic data; high-risk tools are schema-only with
+ * approvalRequired gating. A later step swaps in real inventory/order/finance
+ * adapters behind the same RuntimeTool interface.
  */
 export class ToolRegistry {
   private readonly tools = new Map<string, RuntimeTool>()
@@ -85,20 +83,16 @@ export class PolicyDenyError extends Error {
 }
 
 /**
- * Builds the default MVP tool registry covering all PRD §11 tools:
- * read-only catalog/order stubs + workflow stubs + schema-only high-risk tool.
+ * Builds the default MVP tool registry: the three actions the harness
+ * scheduler actually dispatches (check_availability / create_handoff /
+ * schedule_followup) plus get_product for catalog lookups and the schema-only
+ * high-risk issue_refund that anchors the approval gate.
  */
 export function createDefaultToolRegistry(): ToolRegistry {
   return new ToolRegistry()
     .register(getProductTool)
     .register(checkAvailabilityTool)
-    .register(getMediaTool)
-    .register(searchProductsTool)
-    .register(calculatePriceTool)
-    .register(getOrderHistoryTool)
-    .register(getOrderStatusTool)
     .register(createHandoffTool)
     .register(scheduleFollowupTool)
-    .register(addInternalNoteTool)
     .register(issueRefundTool)
 }
