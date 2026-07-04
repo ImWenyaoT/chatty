@@ -1,0 +1,16 @@
+# harness 版（§5.3）。与 legacy 版语义等价性：
+# - actionIn [ask_body, ack_rental_period] → ask_missing_info（ask_body 走映射表；
+#   ack_rental_period 逐场景定夺：确认档期后继续收集体型，同属信息收集形态）；
+# - "继续追问身高"由 contains 行为断言表达；
+# - profile.rentalPeriod 断言豁免（blocked-on-§16，见 README.md）。
+name: rental-period-provide
+description: 用户已锁商品，提供档期 → 继续追问身高体重
+customerId: golden-period-provide
+productId: SUIT-001
+conversationId: golden-period-provide-v1
+steps:
+  - user: 我想租这款黑色双排扣
+  - user: 5月9号到10号用
+    expect:
+      action: ask_missing_info
+      contains: ["身高"]

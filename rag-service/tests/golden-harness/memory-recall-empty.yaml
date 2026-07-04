@@ -1,0 +1,14 @@
+# harness 版（§5.3）。与 legacy 版语义等价性：
+# - action recall_body_empty 无 harness 对应词汇（§5.3 "其余逐场景定夺"）：真实契约
+#   是"没记录就承认没有、不编造"，行为化改写为 containsAny（承认无记录/请求提供）
+#   + notContains（不编造具体数值）。
+name: memory-recall-empty
+description: 用户问"身高体重多少"但没记录过，不应编造
+customerId: golden-memory-empty
+conversationId: golden-memory-empty-v1
+steps:
+  - user: 我身高体重多少来着？
+    expect:
+      containsAny: ["没有", "还没", "暂", "未", "记录", "提供", "发我"]
+      notContains: ["身高180", "体重70"]
+      minScore: 6

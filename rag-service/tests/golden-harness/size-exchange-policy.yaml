@@ -1,0 +1,11 @@
+# 检索必答场景（§5.4 之 2）：换码政策（免费补发/协助更换一次）只存在于
+# knowledge/rules/rental-policy.md 与 knowledge/history/ 问答语料——缺检索必 FAIL。
+# 不计入 11/11 退役门槛；B5 达标验收要求 PASS。
+name: size-exchange-policy
+description: 检索必答——问"不合身能换吗"，政策口径只在知识库语料里
+customerId: golden-size-exchange
+conversationId: golden-size-exchange-v1
+steps:
+  - user: 衣服收到不合身能换吗？
+    expect:
+      containsAny: ["免费补发", "更换一次"]

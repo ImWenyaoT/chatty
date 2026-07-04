@@ -1,0 +1,14 @@
+# harness 版（§5.3）。与 legacy 版语义等价性：
+# - action ask_product → ask_missing_info（§5.3 映射表）；
+# - "先追问款式、款式未确认前不问身高"是产品硬规则，行为断言原样保留。
+name: generic-intent
+description: 用户说"我想租衣服"但没指定款式，应追问款式/编号
+customerId: golden-generic
+conversationId: golden-generic-v1
+steps:
+  - user: 我想租个衣服
+    expect:
+      action: ask_missing_info
+      containsAny: ["款式", "编号", "哪一款", "哪款", "商品号", "链接"]
+      notContains: ["身高"]
+      minScore: 6

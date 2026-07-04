@@ -1,0 +1,16 @@
+# harness 版（docs/agentic-search-design.md §5.3）。与 legacy 版语义等价性：
+# - actionIn [confirm_review, guide_order, confirm_size] 的意图是"三要素齐了就推进、
+#   不再追问"→ harness 词汇里对应 check_availability / recommend_size / answer_question；
+# - notContains/minScore 是行为断言，原样保留；
+# - profile.heightCm/weightKg/rentalPeriod 断言豁免（blocked-on-§16，见 README.md）。
+name: all-in-one
+description: 用户一句话同时给齐商品+档期+身高体重，应直接推进而非追问
+customerId: golden-all-in-one
+productId: SUIT-001
+conversationId: golden-all-in-one-v1
+steps:
+  - user: 我想租黑色双排扣西装，5月9号到10号用，身高175 体重70kg
+    expect:
+      actionIn: [check_availability, recommend_size, answer_question]
+      notContains: ["胸围", "常穿", "几XL", "整套还是"]
+      minScore: 6

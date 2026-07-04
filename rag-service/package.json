@@ -25,6 +25,10 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@rental/agent-core": "workspace:*",
+    "@rental/db": "workspace:*",
+    "@rental/llm": "workspace:*",
+    "@rental/shared": "workspace:*",
     "@types/node": "^22.13.10",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2"
