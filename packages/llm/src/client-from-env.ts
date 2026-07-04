@@ -13,14 +13,16 @@ export interface LlmEnvConfig {
  * stacks. Any OpenAI-compatible endpoint (DeepSeek, OpenAI, Azure-compatible,
  * moon-bridge, etc.) is selected purely via OPENAI_BASE_URL.
  *
- * Default model is unified with .env.example (deepseek-chat) to avoid the
- * divergence that existed between the two before the dual-provider change.
+ * Default model is unified with .env.example (deepseek-v4-pro). We pin the
+ * explicit `-pro` tier rather than the `deepseek-chat` alias: the alias
+ * currently resolves to `deepseek-v4-flash`, whose weaker multi-turn tool-call
+ * behavior drops structured output after a tool result — pro holds format.
  */
 export function readLlmEnv(env: NodeJS.ProcessEnv = process.env): LlmEnvConfig {
   return {
     apiKey: env.OPENAI_API_KEY ?? '',
     baseURL: env.OPENAI_BASE_URL || undefined,
-    chatModel: env.CHAT_MODEL ?? 'deepseek-chat',
+    chatModel: env.CHAT_MODEL ?? 'deepseek-v4-pro',
   }
 }
 
