@@ -10,8 +10,7 @@
   "workspaces": [
     "packages/*",
     "apps/*",
-    "rag-service",
-    "rag-service/dashboard"
+    "rag-service"
   ],
   "scripts": {
     "dev": "pnpm --filter @chatty/web dev",

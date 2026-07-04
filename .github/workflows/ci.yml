@@ -53,7 +53,6 @@ jobs:
       - name: Typecheck workspaces
         run: pnpm typecheck
 
-      # pnpm -r build 已覆盖全部 workspace 包（含 rental-rag-service 与 rental-dashboard），
-      # 此前单独重复构建两者的步骤已删除
+      # pnpm -r build 已覆盖全部 workspace 包（含 rental-rag-service）
       - name: Build workspaces
         run: pnpm build

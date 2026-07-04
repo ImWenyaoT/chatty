@@ -15,7 +15,6 @@ rag-service/data/memory-store.json
 rag-service/data/local-vectors.json
 rag-service/data/*.bak-*
 rag-service/public/dashboard/
-rag-service/dashboard/node_modules/
 
 # eval 产物（运行 npm run eval --save 生成的报告，不入库）；
 # iter4.json 是提交入库的金标回归基线，CI --baseline iter4 依赖它

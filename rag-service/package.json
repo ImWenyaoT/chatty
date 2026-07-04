@@ -10,8 +10,6 @@
     "start": "node dist/src/server.js",
     "ingest": "tsx scripts/ingest.ts",
     "eval": "tsx scripts/eval.ts",
-    "build:dashboard": "pnpm --dir dashboard run build",
-    "dev:dashboard": "pnpm --dir dashboard run dev",
     "dev:setup": "bash scripts/dev-setup.sh",
     "qdrant:start": "docker run -d --name rental-qdrant -p 6333:6333 -p 6334:6334 -v qdrant_storage:/qdrant/storage qdrant/qdrant",
     "qdrant:stop": "docker stop rental-qdrant",
