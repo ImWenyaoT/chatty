@@ -90,6 +90,8 @@ export interface RuntimeTool<
 > {
   name: string
   description: string
+  /** 入参 JSON Schema（对齐 Chat Completions function.parameters）；无参工具可省略。 */
+  parameters?: Record<string, JsonValue>
   risk: RuntimeToolRisk
   approvalRequired: boolean
   execute(input: TInput): Promise<TOutput>

@@ -44,6 +44,7 @@ function fixedReplyAdapter(rawReply: string): ChatCompletionsAdapter {
   return {
     complete: async () => rawReply,
     completeJson: async <T>() => parseJsonObject<T>(rawReply),
+    completeWithTools: async () => ({ text: rawReply }),
   }
 }
 

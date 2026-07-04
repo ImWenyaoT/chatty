@@ -11,6 +11,29 @@ export interface ChatCompletionMessage {
   content: string
 }
 
+/** 工具定义（Chat Completions function tool 形态）：name/description + JSON Schema。 */
+export interface ToolDefinition {
+  name: string
+  description: string
+  parameters: Record<string, unknown>
+}
+
+/** 模型发起的一次工具调用；arguments 为原始 JSON 字符串，解析与容错归调用方。 */
+export interface ToolCallRequest {
+  id: string
+  name: string
+  arguments: string
+}
+
+/** 工具循环消息：基础三角色之上扩展 assistant 携带 toolCalls 与 role:'tool' 回填。 */
+export type ToolLoopMessage =
+  | ChatCompletionMessage
+  | { role: 'assistant'; content: string; toolCalls: ToolCallRequest[] }
+  | { role: 'tool'; toolCallId: string; content: string }
+
+/** completeWithTools 的两种回复形态：模型要么请求工具调用，要么给出纯文本。 */
+export type CompleteWithToolsResult = { toolCalls: ToolCallRequest[] } | { text: string }
+
 export interface ChatCompletionsAdapter {
   complete(messages: ChatCompletionMessage[]): Promise<string>
   /**
@@ -19,6 +42,15 @@ export interface ChatCompletionsAdapter {
    * response_format still work (e.g. some OpenAI-compatible endpoints).
    */
   completeJson<T = unknown>(messages: ChatCompletionMessage[]): Promise<T>
+  /**
+   * 带工具的单次补全（docs/agentic-search-design.md B2）：不带 response_format
+   * （不假设 provider 同时严格支持两者，§4.3）；tools 为空数组时省略该参数，
+   * 供有界循环的收尾轮使用（§4.2）。回复解析成 tool_calls 或纯文本两种形态。
+   */
+  completeWithTools(
+    messages: ToolLoopMessage[],
+    tools: ToolDefinition[],
+  ): Promise<CompleteWithToolsResult>
 }
 
 /**
@@ -48,7 +80,57 @@ export function createChatCompletionsAdapter(
       const raw = response.choices[0]?.message?.content?.trim() ?? ''
       return parseJsonObject<T>(raw)
     },
+
+    async completeWithTools(messages: ToolLoopMessage[], tools: ToolDefinition[]) {
+      const response = await options.client.chat.completions.create({
+        model: options.model,
+        messages: messages.map(toOpenAiMessage),
+        ...(tools.length > 0
+          ? {
+              tools: tools.map((tool) => ({
+                type: 'function' as const,
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: tool.parameters,
+                },
+              })),
+            }
+          : {}),
+      })
+      const message = response.choices[0]?.message
+      const toolCalls = (message?.tool_calls ?? [])
+        .filter((call) => call.type === 'function')
+        .map((call) => ({
+          id: call.id,
+          name: call.function.name,
+          arguments: call.function.arguments,
+        }))
+      if (toolCalls.length > 0) return { toolCalls }
+      return { text: message?.content?.trim() ?? '' }
+    },
   }
+}
+
+/** 把工具循环消息转成 Chat Completions 线格式（camelCase → snake_case）。 */
+function toOpenAiMessage(
+  message: ToolLoopMessage,
+): OpenAI.Chat.Completions.ChatCompletionMessageParam {
+  if (message.role === 'tool') {
+    return { role: 'tool', tool_call_id: message.toolCallId, content: message.content }
+  }
+  if (message.role === 'assistant' && 'toolCalls' in message) {
+    return {
+      role: 'assistant',
+      content: message.content,
+      tool_calls: message.toolCalls.map((call) => ({
+        id: call.id,
+        type: 'function' as const,
+        function: { name: call.name, arguments: call.arguments },
+      })),
+    }
+  }
+  return message
 }
 
 /**
