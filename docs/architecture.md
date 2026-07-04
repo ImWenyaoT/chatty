@@ -1,8 +1,10 @@
 # Chatty MVP 架构 Spec
 
-Last updated: 2026-07-02
-Status: **重写蓝图（编号 RW-1）** — 本文档是 legacy `rag-service` 推倒重写的目标架构。
-重写完成、金标验收通过后，`rag-service/` 从 main 删除（完整历史在 `legacy-extras` 分支）。
+Last updated: 2026-07-04
+Status: **重写设计提案（编号 RW-1，未实施）** — 本文档是 legacy `rag-service` 推倒重写的目标架构设计。
+曾按 §2/§3 平移出 `packages/domain` 代码骨架，但骨架从未接入 playground / 金标评测等生产路径，
+已于 2026-07 的 cleanup 中整包移除；设计本身保留，作为架构决策记录。
+若重启 RW-1：按本文档推进，以 §9 验收清单为完成定义；届时 `rag-service/` 从 main 删除（完整历史在 `legacy-extras` 分支）。
 
 ## 0. 设计原则
 
@@ -41,7 +43,7 @@ Status: **重写蓝图（编号 RW-1）** — 本文档是 legacy `rag-service` 
 
 - **@rental/shared**：跨切类型（事件、AgentStepResult、RuntimeTool）、zod schema、auth、
   事件工具。零依赖（仅 zod）。
-- **@rental/domain**（新，本次重写的主体）：租衣客服对话引擎。纯 TS + 端口接口，
+- **@rental/domain**（提案，重写主体；代码骨架已移除，见文首状态）：租衣客服对话引擎。纯 TS + 端口接口，
   **不 import 任何 SDK/HTTP/fs 运行时依赖**（prompts/catalog 以解析好的对象注入）。
 - **@rental/llm**：OpenAI 兼容适配器；实现 domain 的三个 LLM 端口 + embeddings +
   本地向量知识库实现 + Agents SDK lane（带安全门）。
@@ -151,6 +153,8 @@ ask_info 走 DialogueEngine（缺省）或 Agents SDK lane（`CHATTY_AGENTS_SDK=
 真实 LLM 全量金标（含 judge）需在配 key 环境跑 `pnpm eval:full` 复核 11/11。
 
 ## 9. 验收清单（重写完成的定义）
+
+以下条目均未开始；若重启 RW-1 实施，以此为完成定义：
 
 - [ ] `pnpm lint` / `pnpm typecheck` / `pnpm test`（全包）/ `pnpm smoke` 全绿
 - [ ] `pnpm eval`（离线结构断言）11/11 场景通过并进 CI

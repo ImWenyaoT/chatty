@@ -96,19 +96,6 @@ importers:
         specifier: ^4.19.0
         version: 4.22.4
 
-  packages/domain:
-    dependencies:
-      '@rental/shared':
-        specifier: workspace:*
-        version: link:../shared
-      yaml:
-        specifier: ^2.8.3
-        version: 2.9.0
-    devDependencies:
-      tsx:
-        specifier: ^4.19.0
-        version: 4.22.4
-
   packages/llm:
     dependencies:
       '@openai/agents':
