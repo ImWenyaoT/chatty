@@ -5,17 +5,13 @@
 // 大量 isXxxQuestion 判别已经搬进 src/rag/intents.ts，
 // 选 Action 的规则 + LLM tool-call 兜底在 src/rag/action-picker.ts。
 
-import { config } from './config.js'
-import { cosineSimilarity, readLocalVectors } from './local-store.js'
 import {
   extractStructuredConversationFacts,
   getCustomerMemory,
   getProductMemory,
 } from './memory-store.js'
-import { openai } from './openai.js'
 import { buildCurrentMonthDate, buildCurrentYearMonthDate } from './parsers/date.js'
 import { extractHeightWeightFromText, extractQuantityFromText } from './parsers/measurements.js'
-import { isQdrantAvailable, qdrant } from './qdrant.js'
 import { selectAction, type ActionContext } from './rag/action-picker.js'
 import { generateText } from './rag/generate-text.js'
 import { sanitizeAnswerText } from './rag/sanitize.js'
@@ -85,74 +81,6 @@ function extractProvidedPeriodFallback(questionRaw: string) {
   return undefined
 }
 
-// ========== 知识检索 ==========
-function toKnowledgeChunk(payload: Record<string, unknown> | null | undefined): KnowledgeChunk {
-  return {
-    id: String(payload?.id ?? ''),
-    text: String(payload?.text ?? ''),
-    sourceType: (payload?.sourceType as KnowledgeChunk['sourceType']) ?? 'rule',
-    contentType: (payload?.contentType as KnowledgeChunk['contentType']) ?? 'text',
-    filePath: String(payload?.filePath ?? ''),
-    title: String(payload?.title ?? ''),
-    chunkIndex: Number(payload?.chunkIndex ?? 0),
-  }
-}
-
-export async function embedText(input: string) {
-  const response = await openai.embeddings.create({
-    model: config.embeddingModel,
-    input,
-  })
-  return response.data[0].embedding
-}
-
-// 进程级标记：一旦确认 embedding 接口不存在（HTTP 404），后续不再发起无谓请求。
-// 典型场景：所连的 OpenAI 兼容后端（如 DeepSeek）只提供 chat completions、不提供 embeddings。
-let embeddingEndpointMissing = false
-
-/**
- * 检索知识库：优先 Qdrant 向量检索，无 Qdrant 时退回本地向量库。
- * embedding 不可用时做显式降级——warn 一次并返回空结果，让上层走"无知识上下文"分支，
- * 而不是让整条问答链路崩溃。注意这是有声降级（会打 warn），不是沉默吞错。
- */
-export async function searchKnowledge(question: string) {
-  if (embeddingEndpointMissing) return []
-  let vector: number[]
-  try {
-    vector = await embedText(question)
-  } catch (error) {
-    const status =
-      typeof error === 'object' && error !== null && 'status' in error
-        ? (error as { status?: number }).status
-        : undefined
-    if (status === 404) embeddingEndpointMissing = true
-    console.warn(
-      '[searchKnowledge] embedding 调用失败，本次跳过知识检索：',
-      error instanceof Error ? error.message : error,
-    )
-    return []
-  }
-  if (await isQdrantAvailable()) {
-    const result = await qdrant.search(config.qdrantCollection, {
-      vector,
-      limit: config.topK,
-      with_payload: true,
-    })
-    return result.map((item) => ({
-      score: item.score,
-      payload: toKnowledgeChunk((item.payload ?? null) as Record<string, unknown> | null),
-    }))
-  }
-  const localVectors = await readLocalVectors()
-  return localVectors
-    .map((point) => ({
-      score: cosineSimilarity(vector, point.vector),
-      payload: point.payload,
-    }))
-    .sort((left, right) => right.score - left.score)
-    .slice(0, config.topK)
-}
-
 // ========== 主入口 ==========
 export async function answerQuestion(body: ChatRequestBody) {
   const customerMemory = await getCustomerMemory(body.customerId)
@@ -196,7 +124,9 @@ export async function answerQuestion(body: ChatRequestBody) {
   if (!effectiveQuestion) {
     effectiveQuestion = body.imageUrl ? '[图片]' : ''
   }
-  const rawReferences = await searchKnowledge(effectiveQuestion)
+  // 检索子系统（qdrant/embedding）已退役：legacy 走确定性模板/记忆路径，不再挂知识引用。
+  // 知识检索现由 agentic search lane（packages/agent-core 的 search_knowledge + FTS）承担。
+  const rawReferences: Array<{ score: number; payload: KnowledgeChunk }> = []
 
   // ========== 图片过滤：按用户意图剔除不相关的图片 chunk ==========
   // 三层过滤互为保险：

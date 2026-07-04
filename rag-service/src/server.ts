@@ -17,7 +17,6 @@ import {
   reEvaluateConversation,
 } from './memory-store.js'
 import { loaded } from './prompts-loader.js'
-import { ensureCollection, isQdrantAvailable } from './qdrant.js'
 import { answerQuestion } from './rag.js'
 import { sanitizeAnswerText } from './rag/sanitize.js'
 
@@ -90,7 +89,6 @@ app.get('/config/info', async () => ({
   promptVersionName: loaded.versionName,
   chatModel: config.chatModel,
   evaluatorModel: config.evaluatorModel,
-  embeddingModel: config.embeddingModel,
   products: loaded.catalog.products.map((p) => ({ id: p.id, name: p.name })),
 }))
 
@@ -342,11 +340,6 @@ app.get('/media/:file', async (request, reply) => {
 })
 
 const start = async () => {
-  if (await isQdrantAvailable()) {
-    await ensureCollection()
-  } else {
-    app.log.warn('Qdrant unavailable, using local vector store fallback.')
-  }
   await app.listen({ port: config.port, host: '0.0.0.0' })
 }
 

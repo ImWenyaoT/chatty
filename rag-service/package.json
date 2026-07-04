@@ -8,15 +8,9 @@
     "build": "tsc -p tsconfig.json",
     "test": "node --test --import tsx \"src/**/*.test.ts\"",
     "start": "node dist/src/server.js",
-    "ingest": "tsx scripts/ingest.ts",
-    "eval": "tsx scripts/eval.ts",
-    "dev:setup": "bash scripts/dev-setup.sh",
-    "qdrant:start": "docker run -d --name rental-qdrant -p 6333:6333 -p 6334:6334 -v qdrant_storage:/qdrant/storage qdrant/qdrant",
-    "qdrant:stop": "docker stop rental-qdrant",
-    "qdrant:rm": "docker rm -f rental-qdrant"
+    "eval": "tsx scripts/eval.ts"
   },
   "dependencies": {
-    "@qdrant/js-client-rest": "^1.13.0",
     "dotenv": "^16.4.7",
     "fastify": "^5.2.1",
     "fastify-plugin": "^5.0.1",

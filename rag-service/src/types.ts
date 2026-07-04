@@ -233,12 +233,6 @@ export interface ConversationProfile {
   updatedAt: string
 }
 
-export interface VectorPoint {
-  id: string
-  vector: number[]
-  payload: KnowledgeChunk
-}
-
 export interface MemoryMessage {
   role: 'user' | 'assistant'
   content: string
