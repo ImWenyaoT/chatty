@@ -16,6 +16,8 @@ SQLite for MVP sessions/state
 Existing memory model kept mostly intact
 Temporal deferred until the product proves it needs durable workflow guarantees
 Chatwoot used as open-source product reference, not as runtime dependency
+No RAG / no vector database in the target architecture: memory + FTS indexing +
+agent search tools; legacy qdrant lane retires after golden-eval parity
 ```
 
 ## 2. Next.js vs Fastify
@@ -252,7 +254,32 @@ Recommended artifacts:
 
 The repository source of truth remains markdown under `docs/`. Figma/Canva links should be referenced from docs instead of replacing docs.
 
-## 11. Still Open
+## 11. Retrieval and Knowledge Access: No RAG, No Vector Database
+
+Decision: the target architecture uses no LangChain/LlamaIndex, no embedding-based
+RAG pipeline, and no vector database. Knowledge access is built from four parts:
+
+1. **Memory done right.** Session/customer memory lives in SQLite repositories and
+   is assembled into context deliberately (`buildCustomerServiceContext`), not
+   retrieved by similarity.
+2. **Deliberate chunking, indexing, and summarization.** Knowledge content is split
+   and indexed for exact/fuzzy lookup (SQLite FTS5 planned), with summaries written
+   at indexing time — instead of blind chunk-and-embed.
+3. **Search as an agent tool.** The model gets a `search_knowledge` tool and decides
+   when and what to search across turns, replacing pipeline-fixed top-k retrieval.
+4. **Fast OpenAI-compatible inference.** The latency bottleneck is LLM inference,
+   not retrieval I/O. Providers like Groq/Cerebras plug in via `OPENAI_BASE_URL`
+   with zero code changes. Consequently the search implementation stays simple
+   (FTS/LIKE is enough) — no Redis, no caching layers, no I/O micro-optimization:
+   shaving retrieval from 0.1s to 0.01s is invisible next to a multi-second
+   model call.
+
+Consequence for the legacy lane: `rag-service` (qdrant + embeddings) is now a
+migration source only. Retirement gate: the golden eval must pass against the
+harness lane at parity (11/11) before the qdrant lane is deleted. Eval quality is
+the invariant; the retrieval implementation is what gets swapped.
+
+## 12. Still Open
 
 1. Whether to introduce Temporal later. Current decision: defer.
 2. Whether Next.js Route Handlers are sufficient for all public API needs. Current decision: yes for MVP.
