@@ -1,18 +1,11 @@
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { LegacyChatAnswer, LegacyChatInput } from '@rental/shared'
-import {
-  createEvaluator,
-  type Evaluator,
-  type LegacyRagService,
-  createLegacyRagServiceAdapter,
-} from '@rental/agent-core'
+import { createEvaluator, type Evaluator } from '@rental/agent-core'
 
-// Step 5 glue: wires the existing rag-service answerQuestion() into the Chatty
-// loop in-process, behind the LegacyRagService boundary the loop expects. No
-// Fastify, no HTTP — the function is already side-effect-free for the answer
-// path (memory writes happen in the loop / repository, not here).
+// Wires the legacy rag-service LLM-judge (evaluateCustomerServiceReply) into
+// the new stack in-process, behind the agent-core Evaluator boundary. No
+// Fastify, no HTTP — the evaluator is side-effect-free for the scoring path.
 //
 // Loaded lazily via dynamic import because rag-service ships its own dependency
 // versions (openai ^4, zod ^3) which we do not want in the Next server graph;
@@ -31,12 +24,9 @@ const RAG_DIST_CANDIDATES = [
   path.resolve(__dirname, '../../rag-service/dist/src/rag.js'),
 ]
 
-let cached: LegacyRagService | undefined
 let cachedModule: RagModule | undefined
-let availabilityCache: boolean | undefined
 
 interface RagModule {
-  answerQuestion: (input: LegacyChatInput) => Promise<LegacyChatAnswer>
   evaluateCustomerServiceReply: (
     history: Array<{ role: string; content: string }>,
     reply: string,
@@ -52,6 +42,10 @@ async function importRuntimeModule(filePath: string): Promise<unknown> {
   return import(/* webpackIgnore: true */ pathToFileURL(filePath).href)
 }
 
+/**
+ * 在候选路径中定位 legacy rag-service 的构建产物；找不到时返回 undefined，
+ * 调用方据此跳过异步评估而不是抛错。
+ */
 function resolveRagDist(): string | undefined {
   for (const candidate of RAG_DIST_CANDIDATES) {
     try {
@@ -64,28 +58,18 @@ function resolveRagDist(): string | undefined {
   return undefined
 }
 
-export async function loadLegacyRagService(): Promise<LegacyRagService> {
-  if (cached) return cached
-  const ragPath = resolveRagDist()
-  if (!ragPath) {
-    throw new Error(`rag-service build not found in: ${RAG_DIST_CANDIDATES.join(', ')}`)
-  }
-  const mod = (await importRuntimeModule(ragPath)) as RagModule
-  cachedModule = mod
-  cached = createLegacyRagServiceAdapter((input) => mod.answerQuestion(input))
-  return cached
-}
-
 /**
  * Loads the legacy evaluator (evaluateCustomerServiceReply) wrapped behind the
- * agent-core Evaluator boundary. Reuses the already-imported rag-service module
+ * agent-core Evaluator boundary. The imported module is cached for the process
  * so there is no second dynamic import. Returns undefined when rag-service is
  * unavailable; callers should then skip async evaluation.
  */
 export async function loadLegacyEvaluator(): Promise<Evaluator | undefined> {
   try {
     if (!cachedModule) {
-      await loadLegacyRagService()
+      const ragPath = resolveRagDist()
+      if (!ragPath) return undefined
+      cachedModule = (await importRuntimeModule(ragPath)) as RagModule
     }
     const mod = cachedModule
     if (!mod?.evaluateCustomerServiceReply) return undefined
@@ -93,24 +77,4 @@ export async function loadLegacyEvaluator(): Promise<Evaluator | undefined> {
   } catch {
     return undefined
   }
-}
-
-/**
- * True when the legacy rag-service build is importable. Used by the route
- * handler to decide between the legacy path and the LLM-only fallback. Result
- * is cached for the process.
- */
-export async function isLegacyAvailable(): Promise<boolean> {
-  if (availabilityCache !== undefined) return availabilityCache
-  try {
-    await loadLegacyRagService()
-    availabilityCache = true
-  } catch (err) {
-    availabilityCache = false
-    console.warn(
-      '[legacy-adapter] rag-service unavailable, using LLM-only fallback:',
-      err instanceof Error ? err.message : err,
-    )
-  }
-  return availabilityCache
 }

@@ -33,9 +33,9 @@ export interface Evaluator {
 export type EvaluateFunction = Evaluator['evaluate']
 
 /**
- * Wraps a plain evaluate function as an Evaluator. Mirrors the
- * createLegacyRagServiceAdapter injection pattern so the legacy evaluator can be
- * wired without agent-core importing rag-service.
+ * Wraps a plain evaluate function as an Evaluator, so the legacy evaluator can
+ * be wired in apps/web/lib/legacy-adapter without agent-core importing
+ * rag-service.
  */
 export function createEvaluator(evaluate: EvaluateFunction): Evaluator {
   return { evaluate }

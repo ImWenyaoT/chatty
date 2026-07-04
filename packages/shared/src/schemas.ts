@@ -92,14 +92,3 @@ export const legacyChatInputSchema = z
   .refine((data) => data.question.trim().length > 0 || data.imageUrl, {
     message: 'question 或 imageUrl 至少要提供一项',
   })
-
-/**
- * Validates the context object handed to an Agents SDK runner. The runtimeTool
- * array is left loose (record of name/json) since RuntimeTool.execute cannot be
- * serialized; callers pass real RuntimeTool[] objects at runtime.
- */
-export const agentsSdkRunInputSchema = z.object({
-  event: conversationEventSchema,
-  instructions: z.string(),
-  context: z.record(z.string(), jsonValueSchema),
-})

@@ -124,32 +124,3 @@ export interface LegacyChatAnswer {
   intent?: JsonValue
   extractedFacts?: JsonValue
 }
-
-/**
- * Input handed to an OpenAI Agents SDK runner. Carries loop semantics so the SDK
- * run can map back onto AgentStepResult (terminality/status/memoryPatch).
- *
- * Kept in shared (not packages/llm) so agent-core depends only on @rental/shared
- * for these contracts, matching where AgentStepResult lives.
- */
-export interface AgentsSdkRunInput {
-  /** ConversationEvent driving the turn; the SDK run reads the question from payload. */
-  event: ConversationEvent
-  /** System instructions merged into the Agent. */
-  instructions: string
-  /** Arbitrary typed context (memory snapshot, product hints). */
-  context: Record<string, JsonValue>
-  /** Runtime tools the SDK Agent may call (mapped onto SDK tool()). */
-  tools?: RuntimeTool[]
-}
-
-/**
- * Boundary around OpenAI Agents SDK execution. Implemented in packages/llm;
- * consumed by agent-core loop-runner via dependency injection so product code
- * never imports @openai/agents directly (docs tech-stack §7 package boundary).
- */
-export interface AgentsSdkRunner {
-  run(input: AgentsSdkRunInput): Promise<AgentStepResult>
-}
-
-export type AgentsSdkRunFunction = (input: AgentsSdkRunInput) => Promise<AgentStepResult>
