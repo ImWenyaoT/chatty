@@ -1,7 +1,6 @@
 // Smoke test: exercise the full data path WITHOUT a real LLM.
 // Verifies: SQLite open, schema (incl. FKs), session/trace/review/failure repos,
-// failure-case policy + golden export + promote CLI (the flywheel's last mile),
-// evaluator injection.
+// failure-case policy + golden export + promote CLI (the flywheel's last mile).
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -17,7 +16,6 @@ import {
   shouldCreateFailureCase,
   deriveFailureCase,
   exportFailureCaseToGoldenYaml,
-  createEvaluator,
 } from '@rental/agent-core'
 import { promoteFailureCase } from './promote-failure-case.mts'
 
@@ -58,6 +56,9 @@ const t = traces.append({
 ok('trace appended', t.id === 'smoke-tr')
 
 // 2. review + failure case (simulating a low score)
+// 这里的评分是 CI 冒烟用的硬编码模拟值（无 LLM 环境下驱动同一条数据链路）；
+// 生产评分路径在 apps/web/app/api/playground/route.ts：trace 落库后 fire-and-forget
+// 走 apps/web/lib/eval-chain.ts（LLM-judge → review → 低分晋升 failure_case）。
 const review = {
   score: 3,
   issues: ['拒绝回答'],
@@ -114,12 +115,7 @@ ok('promote writes the golden file', fs.existsSync(promoted.file))
 ok('promoted yaml keeps the failing issue', promoted.yaml.includes('拒绝回答'))
 ok('promoted case leaves the open queue', failures.findOpen().length === 0)
 
-// 4. evaluator injection
-const evaluator = createEvaluator(async () => review)
-const evalResult = await evaluator.evaluate([{ role: 'user', content: '多少钱' }], '不知道')
-ok('evaluator returns score', evalResult.score === 3)
-
-// 5. FK enforcement (orphan rejected)
+// 4. FK enforcement (orphan rejected)
 let fkRejected = false
 try {
   failures.create({
@@ -135,7 +131,7 @@ try {
 }
 ok('FK rejects orphan failure case', fkRejected === true)
 
-// 6. memory continuity: appended turns accumulate and a later snapshot reads
+// 5. memory continuity: appended turns accumulate and a later snapshot reads
 // them back (the write path the route uses to avoid conversational amnesia).
 const memKey = { customerId: 'c', productId: 'SUIT-001', conversationId: 'c:SUIT-001' }
 memory.appendRecentMessages(memKey, [

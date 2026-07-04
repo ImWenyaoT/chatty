@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { createEvaluator, type Evaluator } from '@rental/agent-core'
+import type { Evaluator } from '@rental/agent-core'
 
 // Wires the legacy rag-service LLM-judge (evaluateCustomerServiceReply) into
 // the new stack in-process, behind the agent-core Evaluator boundary. No
@@ -15,11 +15,12 @@ const require = createRequire(import.meta.url)
 
 // Candidate locations of the legacy rag-service build. __dirname is unreliable
 // inside Next's bundled server chunks, so we resolve from several anchors:
-//   1. process.cwd() (Next runs from the repo root in dev and `next start`)
-//   2. this module's source dir (works under tsx / non-bundled runtimes)
-//   3. the package.json of this app as an anchor
+//   1. process.cwd() when the server runs from the repo root
+//   2. process.cwd() when the server runs from apps/web (pnpm --filter dev/start)
+//   3./4. this module's source dir (works under tsx / non-bundled runtimes)
 const RAG_DIST_CANDIDATES = [
   path.resolve(process.cwd(), 'rag-service/dist/src/rag.js'),
+  path.resolve(process.cwd(), '../../rag-service/dist/src/rag.js'),
   path.resolve(__dirname, '../../../rag-service/dist/src/rag.js'),
   path.resolve(__dirname, '../../rag-service/dist/src/rag.js'),
 ]
@@ -73,7 +74,7 @@ export async function loadLegacyEvaluator(): Promise<Evaluator | undefined> {
     }
     const mod = cachedModule
     if (!mod?.evaluateCustomerServiceReply) return undefined
-    return createEvaluator((history, reply) => mod.evaluateCustomerServiceReply(history, reply))
+    return { evaluate: (history, reply) => mod.evaluateCustomerServiceReply(history, reply) }
   } catch {
     return undefined
   }

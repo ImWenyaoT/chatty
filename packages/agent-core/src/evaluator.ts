@@ -30,17 +30,6 @@ export interface Evaluator {
   evaluate(history: EvaluationMessage[], reply: string): Promise<EvaluationResult>
 }
 
-export type EvaluateFunction = Evaluator['evaluate']
-
-/**
- * Wraps a plain evaluate function as an Evaluator, so the legacy evaluator can
- * be wired in apps/web/lib/legacy-adapter without agent-core importing
- * rag-service.
- */
-export function createEvaluator(evaluate: EvaluateFunction): Evaluator {
-  return { evaluate }
-}
-
 /**
  * Coerces an arbitrary recentMessages value (JsonValue[] from SQLite or the
  * legacy JSON store) into the {role, content} shape the evaluator expects.
