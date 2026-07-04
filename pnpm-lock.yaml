@@ -7,26 +7,16 @@ settings:
 importers:
 
   .:
-    dependencies:
-      '@openai/agents':
-        specifier: ^0.12.0
-        version: 0.12.0(ws@8.21.0)(zod@4.4.3)
-      openai:
-        specifier: ^6.45.0
-        version: 6.45.0(ws@8.21.0)(zod@4.4.3)
-      zod:
-        specifier: ^4.0.0
-        version: 4.4.3
     devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.5.2
+        version: 2.5.2
       '@rental/agent-core':
         specifier: workspace:*
         version: link:packages/agent-core
       '@rental/db':
         specifier: workspace:*
         version: link:packages/db
-      '@biomejs/biome':
-        specifier: ^2.5.2
-        version: 2.5.2
       '@types/node':
         specifier: ^22.13.10
         version: 22.20.0
@@ -60,6 +50,9 @@ importers:
       react-dom:
         specifier: ^19.0.0
         version: 19.2.7(react@19.2.7)
+      zod:
+        specifier: ^4.0.0
+        version: 4.4.3
     devDependencies:
       '@types/node':
         specifier: ^22.13.10
@@ -127,6 +120,9 @@ importers:
       openai:
         specifier: ^6.45.0
         version: 6.45.0(ws@8.21.0)(zod@4.4.3)
+      zod:
+        specifier: ^4.0.0
+        version: 4.4.3
     devDependencies:
       tsx:
         specifier: ^4.19.0
