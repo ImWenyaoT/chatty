@@ -1,26 +1,14 @@
 # Loop Engineering Plan
 
-Last updated: 2026-07-02
+Last updated: 2026-07-04
 
 ## 0. Decision Snapshot
 
 This plan starts the Next.js-first Chatty agent loop foundation without rewriting the current rental RAG service.
 
-Decisions:
-
-- Name the customer-service agent Chatty.
-- Use Node.js and TypeScript.
-- Put Next.js first for Web, BFF, admin, and MVP API Route Handlers.
-- Use SQLite for MVP session/state.
-- Keep the current long-term memory shape mostly intact.
-- Use OpenAI Agents SDK TypeScript for agent runs, tools, handoffs, guardrails, and tracing.
-- Keep OpenAI Chat Completions API for extraction, evaluation, direct compatibility, and fallback paths.
-- Keep the current `rag-service` running and treat `answerQuestion()` as a legacy capability.
-- Do not introduce Fastify in the new stack unless Next.js Route Handlers prove insufficient.
-- Do not introduce Temporal in MVP.
-- Use Chatwoot as an open-source product reference, not as runtime infrastructure.
-- Use AgentKit and Agent Builder as a prototype lane, not production source of truth.
-- Do not call runtime tools/playbooks/policies "skills". `skills` means Codex development skills only.
+Stack and product decisions are registered once in
+[tech-stack-decisions.md](tech-stack-decisions.md); this plan does not restate them.
+This document keeps the migration plan, phase records, and the Legacy Migration Ledger (§16).
 
 ## 1. Scope And Non-Goals
 
@@ -35,21 +23,10 @@ Decisions:
 
 - No full Next.js UI migration yet.
 - No rewrite of `rag-service/public/test.html`.
-- No rewrite of `rag-service/dashboard`.
+- No rewrite of `rag-service/dashboard`.（该子包已于 2026-07 删除：apps/web 的 `/dashboard` 重建了同类功能，源码在 git 历史 / `legacy-extras` 分支）
 - No full memory redesign.
 - No full Chatwoot inbox clone.
 - No direct production dependency on Agent Builder exported flows.
-
-## 2. Source Of Truth And Asset Policy
-
-Markdown under `docs/` is the repository source of truth.
-
-Design assets:
-
-- Mermaid diagrams live directly in docs.
-- Figma can be linked for precise UI flow and layout specs.
-- Canva can be linked for stakeholder summaries.
-- Figma and Canva links supplement docs; they do not replace docs.
 
 ## 3. Current System Baseline
 
@@ -61,7 +38,7 @@ Current service:
 - `rag-service/src/conversation-orchestrator.ts` derives the current business stage.
 - `rag-service/src/rag/action-picker.ts` maps context into actions.
 - `rag-service/public/test.html` is the manual test console.
-- `rag-service/dashboard` is the existing Vite dashboard source.
+- `rag-service/dashboard` was the legacy Vite dashboard source (removed 2026-07, superseded by apps/web `/dashboard`).
 
 Important limitation:
 
@@ -88,7 +65,7 @@ flowchart TD
   LOOP --> TRACE["agent trace"]
   TRACE --> SQLITE
   ROUTE -. "compatibility lane" .-> LEGACY["rag-service /chat or answerQuestion adapter"]
-  LEGACY -. "unchanged" .-> OLDUI["test.html + Vite dashboard"]
+  LEGACY -. "unchanged" .-> OLDUI["test.html"]
 ```
 
 ## 5. Runtime Lanes
@@ -102,8 +79,6 @@ Next.js Route Handlers are the MVP API surface:
 - call a bounded local agent step;
 - persist trace and state;
 - return response to the caller.
-
-Rule: avoid long-running loops in the request handler. A single bounded step is acceptable. Background follow-ups or long waits should move to a worker in a later phase.
 
 ### 5.2 Model Lane: OpenAI Agents SDK TS
 
@@ -121,22 +96,6 @@ Use direct Chat Completions for:
 - reply evaluation;
 - fallback generation;
 - low-level direct model calls where Agents SDK is unnecessary.
-
-### 5.4 Prototype Lane: AgentKit / Agent Builder
-
-AgentKit and Agent Builder can be used for visual workflow prototypes and stakeholder review.
-
-Production promotion requires:
-
-- typed input/output schema;
-- runtime tool schema;
-- guardrails;
-- memory read/write policy;
-- handoff policy;
-- eval cases;
-- trace fields.
-
-Prototype output should live under `experiments/agent-builder/` when added.
 
 ### 5.5 Legacy Reference Lane: rag-service
 
@@ -167,54 +126,8 @@ Keep low-level packages generic, such as `packages/agent-core`, so the architect
 
 ### 6.1 SQLite MVP Schema
 
-```mermaid
-erDiagram
-  AGENT_SESSIONS {
-    text id PK
-    text customer_id
-    text product_id
-    text conversation_id
-    text status
-    text current_step
-    text created_at
-    text updated_at
-  }
-
-  CUSTOMER_MEMORIES {
-    text customer_id PK
-    text global_summary
-    text session_context_json
-    text body_profiles_json
-    text updated_at
-  }
-
-  PRODUCT_MEMORIES {
-    text conversation_id PK
-    text customer_id
-    text product_id
-    text summary
-    text recent_messages_json
-    text conversation_profile_json
-    text reviews_json
-    text updated_at
-  }
-
-  AGENT_TRACES {
-    text id PK
-    text session_id
-    text event_type
-    text intent
-    text action
-    text input_json
-    text output_json
-    text tool_calls_json
-    text references_json
-    text created_at
-  }
-
-  AGENT_SESSIONS ||--o{ AGENT_TRACES : records
-  CUSTOMER_MEMORIES ||--o{ PRODUCT_MEMORIES : owns
-```
+Table definitions live in [tech-stack-decisions.md §6](tech-stack-decisions.md#6-session-and-memory)
+(single registry; not duplicated here).
 
 ### 6.2 Current Session Status
 
@@ -392,14 +305,9 @@ Settled:
   not HTTP — Next marks rag-service a server external and dynamic-imports its dist.
 - Agents SDK routes only `ask_info` (feature flag `CHATTY_AGENTS_SDK=1`); everything else
   stays on direct Chat Completions.
-
-- MVP uses Next.js first.
-- MVP uses SQLite.
-- Fastify is not a new MVP dependency.
-- Temporal is deferred.
-- Chatwoot is a reference, not runtime.
-- Current frontend is preserved.
-- Runtime concepts are not called skills.
+- Stack-level decisions (Next.js first, SQLite, no Fastify, Temporal deferred,
+  Chatwoot as reference, runtime concepts are not called skills): see
+  [tech-stack-decisions.md](tech-stack-decisions.md).
 
 ## 13. Implementation Plan
 
@@ -422,10 +330,6 @@ Settled:
 - `packages/agent-core` defines loop and legacy adapter boundaries.
 - `packages/llm` defines Agents SDK and Chat Completions adapter boundaries.
 - `pnpm build:rag-service` still passes or its existing failures are documented.
-
-## 15. Appendix: External Asset Links
-
-No Figma or Canva links have been added yet.
 
 ## 16. Legacy Migration Ledger
 

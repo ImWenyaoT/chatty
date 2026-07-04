@@ -2,7 +2,7 @@
 
 Last updated: 2026-07-03
 
-This document records the current stack decisions for Chatty, the agentic customer-service rewrite. It supersedes earlier exploratory notes in `docs/agentic-customer-service-prd.md` where the two conflict.
+This document is the single decision registry for Chatty, the agentic customer-service rewrite. It supersedes the exploratory PRD (now a short decision record in `docs/agentic-customer-service-prd.md`, full text in git history) where the two conflict.
 
 ## 1. Current Decision Summary
 
@@ -48,8 +48,7 @@ Decision: do not heavily rewrite the existing frontend.
 Current frontend assets:
 
 - `rag-service/public/test.html`: manual test console.
-- `rag-service/dashboard`: React/Vite dashboard source.
-- `rag-service/public/dashboard`: built dashboard output.
+- `rag-service/dashboard`（已删除，2026-07）: legacy React/Vite dashboard source; apps/web 的 `/dashboard` 已重建同类功能，源码在 git 历史 / `legacy-extras` 分支.
 
 Migration approach:
 
@@ -164,7 +163,8 @@ behind adapter boundaries.
 
 The first live path is the customer-service Harness Core:
 
-- `scheduleCustomerServiceTask`: maps a customer utterance into a narrow service task.
+- `scheduleCustomerServiceTask`: maps a customer utterance into a narrow service task
+  (`collect_missing_info` / `answer_question` / `check_availability` / `handoff` / `follow_up`).
 - `buildCustomerServiceContext`: assembles customer, product, memory, policy, and retrieved context fragments.
 - `parseCustomerServiceOutput`: parses strict JSON action output with a deterministic fallback.
 - `executeCustomerServiceAction`: runs low-risk tools through policy-aware executors and escalates sensitive actions.
@@ -173,7 +173,8 @@ The first live path is the customer-service Harness Core:
 This keeps Chatty scoped to a rental customer-service project instead of a
 general-purpose agent runtime. LLM/SDK usage can replace the model-output
 composer later without changing task scheduling, executor policy, or trace
-contracts.
+contracts. Deliberately out of scope for the harness core: terminal/file tools,
+MCP, background workers, multi-agent routing, and any new GUI.
 
 Decision: use both.
 
@@ -255,4 +256,4 @@ The repository source of truth remains markdown under `docs/`. Figma/Canva links
 1. Whether to introduce Temporal later. Current decision: defer.
 2. Whether Next.js Route Handlers are sufficient for all public API needs. Current decision: yes for MVP.
 3. Whether SQLite remains local-only or becomes production MVP storage. Current decision: use SQLite for MVP unless deployment constraints force Postgres.
-4. How much of the existing Vite dashboard gets migrated into Next.js. Current decision: minimize changes first.
+4. ~~How much of the existing Vite dashboard gets migrated into Next.js.~~ Resolved 2026-07: apps/web rebuilt `/dashboard`; the legacy Vite dashboard package was removed.

@@ -65,6 +65,5 @@ pnpm promote:failure-case # 失败用例 → 金标回归的晋升 CLI（--list 
 
 ## Docs
 
-- [Tech Stack Decisions](docs/tech-stack-decisions.md)
-- [Loop Engineering Plan](docs/loop-engineering-plan.md)
-- [Agentic Customer Service PRD](docs/agentic-customer-service-prd.md)
+- [Architecture (RW-1 目标架构)](docs/architecture.md)
+- [Tech Stack Decisions（唯一决策登记处）](docs/tech-stack-decisions.md)
