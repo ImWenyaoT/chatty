@@ -496,30 +496,55 @@ async function runScenario(scenario: Scenario, target: EvalTarget): Promise<Scen
   }
 }
 
+/**
+ * 并发映射，保序、限流、无第三方依赖。用于并行跑相互独立的场景，
+ * 把评测墙钟时间从「场景数 × 单场景」降到「场景数 / 并发数 × 单场景」。
+ */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let cursor = 0
+  async function worker(): Promise<void> {
+    while (true) {
+      const index = cursor++
+      if (index >= items.length) return
+      results[index] = await fn(items[index], index)
+    }
+  }
+  const workers = Math.max(1, Math.min(limit, items.length))
+  await Promise.all(Array.from({ length: workers }, () => worker()))
+  return results
+}
+
 // 跑一整套场景一次（跑前清空隔离记忆库，保证各 run 互不污染）。
+// harness 目标每场景用独立 tmp SQLite，可并发；legacy 目标共享 TMP_MEMORY，
+// 必须串行（并发会互相污染记忆库）。瓶颈是 LLM inference，并发直接缩墙钟。
 async function runAllScenarios(
   scenarios: Scenario[],
   target: EvalTarget,
+  concurrency = 1,
 ): Promise<ScenarioResult[]> {
   await fs.rm(TMP_MEMORY, { force: true }).catch(() => undefined)
-  const results: ScenarioResult[] = []
-  for (const scenario of scenarios) {
+  const limit = target === 'harness' ? Math.max(1, concurrency) : 1
+  return mapWithConcurrency(scenarios, limit, async (scenario) => {
     try {
-      results.push(await runScenario(scenario, target))
+      return await runScenario(scenario, target)
     } catch (error) {
       console.error(
         `    ${scenario.name} error: ${error instanceof Error ? error.message : String(error)}`,
       )
-      results.push({
+      return {
         name: scenario.name,
         description: scenario.description,
         passed: false,
         steps: [],
         avgScore: 0,
-      })
+      }
     }
-  }
-  return results
+  })
 }
 
 // 把 N 次运行聚合成单份报告：avgScore 取均值、passed 记通过率，steps 取最后一次用于展示。
@@ -628,6 +653,8 @@ async function compareBaseline(baselineTag: string, results: ScenarioResult[]) {
 async function main() {
   const args = parseArgs(process.argv.slice(2))
   const repeat = Math.max(1, Number(args.repeat ?? 1) || 1)
+  // 场景并发数（仅 harness 目标生效）。默认 6，兼顾墙钟与 DeepSeek 速率限制。
+  const concurrency = Math.max(1, Number(args.concurrency ?? 6) || 6)
   const target = (args.target ?? 'legacy') as EvalTarget
   if (target !== 'legacy' && target !== 'harness') {
     console.error(`unknown --target ${String(args.target)}（只支持 legacy | harness）`)
@@ -650,15 +677,16 @@ async function main() {
       ? `harness-${createHash('sha256').update(CUSTOMER_SERVICE_COMPOSE_INSTRUCTIONS).digest('hex').slice(0, 6)}`
       : loaded.promptVersion
 
+  const parallelNote = target === 'harness' ? `, concurrency=${concurrency}` : ' (legacy: serial)'
   console.log(
-    `Running ${scenarios.length} scenario(s) × ${repeat} repeat, target=${target}, promptVersion=${promptVersion}`,
+    `Running ${scenarios.length} scenario(s) × ${repeat} repeat, target=${target}${parallelNote}, promptVersion=${promptVersion}`,
   )
   console.log(`Tmp store dir: ${TMP_DIR}\n`)
 
   const runs: ScenarioResult[][] = []
   for (let i = 0; i < repeat; i++) {
     if (repeat > 1) process.stdout.write(`  run ${i + 1}/${repeat} ...`)
-    const r = await runAllScenarios(scenarios, target)
+    const r = await runAllScenarios(scenarios, target, concurrency)
     runs.push(r)
     if (repeat > 1)
       process.stdout.write(` done (${r.filter((x) => x.passed).length}/${r.length} pass)\n`)
