@@ -9,9 +9,10 @@ export interface LlmEnvConfig {
 /**
  * Reads the shared OpenAI-compatible model config from the environment.
  *
- * Names mirror rag-service/src/config.ts so a single local `.env` drives both
- * stacks. Any OpenAI-compatible endpoint (DeepSeek, OpenAI, Azure-compatible,
- * moon-bridge, etc.) is selected purely via OPENAI_BASE_URL.
+ * These are the shared OpenAI-compatible env var names, so a single local
+ * `.env` drives both the app and the eval harness. Any OpenAI-compatible
+ * endpoint (DeepSeek, OpenAI, Azure-compatible, moon-bridge, etc.) is selected
+ * purely via OPENAI_BASE_URL.
  *
  * Default model is unified with .env.example (deepseek-v4-pro). We pin the
  * explicit `-pro` tier rather than the `deepseek-chat` alias: the alias

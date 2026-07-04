@@ -3,8 +3,8 @@ import { SellerNavigation } from '../components/seller/SellerNavigation'
 import { SELLER_ORDERS } from '../components/seller/orderData'
 
 // 纯演示后台：会话/知识面板沿用卖家演示数据，无按请求变化的数据源，可静态渲染。
-// 质量回归不在此页——由 `pnpm eval --target harness` 的朴素金标回归承担
-// （报告落 rag-service/tests/reports/），评测飞轮已退役。
+// 质量回归不在此页——由根级 `pnpm eval` 的朴素金标回归承担
+// （报告落 eval/reports/），评测飞轮已退役。
 
 const KNOWLEDGE_BUCKETS = [
   { label: '规则政策', value: 12, hint: '租赁、押金、物流、退换' },

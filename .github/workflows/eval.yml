@@ -44,14 +44,14 @@ jobs:
       - name: Build package skeleton
         run: pnpm build:skeleton
 
-      # 默认 harness lane（agentic search 上线后的当前路径）。--repeat 3 聚合抵消
-      # LLM judge 的评分噪声。失败条件：任一场景低于通过线（eval.ts 以非零码退出）。
+      # harness lane 是 agentic search 上线后的唯一活路径。--repeat 3 聚合抵消
+      # LLM judge 的评分噪声。失败条件：任一场景低于通过线（run.ts 以非零码退出）。
       - name: Golden regression (harness lane)
-        run: pnpm --filter rental-rag-service eval -- --repeat 3 --save ci-latest
+        run: pnpm eval -- --repeat 3 --save ci-latest
 
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: eval-report
-          path: rag-service/tests/reports/ci-latest.json
+          path: eval/reports/ci-latest.json

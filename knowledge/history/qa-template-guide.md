@@ -8,7 +8,7 @@
 2. CSV 必须只有两列：`question,answer`。
 3. 其他格式例如 `.md`、`.txt`、`.json`，全部按普通文本入库。
 
-真正用于入库的 QA 文件，建议像 [docs/history/qa-examples.csv](/Users/snoopy/Documents/vscode/Dify/rag-service/docs/history/qa-examples.csv) 那样保存。
+真正用于入库的 QA 文件，建议像 [qa-examples.csv](./qa-examples.csv) 那样保存。
 
 ## 严格模板
 

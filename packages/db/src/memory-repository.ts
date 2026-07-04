@@ -5,11 +5,11 @@ import { nowIso } from './database.js'
 
 /**
  * Memory repository: durable customer/product memory in SQLite JSON columns
- * (docs §6.3), with a read-only fallback to the legacy rag-service
- * `memory-store.json` so the new loop can read continuity without a migration.
+ * (docs §6.3), with an optional read-only fallback to a legacy JSON
+ * `memory-store.json` so a caller can read continuity without a migration.
  *
- * SQLite is the only write path; the legacy JSON store remains read-only
- * fallback evidence for cross-migration continuity.
+ * SQLite is the only write path; the legacy JSON store, when a path is
+ * provided, is a read-only fallback for cross-migration continuity.
  */
 export interface MemoryRepository {
   getCustomer(customerId: string): CustomerMemoryRecord | undefined
@@ -346,7 +346,7 @@ function parseProductRow(row: ProductRow): ProductMemoryRecord {
 }
 
 /**
- * Reads the legacy rag-service memory-store.json (flat map keyed by customerId,
+ * Reads a legacy JSON memory-store.json (flat map keyed by customerId,
  * with a nested productMemories map keyed by `${customerId}:${productId}`) and
  * projects it into a MemorySnapshotRecord. Read-only: the new loop never writes
  * back to this file.

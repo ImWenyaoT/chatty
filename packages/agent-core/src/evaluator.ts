@@ -1,10 +1,10 @@
 /**
- * Result of evaluating one agent reply. Field shape mirrors the legacy
- * evaluateCustomerServiceReply() (rag-service/src/rag.ts) so the legacy
- * evaluator can be wrapped behind this interface without remapping.
+ * Result of evaluating one agent reply. Field shape mirrors the judge
+ * evaluateCustomerServiceReply() (eval/judge.ts) so any concrete judge can be
+ * wrapped behind this interface without remapping.
  *
- * Declared locally in agent-core (not imported from rag-service) so the
- * package boundary stays clean; legacy wiring happens in apps/web.
+ * Declared locally in agent-core (not imported from a judge) so the package
+ * boundary stays clean.
  */
 export interface EvaluationResult {
   score: number

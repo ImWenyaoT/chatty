@@ -52,8 +52,8 @@ export const getProductTool: RuntimeTool<Record<string, JsonValue>, JsonValue> =
 }
 
 // --- check_availability(productId, size, rentalPeriod) ----------------------
-// Stub (mirrors rag-service availability-service.ts which always returns
-// available). Real inventory replaces this behind the same interface.
+// Stub: always returns available (no real inventory system in the MVP).
+// Real inventory replaces this behind the same interface.
 
 export const checkAvailabilityTool: RuntimeTool<Record<string, JsonValue>, JsonValue> = {
   name: 'check_availability',
