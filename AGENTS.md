@@ -13,6 +13,14 @@
 - 金标回归：`pnpm --filter rental-rag-service eval`
 - 失败用例晋升金标：`pnpm promote:failure-case`
 
+## 数据红线（公开仓库）
+
+- 本仓库开源，但业务数据来自真实店铺：真实客户信息（姓名/电话/地址/对话原文）**任何情况下不得入库**。
+- `rag-service/data/`、`data/`、`*.db` 已在 .gitignore 硬性排除，不要用 `git add -f` 绕过。
+- `pnpm promote:failure-case` 会把真实 trace 晋升为金标 YAML——**提交前必须人工核查并脱敏**
+  （客户 ID 用 `cx-*`/`golden-*` 形态，地址只到区级，对话原文重写为等价合成表述）。
+- 店铺对客公开的联系方式（店名/店铺电话）允许出现在政策文档与金标场景中。
+
 ## 代码风格
 
 - TypeScript strict mode；单引号、无分号；优先函数式写法
