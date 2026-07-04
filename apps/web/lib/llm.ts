@@ -1,10 +1,12 @@
 import {
   CUSTOMER_SERVICE_COMPOSE_INSTRUCTIONS,
   type CustomerServiceModelFn,
+  type CustomerServiceToolLoopFn,
 } from '@rental/agent-core'
 import {
   type ChatCompletionsAdapter,
   createChatCompletionsAdapterFromEnv,
+  parseJsonObject,
   readLlmEnv,
 } from '@rental/llm'
 
@@ -41,4 +43,26 @@ export function createPlaygroundModelFn(): CustomerServiceModelFn | undefined {
   if (process.env.CHATTY_LLM !== '1') return undefined
   if (!readLlmEnv().apiKey) return undefined
   return createComposeModelFn(createChatCompletionsAdapterFromEnv())
+}
+
+/**
+ * 把 completeWithTools 包装成 harness 有界搜索循环的每轮调用（design §4.1 C2）：
+ * tool_calls 轮透传；纯文本轮沿用 parseJsonObject 宽容解析（fenced JSON 兜底）
+ * 后再字符串化，完全不可解析时抛错，由 compose 落回确定性 composer（§4.3）。
+ */
+export function createComposeToolLoopFn(
+  adapter: ChatCompletionsAdapter,
+): CustomerServiceToolLoopFn {
+  return async (messages, tools) => {
+    const reply = await adapter.completeWithTools(messages, tools)
+    if ('toolCalls' in reply) return reply
+    return { text: JSON.stringify(parseJsonObject<Record<string, unknown>>(reply.text)) }
+  }
+}
+
+/** playground 的搜索循环注入：与 createPlaygroundModelFn 相同的双重门控。 */
+export function createPlaygroundToolLoopFn(): CustomerServiceToolLoopFn | undefined {
+  if (process.env.CHATTY_LLM !== '1') return undefined
+  if (!readLlmEnv().apiKey) return undefined
+  return createComposeToolLoopFn(createChatCompletionsAdapterFromEnv())
 }

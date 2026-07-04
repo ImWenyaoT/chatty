@@ -6,9 +6,12 @@ import {
   createDefaultToolRegistry,
   createCustomerServiceModelOutput,
   executeCustomerServiceAction,
+  MAX_SEARCH_CALLS,
   parseCustomerServiceOutput,
   runCustomerServiceHarnessStep,
   scheduleCustomerServiceTask,
+  type CustomerServiceLoopMessage,
+  type CustomerServiceToolLoopFn,
 } from './index.js'
 
 function userEvent(question: string): ConversationEvent {
@@ -184,4 +187,142 @@ test('harness step returns a bounded trace with task, context, action and memory
     lastHarnessTask: 'check_availability',
     lastHarnessAction: 'check_availability',
   })
+})
+
+// ---- B3 有界搜索循环（docs/agentic-search-design.md §4）----
+
+/** 造一个可数命中次数的知识检索 fake，配合 createDefaultToolRegistry 注册 search_knowledge。 */
+function knowledgeSearcher(hits: Array<{ text: string; section: string }>) {
+  const state = { calls: 0, queries: [] as string[] }
+  return {
+    state,
+    search(query: string) {
+      state.calls += 1
+      state.queries.push(query)
+      return hits
+    },
+  }
+}
+
+test('搜索循环：先搜后答，搜索调用落 trace toolCalls 与 knowledge fragment', async () => {
+  const searcher = knowledgeSearcher([{ text: '押金按订单规则确认', section: '租赁规则 › 押金' }])
+  const seenMessages: CustomerServiceLoopMessage[][] = []
+  const toolLoopFn: CustomerServiceToolLoopFn = async (messages, tools) => {
+    seenMessages.push([...messages])
+    if (seenMessages.length === 1) {
+      assert.equal(tools.length, 1)
+      assert.equal(tools[0].name, 'search_knowledge')
+      return { toolCalls: [{ id: 'c1', name: 'search_knowledge', arguments: '{"query":"押金"}' }] }
+    }
+    return { text: '{"action":"answer_question","reply":"押金需按具体订单确认。"}' }
+  }
+  const result = await runCustomerServiceHarnessStep({
+    event: userEvent('租衣服要押金吗'),
+    memory: memory(),
+    registry: createDefaultToolRegistry(searcher),
+    toolLoopFn,
+  })
+
+  assert.equal(result.step.reply, '押金需按具体订单确认。')
+  assert.deepEqual(searcher.state.queries, ['押金'])
+  // 搜索调用出现在 trace 的 toolCalls（step 与 trace 一致）
+  assert.equal(result.trace.toolCalls.length, 1)
+  assert.equal(result.trace.toolCalls[0].toolName, 'search_knowledge')
+  assert.deepEqual(result.trace.toolCalls[0].arguments, { query: '押金' })
+  assert.deepEqual(result.step.toolCalls, result.trace.toolCalls)
+  // 结果作为 kind:'knowledge' fragment 进入 context（route 将其持久化为 references）
+  const knowledge = result.trace.context.fragments.filter((f) => f.kind === 'knowledge')
+  assert.equal(knowledge.length, 1)
+  assert.ok(knowledge[0].content.includes('押金按订单规则确认'))
+  // 第二轮模型调用能看到 role:'tool' 的检索结果回填
+  const toolMessages = seenMessages[1].filter((m) => m.role === 'tool')
+  assert.equal(toolMessages.length, 1)
+  assert.ok(toolMessages[0].content.includes('押金按订单规则确认'))
+})
+
+test('搜索循环：达上限后工具被禁用并注入收尾指令，仍强制产出 action JSON', async () => {
+  const searcher = knowledgeSearcher([{ text: '第一天全价', section: '租赁规则 › 计费' }])
+  const seenToolCounts: number[] = []
+  let sawWrapUp = false
+  const toolLoopFn: CustomerServiceToolLoopFn = async (messages, tools) => {
+    seenToolCounts.push(tools.length)
+    if (tools.length > 0) {
+      return {
+        toolCalls: [
+          {
+            id: `c${seenToolCounts.length}`,
+            name: 'search_knowledge',
+            arguments: '{"query":"计费"}',
+          },
+        ],
+      }
+    }
+    sawWrapUp = messages.some(
+      (m) => m.role === 'user' && m.content.includes('知识库搜索次数已用完'),
+    )
+    return { text: '{"action":"answer_question","reply":"到顶后直接作答。"}' }
+  }
+  const result = await runCustomerServiceHarnessStep({
+    event: userEvent('租金怎么算'),
+    memory: memory(),
+    registry: createDefaultToolRegistry(searcher),
+    toolLoopFn,
+  })
+
+  // 恰好 MAX_SEARCH_CALLS 轮带工具 + 1 轮无工具收尾
+  assert.deepEqual(seenToolCounts, [1, 1, 1, 0])
+  assert.equal(searcher.state.calls, MAX_SEARCH_CALLS)
+  assert.ok(sawWrapUp)
+  assert.equal(result.step.reply, '到顶后直接作答。')
+  assert.equal(result.trace.toolCalls.length, MAX_SEARCH_CALLS)
+})
+
+test('搜索循环：坏 tool_calls 参数收到重试文案且计入轮数，不触发检索', async () => {
+  const searcher = knowledgeSearcher([{ text: '不会用到', section: '无' }])
+  let rounds = 0
+  let badArgsReplies: string[] = []
+  const toolLoopFn: CustomerServiceToolLoopFn = async (messages, tools) => {
+    if (tools.length > 0) {
+      rounds += 1
+      // query 缺失（错误键名）——每轮都给坏参数
+      return {
+        toolCalls: [{ id: `b${rounds}`, name: 'search_knowledge', arguments: '{"q":"押金"}' }],
+      }
+    }
+    // 收尾轮：从消息流收集全部 role:'tool' 回填，验证重试文案与计轮
+    badArgsReplies = messages.flatMap((m) => (m.role === 'tool' ? [m.content] : []))
+    return { text: '{"action":"answer_question","reply":"参数一直不对，只能直接回答。"}' }
+  }
+  const result = await runCustomerServiceHarnessStep({
+    event: userEvent('租衣服要押金吗'),
+    memory: memory(),
+    registry: createDefaultToolRegistry(searcher),
+    toolLoopFn,
+  })
+
+  // 坏参数从未触发真实检索，但每次都计轮：MAX_SEARCH_CALLS 次后循环收尾
+  assert.equal(searcher.state.calls, 0)
+  assert.equal(badArgsReplies.length, MAX_SEARCH_CALLS)
+  for (const reply of badArgsReplies) {
+    assert.ok(reply.includes('query 参数缺失或不是字符串'))
+  }
+  assert.equal(result.step.reply, '参数一直不对，只能直接回答。')
+  // 未执行的搜索不进 trace 工具审计
+  assert.equal(result.trace.toolCalls.length, 0)
+})
+
+test('搜索循环：任何一步抛错回退确定性 composer（无 key 不变量保持）', async () => {
+  const searcher = knowledgeSearcher([])
+  const result = await runCustomerServiceHarnessStep({
+    event: userEvent('这款有 L 吗，5月10到12号穿'),
+    memory: memory(),
+    registry: createDefaultToolRegistry(searcher),
+    toolLoopFn: async () => {
+      throw new Error('provider down')
+    },
+  })
+
+  // 与 modelFn 失败路径同构：同一输入下确定性 composer 给出 check_availability
+  assert.equal(result.trace.action.action, 'check_availability')
+  assert.equal(result.trace.action.toolName, 'check_availability')
 })

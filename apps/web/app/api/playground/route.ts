@@ -7,7 +7,7 @@ import {
 } from '@rental/agent-core'
 import { getRepos, newId } from '@/lib/db'
 import { scheduleTraceEvaluation } from '@/lib/eval-chain'
-import { createPlaygroundModelFn } from '@/lib/llm'
+import { createPlaygroundModelFn, createPlaygroundToolLoopFn } from '@/lib/llm'
 
 // Playground endpoint: drives one bounded customer-service Harness step end to end.
 // Request:  POST { customerId, productId?, conversationId?, question, imageUrl? }
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
   }
   const input = parsed.data
 
-  const { sessions, traces, reviews, failures, memory } = getRepos()
+  const { sessions, traces, reviews, failures, memory, knowledge } = getRepos()
   const conversationId =
     input.conversationId ?? `${input.customerId}:${input.productId ?? 'general'}`
 
@@ -89,12 +89,16 @@ export async function POST(request: Request) {
   // otherwise — and on any model failure — the deterministic composer answers,
   // so scheduler/context/executor/trace contracts never depend on a provider.
   // The snapshot record is a structural superset of the harness MemorySnapshot.
+  // toolLoopFn 在场时 compose 进入有界搜索循环（design §4）：search_knowledge 经
+  // registry policy 门执行，结果落 knowledge fragment（随 references 持久化）；
+  // 缺 key/循环失败仍落确定性 composer，"无 key 可跑"不变量保持。
   const harness = await runCustomerServiceHarnessStep({
     event,
     memory: snapshot,
-    registry: createDefaultToolRegistry(),
+    registry: createDefaultToolRegistry(knowledge),
     sessionStatus: session.status,
     modelFn: createPlaygroundModelFn(),
+    toolLoopFn: createPlaygroundToolLoopFn(),
   })
   const result = harness.step
 
