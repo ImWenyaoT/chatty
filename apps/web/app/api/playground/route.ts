@@ -43,7 +43,7 @@ export async function POST(request: Request) {
   }
   const input = parsed.data
 
-  const { sessions, traces, reviews, failures, memory, sqliteEnabled } = getRepos()
+  const { sessions, traces, reviews, failures, memory } = getRepos()
   const conversationId =
     input.conversationId ?? `${input.customerId}:${input.productId ?? 'general'}`
 
@@ -140,9 +140,7 @@ export async function POST(request: Request) {
   //     context — closing the amnesia where the loop read memory but never wrote
   //     it. Only the message log is persisted; customer profile fields and
   //     transient RAG evidence are NOT promoted (chatty-memory-trace-migration).
-  //     Gated on SQLite like eval: in JSON-only mode the legacy store stays
-  //     authoritative and writing to an ephemeral in-memory db is pointless.
-  if (sqliteEnabled) {
+  {
     const turn: import('@rental/shared').JsonValue[] = [{ role: 'user', content: input.question }]
     if (result.reply) turn.push({ role: 'assistant', content: result.reply })
     memory.appendRecentMessages(
@@ -155,10 +153,8 @@ export async function POST(request: Request) {
   //     the persisted trace — review lands in trace_reviews, low scores promote
   //     a failure_case (lib/eval-chain, which also backfills a couple of
   //     unevaluated traces). Never blocks the response; without OPENAI_API_KEY
-  //     it silently no-ops. Gated on SQLite like 5b: in JSON-only mode the
-  //     review repos are ephemeral no-ops, so judging would burn tokens for
-  //     nothing.
-  if (sqliteEnabled && result.reply) {
+  //     it silently no-ops.
+  if (result.reply) {
     scheduleTraceEvaluation(
       { traces, reviews, failures },
       {

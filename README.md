@@ -41,8 +41,8 @@ typed TypeScript harness for:
    "closed 会话拒绝一切新副作用"等不变量有测试锁定。
 5. **评测数据飞轮（可演示的闭环）** — playground 每条 trace 落库后，
    [`apps/web/lib/eval-chain.ts`](apps/web/lib/eval-chain.ts) fire-and-forget 跑
-   LLM-judge（复用 legacy evaluator；需 `CHATTY_SQLITE=1` + `OPENAI_API_KEY`，
-   未配置时静默跳过）→ review 落 `trace_reviews`（`/dashboard` 实时读表）→ 低分晋升
+   LLM-judge（复用 legacy evaluator；需 `OPENAI_API_KEY`，未配置时静默跳过；
+   持久化需 `CHATTY_DB_PATH`，未设置时同一链路落 `:memory:`）→ review 落 `trace_reviews`（`/dashboard` 实时读表）→ 低分晋升
    failure_case → [`scripts/promote-failure-case.mts`](scripts/promote-failure-case.mts)
    晋升为 `tests/golden/regression-*.yaml` → `pnpm eval` 回归。CI 的 smoke 阶段
    （[`scripts/smoke.mts`](scripts/smoke.mts)）用模拟评分把同一条数据链路每次提交真转一圈。

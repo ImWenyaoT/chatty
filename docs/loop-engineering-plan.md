@@ -434,7 +434,7 @@ No Figma or Canva links have been added yet.
 | 能力 | 边界接口 | 状态 | 下一步 |
 |---|---|---|---|
 | 回答路径 answerQuestion | compose 步的 `CustomerServiceModelFn`（playground route 注入 Chat Completions adapter） | 🟡 部分接线——`CHATTY_LLM=1` 且配置 `OPENAI_API_KEY` 时 compose 走真 LLM，未开启或模型调用失败回退确定性 `createCustomerServiceModelOutput`；尚未接 legacy 的知识检索。旧 loop-runner / Agents SDK lane（含 `LegacyRagService` 注入位与 `@openai/agents` 依赖）已整体删除 | 给 compose 上下文接入知识检索，再拿金标场景对齐后替换 legacy answerQuestion |
-| 评估器 LLM-judge | `Evaluator`（`loadLegacyEvaluator`，经 `apps/web/lib/eval-chain.ts`） | 🟡 已接线——playground trace 落库后 fire-and-forget 异步评分：review 落 `trace_reviews`、低分晋升 failure_case、顺带补评积压 trace（`findUnevaluated`），`/dashboard` 读真实表；依赖 `CHATTY_SQLITE=1` + `OPENAI_API_KEY`，未配置时静默跳过 | 换 judge 交叉复评；补评从请求搭车升级为独立 worker |
+| 评估器 LLM-judge | `Evaluator`（`loadLegacyEvaluator`，经 `apps/web/lib/eval-chain.ts`） | 🟡 已接线——playground trace 落库后 fire-and-forget 异步评分：review 落 `trace_reviews`、低分晋升 failure_case、顺带补评积压 trace（`findUnevaluated`），`/dashboard` 读真实表；依赖 `OPENAI_API_KEY`（未配置时静默跳过）；持久化由 `CHATTY_DB_PATH` 决定（未设置时落 `:memory:`，CHATTY_SQLITE 开关已退役） | 换 judge 交叉复评；补评从请求搭车升级为独立 worker |
 | 知识检索 searchKnowledge | 曾有 `KnowledgeAdapter` | ⚪ 边界已删（零消费方）；检索仍在 legacy answerQuestion 内部 | 若把检索提出 loop，再随消费方重建边界 |
 | 会话记忆 | `MemoryRepository`（SQLite + JSON 只读回退） | 🟡 仅 recentMessages 双写；profile 字段仍由 legacy 写 JSON | profile 写路径迁 SQLite JSON 列 |
 | 事实抽取 + 阶段状态机 | 无边界（legacy 内部） | 🔴 完全在 legacy（extractStructuredConversationFacts + orchestrator） | 状态机已有 22 个单测钉行为，可安全搬迁 |
