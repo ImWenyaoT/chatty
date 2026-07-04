@@ -17,7 +17,7 @@ Existing memory model kept mostly intact
 Temporal deferred until the product proves it needs durable workflow guarantees
 Chatwoot used as open-source product reference, not as runtime dependency
 No RAG / no vector database in the target architecture: memory + FTS indexing +
-agent search tools; legacy qdrant lane retires after golden-eval parity
+agent search tools; legacy qdrant retrieval subsystem retired 2026-07 (R4)
 ```
 
 ## 2. Next.js vs Fastify
@@ -274,10 +274,15 @@ RAG pipeline, and no vector database. Knowledge access is built from four parts:
    shaving retrieval from 0.1s to 0.01s is invisible next to a multi-second
    model call.
 
-Consequence for the legacy lane: `rag-service` (qdrant + embeddings) is now a
-migration source only. Retirement gate: the golden eval must pass against the
-harness lane at parity (11/11) before the qdrant lane is deleted. Eval quality is
-the invariant; the retrieval implementation is what gets swapped.
+Consequence for the legacy lane: `rag-service` is now a migration source only.
+The qdrant + embeddings retrieval subsystem was retired (R4, 2026-07): agentic
+search (FTS5 + `search_knowledge`) is the live retrieval path. The designed
+retirement gate was "harness lane at golden parity (11/11) first", but a user
+decision overrode it — the retrieval subsystem was deleted directly without
+chasing parity (harness lane best 13/14). Retiring the *whole* rag-service
+runtime (answerQuestion/orchestrator, R5) remains gated on that parity + the §16
+red/yellow items. Eval quality is the invariant; the retrieval implementation is
+what got swapped.
 
 ## 12. Still Open
 
