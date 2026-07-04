@@ -34,3 +34,5 @@
 - `apps/web`：Next.js playground + dashboard
 - `rag-service`：冻结的 legacy lane（金标评测保活，勿动 src）
 - 架构与决策：`docs/architecture.md`、`docs/tech-stack-decisions.md`
+- harness 组件映射：`docs/design.md`（The Harness Is The Product，living doc——
+  改动编排/循环/context/parser/executor/工具的提交必须同步更新对应小节）
