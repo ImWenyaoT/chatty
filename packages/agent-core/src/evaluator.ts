@@ -22,9 +22,9 @@ export interface EvaluationMessage {
 }
 
 /**
- * Boundary around reply evaluation. Implemented by wrapping the legacy
- * evaluateCustomerServiceReply() (apps/web/lib/legacy-adapter) or any other
- * scoring strategy. agent-core depends on this interface, never on rag-service.
+ * Boundary around reply evaluation. Implemented by wrapping
+ * evaluateCustomerServiceReply() (eval/judge.ts) or any other scoring strategy.
+ * agent-core depends on this interface, never on a concrete judge.
  */
 export interface Evaluator {
   evaluate(history: EvaluationMessage[], reply: string): Promise<EvaluationResult>

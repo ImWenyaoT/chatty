@@ -34,7 +34,7 @@ function ensureInitialized(): Repos {
   const dbPath = process.env.CHATTY_DB_PATH ? path.resolve(process.env.CHATTY_DB_PATH) : ':memory:'
   const db = openDatabase(dbPath)
   // 知识索引幂等同步（docs/agentic-search-design.md §2.4 I1）：启动时对比语料
-  // hash，变更才整体重建。候选路径同 legacy-adapter：repo 根或 apps/web 两种 cwd。
+  // hash，变更才整体重建。候选路径覆盖 repo 根或 apps/web 两种 cwd。
   const knowledgeDir = [
     path.resolve(process.cwd(), 'knowledge'),
     path.resolve(process.cwd(), '../../knowledge'),
@@ -43,9 +43,7 @@ function ensureInitialized(): Repos {
   repos = {
     sessions: createSessionRepository(db),
     traces: createTraceRepository(db),
-    memory: createMemoryRepository(db, {
-      legacyMemoryPath: path.resolve('rag-service/data/memory-store.json'),
-    }),
+    memory: createMemoryRepository(db),
     knowledge: createKnowledgeRepository(db),
   }
   return repos
