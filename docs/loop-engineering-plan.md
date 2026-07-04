@@ -433,8 +433,8 @@ No Figma or Canva links have been added yet.
 
 | 能力 | 边界接口 | 状态 | 下一步 |
 |---|---|---|---|
-| 回答路径 answerQuestion | `LegacyRagService`（in-process 注入） | ✅ 已接线，loop 的 ask_info 默认走它 | 被 SDK lane 逐步替代（按 action 灰度） |
-| 评估器 LLM-judge | `Evaluator`（`loadLegacyEvaluator`） | ✅ 已接线，异步评分 → failure_case → golden 晋升 CLI 闭环 | 换 judge 交叉复评（防同源过拟合） |
+| 回答路径 answerQuestion | `LegacyRagService`（in-process 注入） | 🔴 未接线——生产 playground 走确定性 `createCustomerServiceModelOutput`，不调用任何 LLM；loop-runner 及该注入位无生产调用方 | 后续批次真接线（loop 的 ask_info 走它），届时更新本行 |
+| 评估器 LLM-judge | `Evaluator`（`loadLegacyEvaluator`） | 🔴 未接线——`loadLegacyEvaluator` 全仓零调用方，异步评分闭环不存在；仅 golden 晋升 CLI（`promote:failure-case`）可用 | 先接线异步评分，再谈换 judge 交叉复评 |
 | 知识检索 searchKnowledge | 曾有 `KnowledgeAdapter` | ⚪ 边界已删（零消费方）；检索仍在 legacy answerQuestion 内部 | 若把检索提出 loop，再随消费方重建边界 |
 | 会话记忆 | `MemoryRepository`（SQLite + JSON 只读回退） | 🟡 仅 recentMessages 双写；profile 字段仍由 legacy 写 JSON | profile 写路径迁 SQLite JSON 列 |
 | 事实抽取 + 阶段状态机 | 无边界（legacy 内部） | 🔴 完全在 legacy（extractStructuredConversationFacts + orchestrator） | 状态机已有 22 个单测钉行为，可安全搬迁 |
