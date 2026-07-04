@@ -80,6 +80,23 @@ CREATE TABLE IF NOT EXISTS failure_cases (
 
 CREATE INDEX IF NOT EXISTS idx_failure_cases_status
   ON failure_cases (status);
+
+-- 知识库全文索引（docs/agentic-search-design.md §2.1）：单 FTS5 虚拟表，
+-- trigram tokenizer（§2.2），元数据列 UNINDEXED，chunk_id 即 rowid。
+CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_chunks USING fts5(
+  text,
+  summary,
+  doc_id UNINDEXED,
+  section UNINDEXED,
+  source_type UNINDEXED,
+  tokenize = 'trigram'
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_index_meta (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  source_hash TEXT NOT NULL,
+  built_at TEXT NOT NULL
+);
 `
 
 /**

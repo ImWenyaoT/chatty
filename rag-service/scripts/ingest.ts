@@ -8,7 +8,8 @@ import { writeLocalVectors } from '../src/local-store.js'
 import { embedText } from '../src/rag.js'
 import { ensureCollection, isQdrantAvailable, qdrant } from '../src/qdrant.js'
 
-const DOCS_DIR = path.resolve(process.cwd(), 'docs')
+// R1 语料迁移（docs/agentic-search-design.md §6）：语料移居仓库根 knowledge/。
+const DOCS_DIR = path.resolve(process.cwd(), '..', 'knowledge')
 
 function toPointId(value: string) {
   const hash = createHash('md5').update(value).digest('hex')

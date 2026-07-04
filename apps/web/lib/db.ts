@@ -1,13 +1,17 @@
 import { randomUUID } from 'node:crypto'
+import { existsSync } from 'node:fs'
 import path from 'node:path'
 import {
   createFailureCaseRepository,
+  createKnowledgeRepository,
   createMemoryRepository,
   createSessionRepository,
   createTraceRepository,
   createTraceReviewRepository,
   openDatabase,
+  syncKnowledgeIndex,
   type FailureCaseRepository,
+  type KnowledgeRepository,
   type MemoryRepository,
   type SessionRepository,
   type TraceRepository,
@@ -25,6 +29,7 @@ interface Repos {
   reviews: TraceReviewRepository
   failures: FailureCaseRepository
   memory: MemoryRepository
+  knowledge: KnowledgeRepository
 }
 
 let repos: Repos | undefined
@@ -34,6 +39,13 @@ function ensureInitialized(): Repos {
   if (repos) return repos
   const dbPath = process.env.CHATTY_DB_PATH ? path.resolve(process.env.CHATTY_DB_PATH) : ':memory:'
   const db = openDatabase(dbPath)
+  // 知识索引幂等同步（docs/agentic-search-design.md §2.4 I1）：启动时对比语料
+  // hash，变更才整体重建。候选路径同 legacy-adapter：repo 根或 apps/web 两种 cwd。
+  const knowledgeDir = [
+    path.resolve(process.cwd(), 'knowledge'),
+    path.resolve(process.cwd(), '../../knowledge'),
+  ].find((dir) => existsSync(dir))
+  if (knowledgeDir) syncKnowledgeIndex(db, knowledgeDir)
   repos = {
     sessions: createSessionRepository(db),
     traces: createTraceRepository(db),
@@ -42,6 +54,7 @@ function ensureInitialized(): Repos {
     memory: createMemoryRepository(db, {
       legacyMemoryPath: path.resolve('rag-service/data/memory-store.json'),
     }),
+    knowledge: createKnowledgeRepository(db),
   }
   return repos
 }

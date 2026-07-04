@@ -62,7 +62,9 @@ function shortHash(input: string) {
 function loadAll() {
   const versionName = config.promptVersionName
   const promptsPath = path.join(configDir, 'prompts', `${versionName}.yaml`)
-  const catalogPath = path.join(configDir, 'catalog.yaml')
+  // R1 语料迁移（docs/agentic-search-design.md §6）：catalog 移居仓库根 knowledge/，
+  // configDir 无论解析到 config/ 还是 dist/config 的回退，都指向 rag-service/config。
+  const catalogPath = path.resolve(configDir, '..', '..', 'knowledge', 'catalog.yaml')
 
   const prompts = readYaml<PromptsFile>(promptsPath)
   const catalog = readYaml<CatalogFile>(catalogPath)

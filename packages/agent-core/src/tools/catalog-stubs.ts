@@ -1,6 +1,6 @@
 import type { JsonValue, RuntimeTool } from '@rental/shared'
 
-// Static MVP product catalog mirroring rag-service/config/catalog.yaml.
+// Static MVP product catalog mirroring knowledge/catalog.yaml.
 // Kept inline so the tool stubs are deterministic and dependency-free; a later
 // step can replace this with a catalog adapter that reads the YAML at runtime.
 
