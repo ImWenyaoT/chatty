@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server'
 import { isPlaygroundAuthorized, legacyChatInputSchema } from '@rental/shared'
-import { createDefaultToolRegistry, runCustomerServiceHarnessStep } from '@rental/agent-core'
+import {
+  createDefaultToolRegistry,
+  normalizeEvalHistory,
+  runCustomerServiceHarnessStep,
+} from '@rental/agent-core'
 import { getRepos, newId } from '@/lib/db'
+import { scheduleTraceEvaluation } from '@/lib/eval-chain'
 import { createPlaygroundModelFn } from '@/lib/llm'
 
 // Playground endpoint: drives one bounded customer-service Harness step end to end.
@@ -38,7 +43,7 @@ export async function POST(request: Request) {
   }
   const input = parsed.data
 
-  const { sessions, traces, memory, sqliteEnabled } = getRepos()
+  const { sessions, traces, reviews, failures, memory, sqliteEnabled } = getRepos()
   const conversationId =
     input.conversationId ?? `${input.customerId}:${input.productId ?? 'general'}`
 
@@ -101,7 +106,7 @@ export async function POST(request: Request) {
   const result = harness.step
 
   // 5. Persist trace + update session status. One trace row per user turn.
-  traces.append({
+  const trace = traces.append({
     id: traceId,
     sessionId: session.id,
     eventType: 'agent_reply_sent',
@@ -143,6 +148,27 @@ export async function POST(request: Request) {
     memory.appendRecentMessages(
       { customerId: input.customerId, productId: input.productId ?? 'general', conversationId },
       turn,
+    )
+  }
+
+  // 5c. Eval flywheel, first half (PRD §10/§13): fire-and-forget LLM-judge on
+  //     the persisted trace — review lands in trace_reviews, low scores promote
+  //     a failure_case (lib/eval-chain, which also backfills a couple of
+  //     unevaluated traces). Never blocks the response; without OPENAI_API_KEY
+  //     it silently no-ops. Gated on SQLite like 5b: in JSON-only mode the
+  //     review repos are ephemeral no-ops, so judging would burn tokens for
+  //     nothing.
+  if (sqliteEnabled && result.reply) {
+    scheduleTraceEvaluation(
+      { traces, reviews, failures },
+      {
+        trace,
+        history: [
+          ...normalizeEvalHistory(snapshot.recentMessages),
+          { role: 'user', content: input.question },
+        ],
+        reply: result.reply,
+      },
     )
   }
 

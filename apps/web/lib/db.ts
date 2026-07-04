@@ -155,8 +155,9 @@ function createInMemoryTraceRepo(): TraceRepository {
 }
 
 function createInMemoryTraceReviewRepo(): TraceReviewRepository {
-  // Minimal no-op fallback for JSON-only mode; the async eval path checks
-  // sqliteEnabled before writing reviews, so this is only for type alignment.
+  // Minimal no-op fallback for JSON-only mode; the async eval path
+  // (playground route 5c) checks sqliteEnabled before scheduling evaluation,
+  // so this is only for type alignment and the dashboard's empty state.
   return {
     append(input) {
       return {
@@ -172,6 +173,9 @@ function createInMemoryTraceReviewRepo(): TraceReviewRepository {
       }
     },
     findByTrace() {
+      return []
+    },
+    listRecent() {
       return []
     },
   }

@@ -1,11 +1,15 @@
 import Link from 'next/link'
+import { DEFAULT_FAILURE_SCORE_THRESHOLD } from '@rental/agent-core'
+import type { TraceReview } from '@rental/db'
+import { getRepos } from '@/lib/db'
 import { SellerNavigation } from '../components/seller/SellerNavigation'
 import { SELLER_ORDERS } from '../components/seller/orderData'
 
-const REVIEW_ROWS = [
-  { version: 'v1-current', count: 18, score: '8.4', low: '1', errors: '0' },
-  { version: 'v0-legacy', count: 11, score: '7.7', low: '2', errors: '1' },
-]
+// 评测数据必须每次请求现读 trace_reviews，不能在 build 时被静态化成空态。
+export const dynamic = 'force-dynamic'
+
+const EMPTY_HINT =
+  '暂无评测数据：在 Playground 对话后由 LLM-judge 异步生成（需 CHATTY_SQLITE=1 并配置 OPENAI_API_KEY）'
 
 const KNOWLEDGE_BUCKETS = [
   { label: '规则政策', value: 12, hint: '租赁、押金、物流、退换' },
@@ -13,8 +17,56 @@ const KNOWLEDGE_BUCKETS = [
   { label: '历史问答', value: 24, hint: '客服沉淀的常见回复' },
 ]
 
-/** Restores the original dashboard's business structure: reviews, conversations and knowledge. */
+/** 汇总真实 reviews：总数、平均分、低分数与最新 promptVersion。 */
+function summarizeReviews(reviews: TraceReview[]) {
+  const total = reviews.length
+  const avg = total ? reviews.reduce((sum, r) => sum + r.score, 0) / total : undefined
+  const low = reviews.filter((r) => r.score < DEFAULT_FAILURE_SCORE_THRESHOLD).length
+  const latestVersion = reviews.find((r) => r.promptVersion)?.promptVersion
+  return { total, avg, low, latestVersion }
+}
+
+/** 按 promptVersion 分组出版本对比行（newest-first 输入，保持首次出现顺序）。 */
+function groupByVersion(reviews: TraceReview[]) {
+  const rows = new Map<string, { count: number; sum: number; low: number }>()
+  for (const review of reviews) {
+    const version = review.promptVersion ?? 'unknown'
+    const row = rows.get(version) ?? { count: 0, sum: 0, low: 0 }
+    row.count += 1
+    row.sum += review.score
+    if (review.score < DEFAULT_FAILURE_SCORE_THRESHOLD) row.low += 1
+    rows.set(version, row)
+  }
+  return [...rows.entries()].map(([version, row]) => ({
+    version,
+    count: row.count,
+    avg: (row.sum / row.count).toFixed(1),
+    low: row.low,
+  }))
+}
+
+/** 统计 reviews 里某个字符串数组字段的高频条目（如 issues/suggestions）。 */
+function topEntries(reviews: TraceReview[], pick: (r: TraceReview) => string[], limit = 5) {
+  const counts = new Map<string, number>()
+  for (const review of reviews) {
+    for (const entry of pick(review)) {
+      counts.set(entry, (counts.get(entry) ?? 0) + 1)
+    }
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([text, count]) => ({ text, count }))
+}
+
+/** 后台视图：评测中枢读真实 trace_reviews 聚合，会话/知识面板沿用卖家演示数据。 */
 export default function DashboardPage() {
+  const reviews = getRepos().reviews.listRecent(100)
+  const stats = summarizeReviews(reviews)
+  const versionRows = groupByVersion(reviews)
+  const topIssues = topEntries(reviews, (r) => r.issues)
+  const topSuggestions = topEntries(reviews, (r) => r.suggestions)
+  const recentReviews = reviews.slice(0, 3)
   const selected = SELLER_ORDERS[0]
   return (
     <main className="seller-dashboard">
@@ -33,23 +85,23 @@ export default function DashboardPage() {
       <section className="dashboard-cards">
         <article>
           <span>当前版本</span>
-          <strong>v1-current</strong>
-          <p>当前客服策略版本</p>
+          <strong>{stats.latestVersion ?? '—'}</strong>
+          <p>最近一次评测的 promptVersion</p>
         </article>
         <article>
           <span>评价总数</span>
-          <strong>29</strong>
-          <p>{SELLER_ORDERS.length} 个会话样本</p>
+          <strong>{stats.total}</strong>
+          <p>trace_reviews 表实时统计</p>
         </article>
         <article>
           <span>平均分</span>
-          <strong>8.4</strong>
+          <strong>{stats.avg === undefined ? '—' : stats.avg.toFixed(1)}</strong>
           <p>低分样本需要复盘</p>
         </article>
         <article>
-          <span>知识片段</span>
-          <strong>44</strong>
-          <p>规则 / 商品 / 历史问答</p>
+          <span>低分样本</span>
+          <strong>{stats.low}</strong>
+          <p>{`score < ${DEFAULT_FAILURE_SCORE_THRESHOLD} 自动晋升 failure_case`}</p>
         </article>
       </section>
 
@@ -57,7 +109,7 @@ export default function DashboardPage() {
         <aside className="dashboard-panel">
           <div className="dashboard-panel-head">
             <h2>会话列表</h2>
-            <span>LIVE · 自动刷新</span>
+            <span>DEMO 样例数据</span>
           </div>
           <div className="dashboard-conv-list">
             {SELLER_ORDERS.map((order) => (
@@ -100,14 +152,18 @@ export default function DashboardPage() {
           </div>
           <div className="dashboard-review">
             <h3>评估历史</h3>
-            <article>
-              <strong>8.6</strong>
-              <p>回复覆盖价格、档期和尺码复核，但下单 CTA 还可以更明确。</p>
-            </article>
-            <article>
-              <strong>7.8</strong>
-              <p>用户已经给出体型时，应减少重复追问，直接推进复核。</p>
-            </article>
+            {recentReviews.length === 0 ? (
+              <p>{EMPTY_HINT}</p>
+            ) : (
+              recentReviews.map((review) => (
+                <article key={review.id}>
+                  <strong>{review.score.toFixed(1)}</strong>
+                  <p>
+                    {[...review.issues, ...review.suggestions].join('；') || '无问题与建议记录'}
+                  </p>
+                </article>
+              ))
+            )}
           </div>
         </section>
       </section>
@@ -119,15 +175,18 @@ export default function DashboardPage() {
             <span>Prompt Version Benchmark</span>
           </div>
           <div className="dashboard-version-table">
-            {REVIEW_ROWS.map((row) => (
-              <div key={row.version}>
-                <strong>{row.version}</strong>
-                <span>{row.count} reviews</span>
-                <span>avg {row.score}</span>
-                <span>low {row.low}</span>
-                <span>err {row.errors}</span>
-              </div>
-            ))}
+            {versionRows.length === 0 ? (
+              <p>{EMPTY_HINT}</p>
+            ) : (
+              versionRows.map((row) => (
+                <div key={row.version}>
+                  <strong>{row.version}</strong>
+                  <span>{row.count} reviews</span>
+                  <span>avg {row.avg}</span>
+                  <span>low {row.low}</span>
+                </div>
+              ))
+            )}
           </div>
         </section>
 
@@ -156,22 +215,34 @@ export default function DashboardPage() {
       <section className="dashboard-two-col">
         <section className="dashboard-panel">
           <div className="dashboard-panel-head">
-            <h2>高频问题 Top 10</h2>
+            <h2>高频问题 Top {topIssues.length || 5}</h2>
           </div>
           <ul className="dashboard-list">
-            <li>价格说明不够明确</li>
-            <li>用户给出档期后仍重复追问</li>
-            <li>尺码复核前缺少人工确认提示</li>
+            {topIssues.length === 0 ? (
+              <li>{EMPTY_HINT}</li>
+            ) : (
+              topIssues.map((item) => (
+                <li key={item.text}>
+                  {item.text}（{item.count} 次）
+                </li>
+              ))
+            )}
           </ul>
         </section>
         <section className="dashboard-panel">
           <div className="dashboard-panel-head">
-            <h2>高频建议 Top 10</h2>
+            <h2>高频建议 Top {topSuggestions.length || 5}</h2>
           </div>
           <ul className="dashboard-list">
-            <li>把首日价、续租价和押金拆开写</li>
-            <li>显式告诉卖家下一步是否需要复核</li>
-            <li>售后问题优先转人工并带上上下文</li>
+            {topSuggestions.length === 0 ? (
+              <li>{EMPTY_HINT}</li>
+            ) : (
+              topSuggestions.map((item) => (
+                <li key={item.text}>
+                  {item.text}（{item.count} 次）
+                </li>
+              ))
+            )}
           </ul>
         </section>
       </section>
