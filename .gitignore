@@ -20,6 +20,10 @@ data/
 *.sqlite3
 rag-service/public/dashboard/
 
+# eval 产物：报告（pnpm eval --save 生成）与每场景 tmp SQLite，均不入库
+eval/reports/
+eval/.tmp/
+
 # eval 产物（运行 npm run eval --save 生成的报告，不入库）；
 # iter4.json 是提交入库的金标回归基线，CI --baseline iter4 依赖它
 rag-service/tests/reports/*

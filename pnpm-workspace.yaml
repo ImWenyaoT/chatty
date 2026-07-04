@@ -1,7 +1,6 @@
 packages:
   - 'packages/*'
   - 'apps/*'
-  - 'rag-service'
 allowBuilds:
   better-sqlite3: true
   esbuild: true

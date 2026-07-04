@@ -1,8 +1,9 @@
 # harness 版金标场景（B4，docs/agentic-search-design.md §5.3–§5.4）
 
-本目录是 `pnpm eval -- --target harness` 读取的场景集。legacy 版原文件
-（`../golden/`）保持不动，直到 B5/R4 退役。每个 YAML 头部注释逐场景说明了
-与 legacy 版的语义等价性（映射依据 §5.3：质量不变量→行为断言；可映射的
+本目录是 `pnpm eval` 读取的金标场景集（harness lane，唯一活路径）。legacy 版
+场景集与 legacy lane 已随整个 rag-service 于 R5 删除（迁移账本见
+docs/loop-engineering-plan.md §16）。每个 YAML 头部注释仍逐场景保留与当年
+legacy 版的语义等价性说明作为溯源（映射依据 §5.3：质量不变量→行为断言；可映射的
 action→harness action kind 映射表；其余逐场景定夺）。
 
 ## action 映射表（§5.3 初表 + B4 定夺项）
