@@ -2,20 +2,16 @@ import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import {
-  createFailureCaseRepository,
   createKnowledgeRepository,
   createMemoryRepository,
   createSessionRepository,
   createTraceRepository,
-  createTraceReviewRepository,
   openDatabase,
   syncKnowledgeIndex,
-  type FailureCaseRepository,
   type KnowledgeRepository,
   type MemoryRepository,
   type SessionRepository,
   type TraceRepository,
-  type TraceReviewRepository,
 } from '@rental/db'
 
 // One SQLite connection per server process. The agent loop is single-process
@@ -26,8 +22,6 @@ import {
 interface Repos {
   sessions: SessionRepository
   traces: TraceRepository
-  reviews: TraceReviewRepository
-  failures: FailureCaseRepository
   memory: MemoryRepository
   knowledge: KnowledgeRepository
 }
@@ -49,8 +43,6 @@ function ensureInitialized(): Repos {
   repos = {
     sessions: createSessionRepository(db),
     traces: createTraceRepository(db),
-    reviews: createTraceReviewRepository(db),
-    failures: createFailureCaseRepository(db),
     memory: createMemoryRepository(db, {
       legacyMemoryPath: path.resolve('rag-service/data/memory-store.json'),
     }),
@@ -64,7 +56,7 @@ export function getRepos(): Repos {
   return ensureInitialized()
 }
 
-/** Generates a prefixed unique id for sessions/traces/reviews/failure cases. */
+/** Generates a prefixed unique id for sessions/traces. */
 export function newId(prefix: string): string {
   return `${prefix}_${randomUUID()}`
 }

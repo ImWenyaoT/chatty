@@ -51,36 +51,6 @@ CREATE TABLE IF NOT EXISTS agent_traces (
 CREATE INDEX IF NOT EXISTS idx_agent_traces_session
   ON agent_traces (session_id, created_at);
 
-CREATE TABLE IF NOT EXISTS trace_reviews (
-  id TEXT PRIMARY KEY,
-  trace_id TEXT NOT NULL REFERENCES agent_traces(id) ON DELETE CASCADE,
-  score INTEGER NOT NULL,
-  issues_json TEXT NOT NULL DEFAULT '[]',
-  suggestions_json TEXT NOT NULL DEFAULT '[]',
-  suggested_reply TEXT,
-  evaluator_model TEXT,
-  prompt_version TEXT,
-  created_at TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_trace_reviews_trace
-  ON trace_reviews (trace_id);
-
-CREATE TABLE IF NOT EXISTS failure_cases (
-  id TEXT PRIMARY KEY,
-  trace_id TEXT NOT NULL REFERENCES agent_traces(id) ON DELETE CASCADE,
-  session_id TEXT NOT NULL REFERENCES agent_sessions(id) ON DELETE CASCADE,
-  score INTEGER NOT NULL,
-  issues_json TEXT NOT NULL DEFAULT '[]',
-  input_json TEXT NOT NULL,
-  output_json TEXT,
-  status TEXT NOT NULL DEFAULT 'open',
-  created_at TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_failure_cases_status
-  ON failure_cases (status);
-
 -- 知识库全文索引（docs/agentic-search-design.md §2.1）：单 FTS5 虚拟表，
 -- trigram tokenizer（§2.2），元数据列 UNINDEXED，chunk_id 即 rowid。
 CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_chunks USING fts5(

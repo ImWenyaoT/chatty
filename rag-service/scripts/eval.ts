@@ -1,18 +1,18 @@
 // 金标回归测试运行器（双目标，docs/agentic-search-design.md §5）。
 // 用法：
-//   pnpm eval                                    # legacy lane：跑全部场景
-//   pnpm eval -- --target harness                # harness lane：进程内直调 harness 步
+//   pnpm eval                                    # harness lane（默认，当前路径）：跑全部场景
+//   pnpm eval -- --target legacy                 # legacy lane：冻结的 answerQuestion 直调，作对照
 //   pnpm eval -- --filter happy-path             # 只跑匹配的场景
 //   pnpm eval -- --save v1                       # 跑完把结果存到 tests/reports/v1.json
 //   pnpm eval -- --baseline v1                   # 跑完和 tests/reports/v1.json 对比
 //
 // 双目标（§5.1 E1）：被测面抽象为 sendTurn(target, scenario, question)，
-//   --target legacy  : 现有 answerQuestion 进程内直调（原路径不动），场景在 tests/golden/，
-//                      评分沿用 memory-store 异步评估 + flush 后按 evaluatedReply 回填；
 //   --target harness : runCustomerServiceHarnessStep 进程内直调（复刻 route.ts 步骤
 //                      2→4→5b，去 HTTP/auth/trace 持久化），场景在 tests/golden-harness/，
 //                      每场景独立 tmp SQLite（§5.2），judge 由 runner 同步调用回填分数。
-//                      需先 pnpm build:skeleton（@rental/* 从 dist 解析）。
+//                      需先 pnpm build:skeleton（@rental/* 从 dist 解析）。这是默认 lane。
+//   --target legacy  : 冻结的 answerQuestion 进程内直调（原路径不动），场景在 tests/golden/，
+//                      评分沿用 memory-store 异步评估 + flush 后按 evaluatedReply 回填；仅作对照。
 //
 // 注意：legacy lane 会覆盖写入 tests/.tmp/memory-store.json 作为隔离的记忆库，
 //       不会污染 data/memory-store.json；harness lane 的 tmp SQLite 也在 tests/.tmp/。
@@ -660,7 +660,8 @@ async function main() {
   const repeat = Math.max(1, Number(args.repeat ?? 1) || 1)
   // 场景并发数（仅 harness 目标生效）。默认 6，兼顾墙钟与 DeepSeek 速率限制。
   const concurrency = Math.max(1, Number(args.concurrency ?? 6) || 6)
-  const target = (args.target ?? 'legacy') as EvalTarget
+  // 默认走 harness lane（agentic search 上线后的当前路径）；legacy 作对照，显式 --target legacy。
+  const target = (args.target ?? 'harness') as EvalTarget
   if (target !== 'legacy' && target !== 'harness') {
     console.error(`unknown --target ${String(args.target)}（只支持 legacy | harness）`)
     process.exit(1)
