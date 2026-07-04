@@ -41,12 +41,8 @@ export default function OrdersPage() {
       <SellerNavigation active="orders" />
       <header className="orders-header">
         <div>
-          <p>ORDER OPS</p>
+          <p>ORDER OPS · 演示数据</p>
           <h1>订单管理</h1>
-        </div>
-        <div className="orders-actions">
-          <button type="button">导出</button>
-          <button type="button">同步平台订单</button>
         </div>
       </header>
 
@@ -132,20 +128,6 @@ export default function OrdersPage() {
                   <strong>{selected.risk}</strong>
                 </div>
               </div>
-            </section>
-            <section>
-              <h3>手动录单</h3>
-              <form className="manual-order-form">
-                <label>
-                  <span>conversationId</span>
-                  <input defaultValue={`${selected.customer}:SUIT-001`} />
-                </label>
-                <label>
-                  <span>订单号</span>
-                  <input defaultValue={selected.id} />
-                </label>
-                <button type="button">提交订单号，标记已下单</button>
-              </form>
             </section>
           </div>
 

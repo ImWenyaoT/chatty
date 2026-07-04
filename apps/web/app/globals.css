@@ -363,8 +363,7 @@ a {
   gap: 8px;
 }
 
-.dashboard-actions a,
-.dashboard-search-row button {
+.dashboard-actions a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -517,23 +516,6 @@ a {
   font-weight: 500;
 }
 
-.dashboard-search-row {
-  display: flex;
-  gap: 8px;
-  padding: 0 14px 14px;
-}
-
-.dashboard-search-row input {
-  flex: 1;
-  min-width: 0;
-  height: 34px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
-  color: var(--text-primary);
-}
-
 .dashboard-list {
   display: grid;
   gap: 8px;
@@ -616,14 +598,7 @@ textarea:focus-visible {
   font-weight: 500;
 }
 
-.orders-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.orders-actions button,
-.orders-filter button,
-.manual-order-form button {
+.orders-filter button {
   height: 32px;
   padding: 0 12px;
   border: 1px solid var(--border);
@@ -636,9 +611,7 @@ textarea:focus-visible {
   cursor: pointer;
 }
 
-.orders-actions button:hover,
-.orders-filter button:hover,
-.manual-order-form button:hover {
+.orders-filter button:hover {
   background: var(--ds-gray-100);
 }
 
@@ -664,8 +637,7 @@ textarea:focus-visible {
   margin-bottom: 12px;
 }
 
-.orders-filter input,
-.manual-order-form input {
+.orders-filter input {
   min-width: 0;
   height: 32px;
   padding: 0 8px;
@@ -784,7 +756,7 @@ textarea:focus-visible {
 
 .order-sections {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   margin-top: 16px;
 }
@@ -804,26 +776,6 @@ textarea:focus-visible {
   font-size: 14px;
   line-height: 18px;
   font-weight: 500;
-}
-
-.manual-order-form {
-  display: grid;
-  gap: 10px;
-}
-
-.manual-order-form label {
-  display: grid;
-  gap: 6px;
-}
-
-.manual-order-form span {
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 16px;
-}
-
-.manual-order-form button {
-  width: fit-content;
 }
 
 .fulfillment-board,
@@ -884,9 +836,6 @@ textarea:focus-visible {
 @media (max-width: 1100px) {
   .order-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .order-sections {
-    grid-template-columns: 1fr;
   }
   .fulfillment-steps {
     grid-template-columns: repeat(4, minmax(0, 1fr));

@@ -86,7 +86,6 @@ export const legacyChatInputSchema = z
     question: z.string(),
     imageUrl: z.string().min(1).optional(),
     sessionContext: z.record(z.string(), jsonPrimitiveSchema).optional(),
-    stylistPrompt: z.string().min(1).optional(),
   })
   // 与 legacy /chat 的校验语义保持一致：文字和图片至少要有一样
   .refine((data) => data.question.trim().length > 0 || data.imageUrl, {

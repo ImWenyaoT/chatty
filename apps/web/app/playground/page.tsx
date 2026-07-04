@@ -145,7 +145,6 @@ export default function LegacyConsolePage() {
   const [question, setQuestion] = useState('')
   const [imageUrl, setImageUrl] = useState('')
   const [sessionContext, setSessionContext] = useState('{"channel":"playground","sellerMode":true}')
-  const [stylistPrompt, setStylistPrompt] = useState('保持卖家客服口吻：先确认事实，再给下一步。')
   const [turns, setTurns] = useState<ChatTurn[]>([])
   const [status, setStatus] = useState('页面已加载，等待前端事件。')
   const [debugLog, setDebugLog] = useState<string[]>(['页面已加载，等待前端事件。'])
@@ -406,13 +405,6 @@ export default function LegacyConsolePage() {
                 <textarea
                   value={sessionContext}
                   onChange={(event) => setSessionContext(event.target.value)}
-                />
-              </label>
-              <label>
-                店员风格提示词，可直接修改
-                <textarea
-                  value={stylistPrompt}
-                  onChange={(event) => setStylistPrompt(event.target.value)}
                 />
               </label>
             </details>

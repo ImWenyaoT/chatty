@@ -9,7 +9,7 @@ import { SELLER_ORDERS } from '../components/seller/orderData'
 export const dynamic = 'force-dynamic'
 
 const EMPTY_HINT =
-  '暂无评测数据：在 Playground 对话后由 LLM-judge 异步生成（需 CHATTY_SQLITE=1 并配置 OPENAI_API_KEY）'
+  '暂无评测数据：在 Playground 对话后由 LLM-judge 异步生成（需配置 OPENAI_API_KEY）'
 
 const KNOWLEDGE_BUCKETS = [
   { label: '规则政策', value: 12, hint: '租赁、押金、物流、退换' },
@@ -192,8 +192,8 @@ export default function DashboardPage() {
 
         <section className="dashboard-panel">
           <div className="dashboard-panel-head">
-            <h2>知识库管理</h2>
-            <span>查看、检索、新增与删除知识片段</span>
+            <h2>知识库概览</h2>
+            <span>DEMO 样例数据</span>
           </div>
           <div className="dashboard-knowledge">
             {KNOWLEDGE_BUCKETS.map((bucket) => (
@@ -203,11 +203,6 @@ export default function DashboardPage() {
                 <p>{bucket.hint}</p>
               </article>
             ))}
-          </div>
-          <div className="dashboard-search-row">
-            <input placeholder="按内容或标题搜索..." />
-            <button type="button">搜索</button>
-            <button type="button">新增知识</button>
           </div>
         </section>
       </section>

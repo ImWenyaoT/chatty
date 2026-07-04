@@ -73,8 +73,3 @@ export const SELLER_ORDERS: SellerOrder[] = [
     ],
   },
 ]
-
-/** Returns the seeded order currently used by the seller dashboard pages. */
-export function getPrimaryOrder() {
-  return SELLER_ORDERS[0]
-}

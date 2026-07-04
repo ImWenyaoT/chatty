@@ -111,7 +111,6 @@ export interface LegacyChatInput {
   question: string
   imageUrl?: string
   sessionContext?: Record<string, JsonPrimitive>
-  stylistPrompt?: string
 }
 
 export interface LegacyChatAnswer {
