@@ -88,17 +88,10 @@ export async function POST(request: Request) {
   // when CHATTY_LLM=1 and an API key is configured (Chat Completions adapter);
   // otherwise — and on any model failure — the deterministic composer answers,
   // so scheduler/context/executor/trace contracts never depend on a provider.
-  const harnessMemory = {
-    customerId: input.customerId,
-    conversationId,
-    productId: input.productId,
-    customerMemory: snapshot.customerMemory,
-    productMemory: snapshot.productMemory,
-    recentMessages: snapshot.recentMessages,
-  }
+  // The snapshot record is a structural superset of the harness MemorySnapshot.
   const harness = await runCustomerServiceHarnessStep({
     event,
-    memory: harnessMemory,
+    memory: snapshot,
     registry: createDefaultToolRegistry(),
     sessionStatus: session.status,
     modelFn: createPlaygroundModelFn(),

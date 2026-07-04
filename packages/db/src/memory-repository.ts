@@ -1,5 +1,5 @@
 import { readFileSync, existsSync } from 'node:fs'
-import type { JsonValue } from '@rental/shared'
+import type { JsonValue, MemorySnapshot } from '@rental/shared'
 import type { Db } from './database.js'
 import { nowIso } from './database.js'
 
@@ -8,8 +8,8 @@ import { nowIso } from './database.js'
  * (docs §6.3), with a read-only fallback to the legacy rag-service
  * `memory-store.json` so the new loop can read continuity without a migration.
  *
- * Write path is gated behind the CHATTY_SQLITE flag so legacy behaviour is
- * preserved while the SQLite write path is being proven.
+ * SQLite is the only write path; the legacy JSON store remains read-only
+ * fallback evidence for cross-migration continuity.
  */
 export interface MemoryRepository {
   getCustomer(customerId: string): CustomerMemoryRecord | undefined
@@ -93,13 +93,8 @@ export interface SnapshotInput {
   productId?: string
 }
 
-export interface MemorySnapshotRecord {
-  customerId: string
-  conversationId: string
-  productId?: string
-  customerMemory?: JsonValue
-  productMemory?: JsonValue
-  recentMessages: JsonValue[]
+/** 共享 MemorySnapshot（harness 消费的 6 字段）+ db 层派生的完整记忆字段。 */
+export interface MemorySnapshotRecord extends MemorySnapshot {
   /** 会话级 slot 画像（conversation_profile_json 反序列化），未知时为 {} */
   conversationProfile: JsonValue
   /** 客户体型档案列表（body_profiles_json 反序列化），未知时为 [] */
