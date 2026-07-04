@@ -433,7 +433,7 @@ No Figma or Canva links have been added yet.
 
 | 能力 | 边界接口 | 状态 | 下一步 |
 |---|---|---|---|
-| 回答路径 answerQuestion | `LegacyRagService`（in-process 注入） | 🔴 未接线——生产 playground 走确定性 `createCustomerServiceModelOutput`，不调用任何 LLM；loop-runner 及该注入位无生产调用方 | 后续批次真接线（loop 的 ask_info 走它），届时更新本行 |
+| 回答路径 answerQuestion | compose 步的 `CustomerServiceModelFn`（playground route 注入 Chat Completions adapter） | 🟡 部分接线——`CHATTY_LLM=1` 且配置 `OPENAI_API_KEY` 时 compose 走真 LLM，未开启或模型调用失败回退确定性 `createCustomerServiceModelOutput`；尚未接 legacy 的知识检索。旧 loop-runner / Agents SDK lane（含 `LegacyRagService` 注入位与 `@openai/agents` 依赖）已整体删除 | 给 compose 上下文接入知识检索，再拿金标场景对齐后替换 legacy answerQuestion |
 | 评估器 LLM-judge | `Evaluator`（`loadLegacyEvaluator`） | 🔴 未接线——`loadLegacyEvaluator` 全仓零调用方，异步评分闭环不存在；仅 golden 晋升 CLI（`promote:failure-case`）可用 | 先接线异步评分，再谈换 judge 交叉复评 |
 | 知识检索 searchKnowledge | 曾有 `KnowledgeAdapter` | ⚪ 边界已删（零消费方）；检索仍在 legacy answerQuestion 内部 | 若把检索提出 loop，再随消费方重建边界 |
 | 会话记忆 | `MemoryRepository`（SQLite + JSON 只读回退） | 🟡 仅 recentMessages 双写；profile 字段仍由 legacy 写 JSON | profile 写路径迁 SQLite JSON 列 |

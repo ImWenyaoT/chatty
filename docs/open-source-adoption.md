@@ -13,9 +13,9 @@ Investigated for the WF1 (eval loop) / WF2 (Agents SDK) / WF3 (tools) workstream
 
 | Package | Version | License | Source | Status | Notes |
 |---------|---------|---------|--------|--------|-------|
-| `@openai/agents` | 0.12.0 | MIT | npm (OpenAI official TS SDK) | Adopted | Already in `packages/llm` deps. Real adapter implemented in `agents-sdk-adapter.ts`. API surface used: `Agent`, `run`, `tool`, `result.finalOutput`, `result.lastAgent`. Validated 0.12.0 is the current published line. |
+| `@openai/agents` | 0.12.0 | MIT | npm (OpenAI official TS SDK) | Removed (2026-07) | Adapter lane (`agents-sdk-adapter.ts`) was deleted before gaining any production caller; the compose path now uses the Chat Completions adapter directly. |
 | `openai` | ^6.45.0 | MIT | npm | Adopted (existing) | Dual-provider client construction in `client-from-env.ts`. |
-| `zod` | ^4.4.3 (workspace) | MIT | npm | Adopted (existing) | Playbook schema + agentsSdkRunInputSchema validation. |
+| `zod` | ^4.4.3 (workspace) | MIT | npm | Adopted (existing) | Input schema validation in `@rental/shared` / apps/web. |
 | `better-sqlite3` | (existing) | MIT | npm | Adopted (existing) | SQLite repositories. |
 
 ### Investigated, NOT adopted (with rationale)
