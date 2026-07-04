@@ -16,6 +16,11 @@
 //
 // 注意：legacy lane 会覆盖写入 tests/.tmp/memory-store.json 作为隔离的记忆库，
 //       不会污染 data/memory-store.json；harness lane 的 tmp SQLite 也在 tests/.tmp/。
+//
+// 模型选择（§5.1，双 lane 解耦）：默认两条 lane 都读 CHAT_MODEL；可用 LEGACY_CHAT_MODEL /
+//   HARNESS_CHAT_MODEL 按 --target 分别覆盖（见 eval-env.ts）。legacy 的强制 tool_choice
+//   不被 thinking 档（deepseek-v4-pro）接受，复现红线 4 平价时给 LEGACY_CHAT_MODEL 一个支持
+//   tool_choice 的非 thinking 模型，harness 仍 CHAT_MODEL=deepseek-v4-pro。
 
 // ⚠️ 必须是第一条 import：在 src/config 被求值前把 MEMORY_STORE_PATH 设好，
 // 否则 ESM import 提升会让 config 先拿到默认值 data/，eval 误写生产库且隔离失效。
