@@ -44,7 +44,7 @@ jobs:
       - name: Lint (biome)
         run: pnpm lint
 
-      - name: Smoke test (data path incl. flywheel promotion, no network)
+      - name: Smoke test (core data path, no network)
         run: node scripts/smoke.mts
 
       - name: Test workspaces

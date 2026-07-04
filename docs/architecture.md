@@ -25,8 +25,8 @@ Status: **重写设计提案（编号 RW-1，未实施）** — 本文档是 leg
 | F2 | 有界 agent loop：每请求一次路由决策，reply / handoff / tool 三种终止性 | loop 单测 + smoke |
 | F3 | 工具层：风险分级（low/medium/high）+ 审批门（Agents SDK lane 已于 2026-07 删除，安全门收敛为 policy 审批） | 安全不变量单测 |
 | F4 | 记忆：slot 化 ConversationProfile + 消息滑窗 + SQLite 持久化 | db 单测 + 金标 profile 断言 |
-| F5 | 知识检索：本地向量库（cosine），以 low-risk tool 形态暴露给 loop | 单测（stub embeddings） |
-| F6 | 评测飞轮：LLM-judge 评分 → failure_case → golden 晋升 → 回归 | smoke 真转一圈 + promote CLI |
+| F5 | 知识检索：agentic search（SQLite FTS5 + `search_knowledge` 工具 + 有界循环），以 low-risk tool 形态暴露给 loop | search_knowledge 单测 + 金标检索场景 |
+| F6 | 质量回归：朴素金标回归（`pnpm eval --target harness`，judge 同步回填分数） | 金标场景结构+minScore 断言 |
 | F7 | 观测：trace 落库（含真实 toolCalls 与 handoff 原因），playground 展示 loop 状态 | route 集成路径 + UI |
 
 ## 2. 包结构（模块层）
@@ -47,10 +47,10 @@ Status: **重写设计提案（编号 RW-1，未实施）** — 本文档是 leg
   **不 import 任何 SDK/HTTP/fs 运行时依赖**（prompts/catalog 以解析好的对象注入）。
 - **@rental/llm**：OpenAI 兼容适配器；实现 domain 的三个 LLM 端口 + embeddings +
   本地向量知识库实现（Agents SDK lane 已随 2026-07 清理删除，不在重写范围）。
-- **@rental/db**：SQLite repositories（session/trace/review/failure_case/memory）。
+- **@rental/db**：SQLite repositories（session/trace/memory/knowledge）。
   memory 扩展为完整 profile 持久化（conversation_profile_json 列已在 schema）。
-- **@rental/agent-core**：有界 loop、意图分类、工具 registry + policy、失败用例策略、
-  golden 导出。`ask_info` 通过 `DialogueEngine` 端口调用 domain（替换原 LegacyRagService）。
+- **@rental/agent-core**：有界 loop、意图分类、工具 registry + policy、judge、
+  `search_knowledge` 工具。`ask_info` 通过 `DialogueEngine` 端口调用 domain（替换原 LegacyRagService）。
 - **apps/web**：Next.js playground（UI + /api/playground 组合根）。
 - **evals/**（根目录）：金标 YAML + runner + reports + 晋升 CLI。runner 直调 domain
   引擎（in-process）；结构断言（action/stage/profile/contains/notContains/notSameAsPrev）
@@ -120,8 +120,9 @@ export interface MemoryPort {
 
 SQLite 是唯一持久层（better-sqlite3，`CHATTY_DB_PATH`，缺省 `data/chatty.db`；
 测试用 `:memory:`）。JSON 文件记忆库随 legacy 删除，CHATTY_SQLITE 开关退役。
-六表不变：agent_sessions / customer_memories / product_memories / agent_traces /
-trace_reviews / failure_cases。memory repository 接管完整 profile 读写
+现有表：agent_sessions / customer_memories / product_memories / agent_traces /
+knowledge_chunks（FTS5）/ knowledge_index_meta（trace_reviews / failure_cases 随评测飞轮
+2026-07 退役删除）。memory repository 接管完整 profile 读写
 （现状：新 loop 仅持久化 recentMessages，profile 写入仍在 legacy）。
 
 ## 6. Loop 与工具
@@ -140,7 +141,8 @@ collect_missing_info / check_availability / follow_up / handoff。原 loop-runne
   `pnpm eval:full`（真实 LLM + judge minScore，手动/eval.yml workflow）。
 - 结构断言 = action/actionIn/stage/stageIn/profile 字段/contains/notContains/
   notSameAsPrev；判分断言 = minScore（--repeat 聚合抗噪，--baseline 版本对比）。
-- 飞轮：trace → review → failure_case → `pnpm promote:failure-case` → evals/golden/。
+- 评测飞轮（trace 自动评分 → failure_case → golden 自动晋升）已于 2026-07 退役：
+  质量回归收敛为朴素金标（`pnpm eval --target harness`），无自喂闭环。
 - 历史报告（6/11→11/11 迭代轨迹）保留在 evals/reports/，标注产自重写前实现——
   金标场景本身是跨实现的连续性证据。
 
