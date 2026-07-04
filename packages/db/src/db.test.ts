@@ -447,6 +447,26 @@ test('trace review repository: append then findByTrace round-trip', () => {
   assert.equal(byTrace[0].id, 'rev-1')
 })
 
+test('trace review repository: listRecent returns newest-first across traces with limit', () => {
+  const db = freshDb()
+  const sessions = createSessionRepository(db)
+  const traces = createTraceRepository(db)
+  const reviews = createTraceReviewRepository(db)
+  sessions.create({ id: 'sess-lr', customerId: 'clr', conversationId: 'clr:SUIT-001' })
+  traces.append({ id: 'tr-lr-1', sessionId: 'sess-lr', eventType: 'agent_reply_sent', input: {} })
+  traces.append({ id: 'tr-lr-2', sessionId: 'sess-lr', eventType: 'agent_reply_sent', input: {} })
+  reviews.append({ id: 'rev-lr-1', traceId: 'tr-lr-1', score: 8 })
+  reviews.append({ id: 'rev-lr-2', traceId: 'tr-lr-2', score: 5 })
+  reviews.append({ id: 'rev-lr-3', traceId: 'tr-lr-2', score: 9 })
+
+  const recent = reviews.listRecent()
+  assert.deepEqual(
+    recent.map((r) => r.id),
+    ['rev-lr-3', 'rev-lr-2', 'rev-lr-1'],
+  )
+  assert.equal(reviews.listRecent(2).length, 2)
+})
+
 test('trace repository: findUnevaluated excludes reviewed traces', () => {
   const db = freshDb()
   const sessions = createSessionRepository(db)

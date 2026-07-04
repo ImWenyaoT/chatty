@@ -64,6 +64,8 @@ function toTraceReview(row: TraceReviewRow): TraceReview {
 export interface TraceReviewRepository {
   append(input: NewTraceReview): TraceReview
   findByTrace(traceId: string): TraceReview[]
+  /** Newest-first recent reviews across all traces; feeds the dashboard eval center. */
+  listRecent(limit?: number): TraceReview[]
 }
 
 /**
@@ -96,6 +98,13 @@ export function createTraceReviewRepository(db: Db): TraceReviewRepository {
       const rows = db
         .prepare('SELECT * FROM trace_reviews WHERE trace_id = ? ORDER BY created_at ASC')
         .all(traceId) as TraceReviewRow[]
+      return rows.map(toTraceReview)
+    },
+
+    listRecent(limit = 50) {
+      const rows = db
+        .prepare('SELECT * FROM trace_reviews ORDER BY created_at DESC, rowid DESC LIMIT ?')
+        .all(limit) as TraceReviewRow[]
       return rows.map(toTraceReview)
     },
   }

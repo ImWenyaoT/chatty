@@ -102,7 +102,7 @@ export function createTraceRepository(db: Db): TraceRepository {
         .prepare(
           `SELECT t.* FROM agent_traces t
            WHERE NOT EXISTS (SELECT 1 FROM trace_reviews r WHERE r.trace_id = t.id)
-           ORDER BY t.created_at DESC LIMIT ?`,
+           ORDER BY t.created_at DESC, t.rowid DESC LIMIT ?`,
         )
         .all(limit) as TraceRow[]
       // newest-first is the natural eval queue order (process recent first).
