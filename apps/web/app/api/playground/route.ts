@@ -1,12 +1,8 @@
 import { NextResponse } from 'next/server'
 import { isPlaygroundAuthorized, legacyChatInputSchema } from '@rental/shared'
-import {
-  createDefaultToolRegistry,
-  createCustomerServiceModelOutput,
-  runCustomerServiceHarnessStep,
-  scheduleCustomerServiceTask,
-} from '@rental/agent-core'
+import { createDefaultToolRegistry, runCustomerServiceHarnessStep } from '@rental/agent-core'
 import { getRepos, newId } from '@/lib/db'
+import { createPlaygroundModelFn } from '@/lib/llm'
 
 // Playground endpoint: drives one bounded customer-service Harness step end to end.
 // Request:  POST { customerId, productId?, conversationId?, question, imageUrl? }
@@ -83,9 +79,10 @@ export async function POST(request: Request) {
     productId: input.productId,
   })
 
-  // 4. Run one bounded customer-service Harness step. The temporary composer is
-  // deterministic; later LLM prompting can replace createCustomerServiceModelOutput
-  // without changing scheduler/context/executor/trace contracts.
+  // 4. Run one bounded customer-service Harness step. Compose is LLM-backed
+  // when CHATTY_LLM=1 and an API key is configured (Chat Completions adapter);
+  // otherwise — and on any model failure — the deterministic composer answers,
+  // so scheduler/context/executor/trace contracts never depend on a provider.
   const harnessMemory = {
     customerId: input.customerId,
     conversationId,
@@ -94,20 +91,12 @@ export async function POST(request: Request) {
     productMemory: snapshot.productMemory,
     recentMessages: snapshot.recentMessages,
   }
-  const task = scheduleCustomerServiceTask({
-    event,
-    memory: harnessMemory,
-  })
   const harness = await runCustomerServiceHarnessStep({
     event,
     memory: harnessMemory,
     registry: createDefaultToolRegistry(),
     sessionStatus: session.status,
-    modelOutput: createCustomerServiceModelOutput({
-      event,
-      memory: harnessMemory,
-      task,
-    }),
+    modelFn: createPlaygroundModelFn(),
   })
   const result = harness.step
 

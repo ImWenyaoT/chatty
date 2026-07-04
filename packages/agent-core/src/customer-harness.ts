@@ -77,6 +77,19 @@ export interface CreateCustomerServiceModelOutputInput extends CustomerServiceTu
   task: CustomerServiceTask
 }
 
+/**
+ * Injectable model call for the compose step: takes the harness-built context
+ * prompt and returns the raw model reply text. Kept as a plain function so the
+ * harness stays testable without any LLM package or network access.
+ */
+export type CustomerServiceModelFn = (prompt: string) => Promise<string>
+
+export interface ComposeCustomerServiceModelOutputInput
+  extends CreateCustomerServiceModelOutputInput {
+  context: CustomerServiceContext
+  modelFn?: CustomerServiceModelFn
+}
+
 export interface ExecuteCustomerServiceActionInput {
   action: CustomerServiceAction
   registry: ToolRegistry
@@ -86,10 +99,25 @@ export interface ExecuteCustomerServiceActionInput {
 
 export interface RunCustomerServiceHarnessStepInput extends CustomerServiceTurnInput {
   registry: ToolRegistry
-  modelOutput: string
+  /** Pre-composed model output; when provided the compose step is skipped. */
+  modelOutput?: string
+  /** Optional LLM compose call; absent => deterministic composer. */
+  modelFn?: CustomerServiceModelFn
   sessionStatus?: AgentSessionStatus
   policy?: Policy
 }
+
+/**
+ * System instructions for the LLM compose path. Constrains the model to emit
+ * exactly the action JSON parseCustomerServiceOutput accepts; whatever the
+ * model asks for, tool execution still passes the executor's policy gate.
+ */
+export const CUSTOMER_SERVICE_COMPOSE_INSTRUCTIONS = [
+  '你是租赁电商的客服助手。根据给定的任务和上下文，只输出一个 JSON 对象（不要 markdown 代码块、不要解释文字）：',
+  '{"action": "...", "reply": "...", "toolName": "...", "toolArgs": {...}}',
+  'action 必须是以下之一：ask_missing_info / answer_question / check_availability / recommend_size / handoff / schedule_followup。',
+  'reply 是发给用户的中文回复。toolName/toolArgs 可选，仅在需要查库存（check_availability）、转人工（create_handoff）或安排跟进（schedule_followup）时给出。',
+].join('\n')
 
 /**
  * Schedules the next bounded customer-service task from the current user turn.
@@ -223,8 +251,8 @@ export function parseCustomerServiceOutput(raw: string): CustomerServiceAction {
 
 /**
  * Creates a constrained action JSON string from a scheduled customer-service
- * task. This keeps the playground path deterministic while the harness shape is
- * being proven; a later LLM adapter can replace only this composer.
+ * task. This is the deterministic composer: the default when no modelFn is
+ * injected, and the fallback when the injected LLM call fails.
  */
 export function createCustomerServiceModelOutput(
   input: CreateCustomerServiceModelOutputInput,
@@ -233,6 +261,26 @@ export function createCustomerServiceModelOutput(
   const productId = input.event.productId ?? input.memory.productId ?? 'general'
   const action = actionForTask(input.task, question, productId, input.event.conversationId)
   return JSON.stringify(action)
+}
+
+/**
+ * Compose step: when a modelFn is injected (e.g. a Chat Completions adapter
+ * behind CHATTY_LLM=1), the LLM writes the action JSON from the built context
+ * prompt; when absent, or on any model failure/empty reply, falls back to the
+ * deterministic composer so the harness never needs an API key to answer.
+ */
+export async function composeCustomerServiceModelOutput(
+  input: ComposeCustomerServiceModelOutputInput,
+): Promise<string> {
+  if (input.modelFn) {
+    try {
+      const output = await input.modelFn(input.context.prompt)
+      if (output.trim().length > 0) return output
+    } catch {
+      // fall through to the deterministic composer below
+    }
+  }
+  return createCustomerServiceModelOutput(input)
 }
 
 /**
@@ -298,14 +346,24 @@ export async function executeCustomerServiceAction(
 
 /**
  * Runs one bounded customer-service harness step: schedule task, build context,
- * parse model output, execute allowed tools, and return an inspectable trace.
+ * compose model output (injected LLM or deterministic fallback), parse it,
+ * execute allowed tools, and return an inspectable trace.
  */
 export async function runCustomerServiceHarnessStep(
   input: RunCustomerServiceHarnessStepInput,
 ): Promise<CustomerServiceHarnessStepResult> {
   const task = scheduleCustomerServiceTask(input)
   const context = buildCustomerServiceContext({ ...input, task })
-  const action = parseCustomerServiceOutput(input.modelOutput)
+  const modelOutput =
+    input.modelOutput ??
+    (await composeCustomerServiceModelOutput({
+      event: input.event,
+      memory: input.memory,
+      task,
+      context,
+      modelFn: input.modelFn,
+    }))
+  const action = parseCustomerServiceOutput(modelOutput)
   const executed = await executeCustomerServiceAction({
     action,
     registry: input.registry,

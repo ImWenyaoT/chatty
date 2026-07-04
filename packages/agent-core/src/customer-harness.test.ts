@@ -122,6 +122,51 @@ test('executor runs low-risk availability checks through the tool registry', asy
   assert.equal(result.toolCalls[0].toolName, 'check_availability')
 })
 
+test('compose step routes through the injected modelFn with the built context prompt', async () => {
+  let seenPrompt: string | undefined
+  const result = await runCustomerServiceHarnessStep({
+    event: userEvent('这款有 L 吗，5月10到12号穿'),
+    memory: memory(),
+    registry: createDefaultToolRegistry(),
+    modelFn: async (prompt) => {
+      seenPrompt = prompt
+      return '{"action":"answer_question","reply":"这款 L 码 5月10到12号可以安排。"}'
+    },
+  })
+
+  assert.ok(seenPrompt?.includes('当前客服任务'))
+  assert.ok(seenPrompt?.includes('SUIT-001'))
+  assert.equal(result.trace.action.action, 'answer_question')
+  assert.equal(result.step.reply, '这款 L 码 5月10到12号可以安排。')
+})
+
+test('compose step falls back to the deterministic composer when the modelFn fails', async () => {
+  const result = await runCustomerServiceHarnessStep({
+    event: userEvent('这款有 L 吗，5月10到12号穿'),
+    memory: memory(),
+    registry: createDefaultToolRegistry(),
+    modelFn: async () => {
+      throw new Error('provider down')
+    },
+  })
+
+  // 同一输入下确定性 composer 会给出 check_availability 工具动作
+  assert.equal(result.trace.action.action, 'check_availability')
+  assert.equal(result.trace.action.toolName, 'check_availability')
+})
+
+test('unparseable modelFn output falls back to the safe answer action via the parser', async () => {
+  const result = await runCustomerServiceHarnessStep({
+    event: userEvent('这款有 L 吗，5月10到12号穿'),
+    memory: memory(),
+    registry: createDefaultToolRegistry(),
+    modelFn: async () => '抱歉，这不是一个 JSON 回复',
+  })
+
+  assert.equal(result.trace.action.action, 'answer_question')
+  assert.equal(result.step.reply, '我先帮您确认一下，再继续处理。')
+})
+
 test('harness step returns a bounded trace with task, context, action and memory patch', async () => {
   const result = await runCustomerServiceHarnessStep({
     event: userEvent('这款有 L 吗，5月10到12号穿'),
