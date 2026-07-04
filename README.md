@@ -39,17 +39,18 @@ typed TypeScript harness for:
    的 allow / require_approval / deny 决策：高风险工具（如 `issue_refund`）永不自动执行，
    `ApprovalRequiredError` / `PolicyDenyError` 被 harness executor 捕获后转人工。
    "closed 会话拒绝一切新副作用"等不变量有测试锁定。
-5. **评测数据飞轮（可演示的闭环）** — playground 每条 trace 落库后，
-   [`apps/web/lib/eval-chain.ts`](apps/web/lib/eval-chain.ts) fire-and-forget 跑
-   LLM-judge（复用 legacy evaluator；需 `OPENAI_API_KEY`，未配置时静默跳过；
-   持久化需 `CHATTY_DB_PATH`，未设置时同一链路落 `:memory:`）→ review 落 `trace_reviews`（`/dashboard` 实时读表）→ 低分晋升
-   failure_case → [`scripts/promote-failure-case.mts`](scripts/promote-failure-case.mts)
-   晋升为 `tests/golden/regression-*.yaml` → `pnpm eval` 回归。CI 的 smoke 阶段
-   （[`scripts/smoke.mts`](scripts/smoke.mts)）用模拟评分把同一条数据链路每次提交真转一圈。
+5. **客服知识检索（agentic search）** — compose 步内的有界工具循环：模型自主决定
+   是否调 [`packages/agent-core/src/tools/search-knowledge.ts`](packages/agent-core/src/tools/search-knowledge.ts)
+   的 `search_knowledge`（SQLite FTS5 trigram + 中文 2 字词 LIKE 回退，服务端固定 top-3），
+   命中知识库后把结果作为 `knowledge` context fragment 落回，最多 3 次搜索到顶强制作答；
+   任何失败回退确定性 composer（"无 key 可跑"是不变量）。索引由
+   [`packages/db/src/knowledge-index.ts`](packages/db/src/knowledge-index.ts) 启动时幂等同步
+   `knowledge/` 语料。完整规格见 [agentic-search-design.md](docs/agentic-search-design.md)。
+   早先基于 embedding/qdrant 的检索子系统已退役（2026-07）。
 
 ## Current Status
 
-This is a working customer-service harness MVP: `/api/playground` runs task scheduling → context assembly → model-output composition (optional LLM via `CHATTY_LLM=1`, deterministic fallback) → parsing → action execution → trace persistence, and the UI shows the resulting harness trace. The legacy `rag-service` remains available for golden evaluation, regression promotion, and migration reference. Migration progress is tracked in the [Legacy Migration Ledger](docs/loop-engineering-plan.md#16-legacy-migration-ledger).
+This is a working customer-service harness MVP: `/api/playground` runs task scheduling → context assembly → model-output composition (optional LLM via `CHATTY_LLM=1`, deterministic fallback) → parsing → action execution → trace persistence, and the UI shows the resulting harness trace. Knowledge retrieval is an agentic search step (SQLite FTS5 + `search_knowledge` tool + bounded loop). The legacy `rag-service` remains available for golden evaluation and migration reference; `pnpm eval --target harness` is the plain golden regression check. Migration progress is tracked in the [Legacy Migration Ledger](docs/loop-engineering-plan.md#16-legacy-migration-ledger).
 
 ## Useful Commands
 
@@ -57,10 +58,10 @@ This is a working customer-service harness MVP: `/api/playground` runs task sche
 pnpm install --frozen-lockfile
 pnpm dev
 pnpm test                 # workspace 单测（含 rag-service parsers）
-pnpm smoke                # 无 LLM 的全数据链路冒烟（含飞轮晋升一圈）
+pnpm smoke                # 无 LLM 的核心数据链路冒烟（SQLite + session/trace + memory 连续性）
 pnpm typecheck:skeleton
 pnpm build:rag-service
-pnpm promote:failure-case # 失败用例 → 金标回归的晋升 CLI（--list 查看候选）
+pnpm --filter rental-rag-service eval  # 朴素金标回归（默认 --target harness）
 ```
 
 ## Docs

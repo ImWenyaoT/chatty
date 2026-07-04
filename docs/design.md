@@ -6,7 +6,8 @@
 > data flow 中间的任何组件都可以排列组合换来换去。
 >
 > **维护规则：改动任何 harness 组件的提交必须同步更新对应小节（living doc）。**
-> Last updated: 2026-07-04（🚧 = agentic-search B1–B5 实施中，规格见 agentic-search-design.md）
+> Last updated: 2026-07-04（agentic search 已上线为当前知识检索路径；embedding/qdrant
+> 检索子系统与评测飞轮已退役，规格见 agentic-search-design.md）
 
 ## 1. agent 核心功能
 
@@ -23,11 +24,13 @@
 ### 1.2 loop 和流程控制（可视化、可观测性、GUI）
 
 - **Shape**：`(task, context, modelFn?) → {reply, terminal, toolCalls, memoryPatch, trace}`
-- **现状**：`runCustomerServiceHarnessStep` 单步有界 harness；🚧 B3 在 compose 步内加
+- **现状**：`runCustomerServiceHarnessStep` 单步有界 harness；compose 步内已上线
   **≤3 次 search 的有界工具循环**（`MAX_SEARCH_CALLS=3` 硬编码，到顶注入"工具已禁用"强制作答，
   任何失败回退确定性 composer——"无 key 可跑"是不变量）。
 - **可观测 / GUI**：每步 trace 落 SQLite（`trace-repository`），playground 页即 GUI inspector
-  （task / action / tool 调用 / context fragments / memory 全展开）；dashboard 展示评测 review 实数据。
+  （task / action / tool 调用 / context fragments / memory 全展开）；dashboard 是卖家后台演示视图
+  （会话/知识面板走演示数据）。质量回归由 `pnpm eval --target harness` 的朴素金标承担，
+  不再有"每条回复自动评分"的飞轮。
 - **简化决策**：无 durable workflow 引擎（Temporal 否决记录在 tech-stack-decisions）；
   轮数上限是常量不是配置项——调整需金标证据。
 
@@ -36,7 +39,7 @@
 - **Shape**：`(customer, product, memory snapshot, policy[, knowledge]) → ContextFragment[] → prompt`
 - **现状**：`buildCustomerServiceContext` 显式拼装；**long-term memory** = SQLite 仓
   （`memory-repository`，`commitTurn` 单事务多表原子提交），快照进 context；
-  🚧 B1/B3 新增 `kind:'knowledge'` fragment（FTS5 检索结果，取代 legacy 的 embedding 检索）。
+  `kind:'knowledge'` fragment 已上线（FTS5 检索结果，取代已退役的 legacy embedding 检索）。
 - **compression**：recentMessages 滑窗截断（有测试钉住）。无 auto-compression——
   客服会话规模用不上，见好就收。
 - **skills/plugins**：不做（决策记录：runtime 概念不叫 skills，tech-stack-decisions §5）。
@@ -64,8 +67,8 @@
 
 - **刻意不做**：客服 agent 没有 terminal/file 工具（harness core 明确排除）——
   它的风险面是业务动作（退款/工单），不是 shell，所以"sandbox"体现为工具 risk 分级 + 审批门。
-- **background tasks**：唯一异步是评测飞轮 fire-and-forget（`apps/web/lib/eval-chain.ts`，
-  void + catch，评测失败永不影响回复）。
+- **background tasks**：无。曾有的评测飞轮 fire-and-forget 已退役（过度设计，见好就收）；
+  质量回归改为离线的朴素金标（`pnpm eval --target harness`）。
 
 ### 2.2 terminal 读 output
 
@@ -73,7 +76,7 @@
 
 ### 2.3 基本 file I/O（cat、sed、rg 的对应物）
 
-- 客服场景的"rg" = **知识检索**：🚧 `search_knowledge`（FTS5 trigram MATCH + 中文 2 字词
+- 客服场景的"rg" = **知识检索**：`search_knowledge` 已上线（FTS5 trigram MATCH + 中文 2 字词
   LIKE 回退，top-3 服务端固定，单参数 `query`）。
 - **Shape**：`query → 三段式纯文本（找到 N 条 → 来源+正文 → "还有 N 条，换更具体关键词"）`
 - 完整规格与中文分词实测记录：[agentic-search-design.md](agentic-search-design.md)。

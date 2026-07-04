@@ -351,15 +351,26 @@ Settled:
 
 | 能力 | 边界接口 | 状态 | 下一步 |
 |---|---|---|---|
-| 回答路径 answerQuestion | compose 步的 `CustomerServiceModelFn`（playground route 注入 Chat Completions adapter） | 🟡 部分接线——`CHATTY_LLM=1` 且配置 `OPENAI_API_KEY` 时 compose 走真 LLM，未开启或模型调用失败回退确定性 `createCustomerServiceModelOutput`；尚未接 legacy 的知识检索。旧 loop-runner / Agents SDK lane（含 `LegacyRagService` 注入位与 `@openai/agents` 依赖）已整体删除 | 给 compose 上下文接入知识检索，再拿金标场景对齐后替换 legacy answerQuestion |
-| 评估器 LLM-judge | `Evaluator`（`loadLegacyEvaluator`，经 `apps/web/lib/eval-chain.ts`） | 🟡 已接线——playground trace 落库后 fire-and-forget 异步评分：review 落 `trace_reviews`、低分晋升 failure_case、顺带补评积压 trace（`findUnevaluated`），`/dashboard` 读真实表；依赖 `OPENAI_API_KEY`（未配置时静默跳过）；持久化由 `CHATTY_DB_PATH` 决定（未设置时落 `:memory:`，CHATTY_SQLITE 开关已退役） | 换 judge 交叉复评；补评从请求搭车升级为独立 worker |
-| 知识检索 searchKnowledge | 曾有 `KnowledgeAdapter` | ⚪ 边界已删（零消费方）；检索仍在 legacy answerQuestion 内部 | 若把检索提出 loop，再随消费方重建边界 |
+| 回答路径 answerQuestion | compose 步的 `CustomerServiceModelFn`（playground route 注入 Chat Completions adapter） | 🟡 部分接线——`CHATTY_LLM=1` 且配置 `OPENAI_API_KEY` 时 compose 走真 LLM，未开启或模型调用失败回退确定性 `createCustomerServiceModelOutput`；知识检索已由 agentic search（harness lane 的 `search_knowledge` + FTS）承担。旧 loop-runner / Agents SDK lane（含 `LegacyRagService` 注入位与 `@openai/agents` 依赖）已整体删除 | 拿金标场景对齐后替换 legacy answerQuestion（属 R5，前置=下方红/黄项闭环） |
+| 评估器 LLM-judge | `Evaluator`（`evaluateCustomerServiceReply`，eval.ts 同步调用回填分数） | 🟢 保留为朴素金标回归的 judge：`pnpm eval --target harness` 内由 runner 同步调 judge 回填每场景分数。曾有的评测飞轮（playground trace fire-and-forget 自动评分 → `trace_reviews` → 低分晋升 failure_case → promote CLI → golden 回归）已于 2026-07 整体退役（过度设计，dont overdo）：`eval-chain.ts`、`promote-failure-case.mts`、`golden-export`、`failure-case`/`trace-review` 仓与表、`findUnevaluated` 均删 | judge 交叉复评（如需） |
+| 知识检索 searchKnowledge | agentic search（`search_knowledge` 工具 + FTS5 索引） | 🟢 R4 已执行（2026-07）：legacy 的 embedding/qdrant 检索子系统（qdrant client、embedding 调用、`ingest.ts`、`chunking.ts`、local-vectors）整体删除；agentic search 上线为当前检索路径。legacy `answerQuestion` 内的检索早因 embeddings 404 恒空，删除只是把"404 降级"变成结构上不存在，行为不变 | 无（子系统退役完成） |
 | 会话记忆 | `MemoryRepository`（SQLite + JSON 只读回退） | 🟡 新 loop 仅持久化 recentMessages（写 SQLite，JSON 保持只读回退）；profile 字段仍只在 legacy 自身运行时写 JSON | profile 写路径迁 SQLite JSON 列 |
 | 事实抽取 + 阶段状态机 | 无边界（legacy 内部） | 🔴 完全在 legacy（extractStructuredConversationFacts + orchestrator） | 状态机已有 22 个单测钉行为，可安全搬迁 |
 
 已知缺口（测试钉住待修）：`post_order_followup` stage 在 `decideStage` 中不可达，
 `close_loop` 动作是死代码——修复属于行为变更，需跑金标 eval 验证后再动。
 
-金标 harness 目前直连 legacy `answerQuestion()`，断言词汇（stage/action）是 legacy 专有；
-重写验收前需要把 eval.ts 的被测面抽象为可切换目标（legacy / /api/playground），
-让 11 个金标场景成为两线共享的验收闸门。
+### R4 退役记录（2026-07）
+
+`agentic-search-design.md §6` 的 R4（删检索子系统）已执行，单独一个 commit：
+qdrant client、embedding 调用、`ingest.ts`、`chunking.ts`、local-vectors、
+`rag.ts` 内的 `searchKnowledge`/`embedText` 调用点、`@qdrant/js-client-rest` 依赖全部删除。
+同批把过度设计的"评测飞轮"（trace 自动评分 → failure_case → golden 自动晋升）拆回
+朴素金标回归（`pnpm eval --target harness` + 同步 judge）。
+
+**平价状态（如实记录）**：harness lane 金标最好一轮 13/14（`tests/reports/harness-r*.json`），
+未追到设计里写的 11/11（那是 legacy 场景集口径）门槛。用户决策**覆盖**了"平价才准删"的
+硬门槛——RAG 直接退役，不因 13/14 未达标而阻塞（这是求职作品集项目，dont overdo，见好就收）。
+
+双目标 runner 仍在（`--target harness` 为默认，`--target legacy` 作对照）；eval.ts 的被测面
+已抽象为可切换目标，harness 场景在 `tests/golden-harness/`（14 个），legacy 场景在 `tests/golden/`。

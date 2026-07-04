@@ -45,7 +45,14 @@ No external/community skills were copied or forked in this sweep. If an external
 
 The single most important reuse decision: **the legacy evaluator (`evaluateCustomerServiceReply`) and golden runner (`scripts/eval.ts`) are reused, not rewritten.** agent-core's `Evaluator` interface is a thin injection boundary around them; the web layer bridges via `loadLegacyEvaluator()`. No scoring logic was forked.
 
-## 2026-06-27 — Knowledge retrieval boundary
+## 2026-06-27 — Knowledge retrieval boundary — **Removed (2026-07)**
+
+> Superseded by agentic search. The embedding/qdrant retrieval subsystem was retired
+> in R4 (2026-07, `agentic-search-design.md §6`): `@qdrant/js-client-rest` dependency,
+> the embedding client, `ingest.ts`, `chunking.ts`, local-vectors, and `rag.ts`'s
+> `searchKnowledge`/`embedText` are all deleted. Knowledge retrieval is now the
+> agentic search step (SQLite FTS5 index + `search_knowledge` tool + bounded loop),
+> which introduces no vector-DB dependency. The record below is kept as history.
 
 Extended the same reuse pattern to knowledge retrieval (PRD §14):
 - `KnowledgeAdapter` interface in agent-core wraps legacy `searchKnowledge()` (qdrant vector search + local-vectors JSON fallback) via `apps/web/lib/legacy-adapter.ts:loadLegacyKnowledgeAdapter()`.

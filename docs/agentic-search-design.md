@@ -441,6 +441,15 @@ orchestrator stage），harness lane 没有也**不应该有**——为凑断言
 
 ## 6. 决策 e：退役顺序
 
+> **状态更新（2026-07）：R4 已执行。** 检索子系统（qdrant client、embedding 调用、
+> `ingest.ts`、`chunking.ts`、local-vectors、`rag.ts` 内 `searchKnowledge`/`embedText`、
+> `@qdrant/js-client-rest` 依赖）已在单独 commit 中删除，agentic search 上线为当前检索路径。
+> 同批把评测飞轮拆回朴素金标回归（`pnpm eval --target harness`，见 §16 R4 记录）。
+> **平价门被用户决策覆盖**：本节 R3/R4 写的"11/11 平价才准删"是设计期的硬门槛；实际
+> harness lane 最好一轮 13/14，用户明确决策 RAG 直接退役、不因平价未达标而阻塞
+> （求职作品集项目，dont overdo）。R5（answerQuestion/orchestrator/memory-store 整体删）
+> 仍未做，范围外。
+
 范围澄清（诚实边界）：`rag-service` 的**整体**删除还依赖 §16 账本的
 "事实抽取 + 阶段状态机"（🔴）与 "profile 写路径"（🟡）两项，不属于本设计。
 本设计负责的退役对象是**检索子系统**（qdrant + embedding + ingest 链）与
