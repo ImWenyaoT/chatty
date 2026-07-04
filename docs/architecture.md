@@ -23,7 +23,7 @@ Status: **重写设计提案（编号 RW-1，未实施）** — 本文档是 leg
 |---|---|---|
 | F1 | 租衣客服多轮对话：锁品→档期→体型→尺码→库存核验→复核→引导下单→售后跟进 | 金标 11 场景结构断言（CI 离线） |
 | F2 | 有界 agent loop：每请求一次路由决策，reply / handoff / tool 三种终止性 | loop 单测 + smoke |
-| F3 | 工具层：风险分级（low/medium/high）+ 审批门 + SDK lane 双层安全过滤 | 安全不变量单测 |
+| F3 | 工具层：风险分级（low/medium/high）+ 审批门（Agents SDK lane 已于 2026-07 删除，安全门收敛为 policy 审批） | 安全不变量单测 |
 | F4 | 记忆：slot 化 ConversationProfile + 消息滑窗 + SQLite 持久化 | db 单测 + 金标 profile 断言 |
 | F5 | 知识检索：本地向量库（cosine），以 low-risk tool 形态暴露给 loop | 单测（stub embeddings） |
 | F6 | 评测飞轮：LLM-judge 评分 → failure_case → golden 晋升 → 回归 | smoke 真转一圈 + promote CLI |
@@ -46,7 +46,7 @@ Status: **重写设计提案（编号 RW-1，未实施）** — 本文档是 leg
 - **@rental/domain**（提案，重写主体；代码骨架已移除，见文首状态）：租衣客服对话引擎。纯 TS + 端口接口，
   **不 import 任何 SDK/HTTP/fs 运行时依赖**（prompts/catalog 以解析好的对象注入）。
 - **@rental/llm**：OpenAI 兼容适配器；实现 domain 的三个 LLM 端口 + embeddings +
-  本地向量知识库实现 + Agents SDK lane（带安全门）。
+  本地向量知识库实现（Agents SDK lane 已随 2026-07 清理删除，不在重写范围）。
 - **@rental/db**：SQLite repositories（session/trace/review/failure_case/memory）。
   memory 扩展为完整 profile 持久化（conversation_profile_json 列已在 schema）。
 - **@rental/agent-core**：有界 loop、意图分类、工具 registry + policy、失败用例策略、
@@ -113,7 +113,7 @@ export interface MemoryPort {
 }
 ```
 
-`engine.answer()` 的输入输出与金标 runner、loop-runner 共享同一契约
+`engine.answer()` 的输入输出与金标 runner 共享同一契约
 （question/customerId/... → answer/action/stage/profile/handoff/answerSource）。
 
 ## 5. 数据与持久化
@@ -122,13 +122,16 @@ SQLite 是唯一持久层（better-sqlite3，`CHATTY_DB_PATH`，缺省 `data/cha
 测试用 `:memory:`）。JSON 文件记忆库随 legacy 删除，CHATTY_SQLITE 开关退役。
 六表不变：agent_sessions / customer_memories / product_memories / agent_traces /
 trace_reviews / failure_cases。memory repository 接管完整 profile 读写
-（此前仅 recentMessages 双写）。
+（现状：新 loop 仅持久化 recentMessages，profile 写入仍在 legacy）。
 
 ## 6. Loop 与工具
 
-loop-runner 语义不变：一次路由决策 → small_talk/provide_info 直回、handoff 转人工、
-ask_info 走 DialogueEngine（缺省）或 Agents SDK lane（`CHATTY_AGENTS_SDK=1`，仅低风险
-工具经双层安全门暴露）。新增 `search_knowledge` low-risk 工具（F5），SDK lane 可用。
+Loop 现状（2026-07 清理后）：有界单步 harness（`packages/agent-core/src/customer-harness.ts`，
+schedule → context → compose → parse → execute），任务词汇为 answer_question /
+collect_missing_info / check_availability / follow_up / handoff。原 loop-runner
+（small_talk/provide_info/ask_info 路由）与 Agents SDK lane（`CHATTY_AGENTS_SDK`）
+已整体删除（见 loop-engineering-plan §16）。重写时应答类任务改走 `DialogueEngine` 端口；
+知识检索按 F5 以 `search_knowledge` low-risk 工具形态暴露。
 状态机实现子集仍为 active/waiting_for_user/waiting_for_human；其余状态是预留设计。
 
 ## 7. 评测方法论

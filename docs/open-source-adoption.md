@@ -29,7 +29,9 @@ Investigated for the WF1 (eval loop) / WF2 (Agents SDK) / WF3 (tools) workstream
 
 ### Adopted as project skills (`.agents/skills/`)
 
-These are project-authored skills (not external copies), so provenance is internal:
+These were project-authored skills (not external copies), so provenance is internal.
+The skill files themselves were removed along with the rest of the project-level
+dev-skill files (see tech-stack-decisions §5); rows kept as adoption history:
 
 | Skill | Source | Derived from |
 |-------|--------|--------------|

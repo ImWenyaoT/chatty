@@ -1,6 +1,6 @@
 # Tech Stack Decisions
 
-Last updated: 2026-07-03
+Last updated: 2026-07-04
 
 This document is the single decision registry for Chatty, the agentic customer-service rewrite. It supersedes the exploratory PRD (now a short decision record in `docs/agentic-customer-service-prd.md`, full text in git history) where the two conflict.
 
@@ -11,8 +11,7 @@ Product/agent name: Chatty
 Node.js + TypeScript
 Next.js first
 Customer-service Harness Core drives /api/playground
-OpenAI Agents SDK TypeScript
-OpenAI Chat Completions API
+OpenAI Chat Completions API (only live model lane; the Agents SDK lane was removed 2026-07)
 SQLite for MVP sessions/state
 Existing memory model kept mostly intact
 Temporal deferred until the product proves it needs durable workflow guarantees
@@ -98,11 +97,11 @@ Do not call customer-service runtime capabilities "skills" in product docs.
 
 ## 6. Session and Memory
 
-Current state:
+Current state (updated 2026-07):
 
-- There is no real session store yet.
-- The current service uses `customerId`, `productId`, and `conversationId`.
-- Long-term memory is file-backed in `rag-service/data/memory-store.json`.
+- `agent_sessions` is a real SQLite session store (`packages/db`); the playground route loads/creates a session per conversation.
+- Conversations are keyed by `customerId`, `productId`, and `conversationId`.
+- New-loop memory writes go to SQLite JSON columns (recentMessages only so far); `rag-service/data/memory-store.json` remains a read-only fallback and the legacy lane's own store.
 - Recent messages, summaries, profile facts, orchestration state, and reviews are stored under `CustomerMemory` and `ProductMemory`.
 
 Decision:
@@ -176,9 +175,12 @@ composer later without changing task scheduling, executor policy, or trace
 contracts. Deliberately out of scope for the harness core: terminal/file tools,
 MCP, background workers, multi-agent routing, and any new GUI.
 
-Decision: use both.
+Decision (2026-06): use both. **Revised 2026-07: the Agents SDK lane (adapter,
+`CHATTY_AGENTS_SDK` flag, `@openai/agents` dependency) was removed with zero
+production callers; Chat Completions is the only live model path. Re-adopt the
+SDK only when a concrete consumer needs run/handoff/guardrail semantics.**
 
-OpenAI Agents SDK TypeScript:
+OpenAI Agents SDK TypeScript (removed 2026-07; original rationale):
 
 - Agent run abstraction.
 - Tools.
@@ -196,7 +198,7 @@ OpenAI Chat Completions API:
 - Evaluator judge.
 - Direct low-level model calls when an Agents SDK run is unnecessary.
 
-All model calls should go through `packages/llm` adapters so the runtime can switch between direct Chat Completions and Agents SDK runs without touching product logic.
+All model calls should go through `packages/llm` adapters so the runtime can switch model providers (or re-introduce an SDK lane) without touching product logic.
 
 ## 8. AgentKit and Agent Builder
 
@@ -231,7 +233,6 @@ flowchart TD
   CTX --> MEM["Existing memory model in SQLite JSON"]
   CTX --> RAG["Knowledge / media retrieval"]
   AC --> LLM["packages/llm"]
-  LLM --> SDK["OpenAI Agents SDK TS"]
   LLM --> CC["OpenAI Chat Completions API"]
   AC --> TOOLS["Runtime tools"]
   TOOLS --> ORD["Order / inventory / media / handoff adapters"]

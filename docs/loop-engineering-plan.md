@@ -48,6 +48,8 @@ Important limitation:
 
 ## 4. Target MVP Architecture
 
+> 注：图中 Agents SDK lane（AGENTS 节点）已于 2026-07 整体删除（见 §5.2 / §16），保留原图作规划记录。
+
 ```mermaid
 flowchart TD
   USER["Customer / operator"] --> WEB["Next.js app"]
@@ -82,6 +84,9 @@ Next.js Route Handlers are the MVP API surface:
 
 ### 5.2 Model Lane: OpenAI Agents SDK TS
 
+> **已删除（2026-07）**：该 lane（适配器、`CHATTY_AGENTS_SDK` 开关与 `@openai/agents` 依赖）
+> 在零生产调用方的状态下整体移除（见 §16）。重新引入的前提是先有具体消费方。以下为原始规划：
+
 Use OpenAI Agents SDK TypeScript when an agent run benefits from tools, handoffs, guardrails, tracing, or built-in loop semantics.
 
 The product code depends on `packages/llm` interfaces, not SDK implementation details.
@@ -100,6 +105,10 @@ Use direct Chat Completions for:
 ### 5.5 Legacy Reference Lane: rag-service
 
 The current `rag-service` remains the migration source and compatibility service.
+
+> **2026-07 更新**：answerQuestion 注入位（`LegacyRagServiceAdapter`）已随 loop-runner 删除；
+> 现在唯一跨边界的集成是评估器（`apps/web/lib/legacy-adapter.ts` 的 `loadLegacyEvaluator`，
+> in-process dynamic import legacy dist）。以下为原始规划：
 
 The minimal adapter is:
 
@@ -131,9 +140,12 @@ Table definitions live in [tech-stack-decisions.md §6](tech-stack-decisions.md#
 
 ### 6.2 Current Session Status
 
-There is no real session store today.
+> **2026-07 更新**：`agent_sessions` 已在 SQLite 落地（`packages/db`），playground 每轮
+> load/create session 并回写 status。以下为 2026-06 决策时的基线：
 
-Current continuity depends on:
+There was no real session store at decision time.
+
+Continuity then depended on:
 
 - `customerId`;
 - `productId`;
@@ -156,7 +168,7 @@ Migration rules:
 
 - Keep `CustomerMemory` and `ProductMemory` shape as JSON columns first.
 - Do not normalize all profile fields in MVP.
-- Preserve JSON fallback while SQLite write path is feature-flagged.
+- Preserve the read-only JSON fallback（SQLite 写路径已常开，`CHATTY_SQLITE` 开关 2026-07 退役）.
 - Do not let OpenAI Agents SDK session memory become the long-term business memory.
 
 ## 7. Agent Loop Contract
@@ -196,11 +208,12 @@ sequenceDiagram
 
 ## 8. Loop State Model
 
-> **实现状态（2026-07-02）**：当前代码只会产生 `active` / `waiting_for_user` /
-> `waiting_for_human` 三个状态（loop-runner 与 SDK 适配器的 `nextStatus`）；
-> `waiting_for_tool` / `paused` / `failed` / `closed` 及对应事件（`tool_result`、
-> `scheduled_followup_due` 等）是预留设计，类型与 zod schema 已定义但无 producer。
-> 引入 tool-chaining / worker 时再实现。下图为目标全集：
+> **实现状态（2026-07-04）**：当前代码只会产生 `active` / `waiting_for_user` /
+> `waiting_for_human` 三个状态（customer-harness 的 `nextStatus`；原 loop-runner 与
+> SDK 适配器已删除）；`waiting_for_tool` / `paused` / `failed` / `closed` 及对应事件
+> （`tool_result`、`scheduled_followup_due` 等）是预留设计，TS 类型已定义但无 producer
+> （对应的运行时 zod 镜像已随 2026-07 清理删除）。引入 tool-chaining / worker 时再实现。
+> 下图为目标全集：
 
 ```mermaid
 stateDiagram-v2
@@ -230,7 +243,7 @@ flowchart TD
   RUNTIME --> POLICIES["policies: approval/escalation/safety"]
   RUNTIME --> ACTIONS["actions: reply or control decisions"]
   RUNTIME --> KNOW["knowledge: FAQ/product/policy/media"]
-  DEV["Codex development workflow"] --> DEVSKILLS["dev skills: OpenAI Developers / Build Web Apps / Superpowers"]
+  DEV["Development workflow"] --> DEVSKILLS["dev skills（项目级文件已于 2026-07 移除，惯例见 tech-stack §5）"]
 ```
 
 Do not use `skills` for runtime concepts.
@@ -271,7 +284,7 @@ MVP should preserve the current evaluator direction but make traces first-class.
 - Add simple health and playground routes.
 - Link existing `rag-service` test page/dashboard rather than rewriting them.
 
-### Phase 2: SQLite Adapter ✅（CHATTY_SQLITE 开关，commit b464c18）
+### Phase 2: SQLite Adapter ✅（CHATTY_SQLITE 开关，commit b464c18；开关已于 2026-07 退役，SQLite 常开）
 
 - Add SQLite connection and repository.
 - Add JSON fallback reader from `rag-service/data/memory-store.json`.
@@ -283,7 +296,7 @@ MVP should preserve the current evaluator direction but make traces first-class.
 - Use `LegacyRagServiceAdapter.answer()` as the first answer path.
 - Persist `AgentTrace`.
 
-### Phase 4: Model Lanes ✅（CHATTY_AGENTS_SDK 开关仅路由 ask_info，commit 4e3a5bc）
+### Phase 4: Model Lanes ✅（CHATTY_AGENTS_SDK 开关仅路由 ask_info，commit 4e3a5bc；该 lane 已于 2026-07 整体删除，见 §16）
 
 - Wire OpenAI Agents SDK TS runner.
 - Keep Chat Completions direct adapter for extraction/eval/fallback.
@@ -301,10 +314,11 @@ Open:
 Settled:
 
 - SQLite connection lives in `packages/db` (`database.ts`), repositories are factories over it.
-- The legacy adapter injects `answerQuestion()` in-process (`apps/web/lib/legacy-adapter.ts`),
-  not HTTP — Next marks rag-service a server external and dynamic-imports its dist.
-- Agents SDK routes only `ask_info` (feature flag `CHATTY_AGENTS_SDK=1`); everything else
-  stays on direct Chat Completions.
+- Legacy 集成走 in-process 而非 HTTP：`apps/web/lib/legacy-adapter.ts` dynamic-import
+  rag-service dist（Next 标记其为 server external）。2026-07 起该边界只剩评估器
+  （`loadLegacyEvaluator`）——answerQuestion 注入位已随 loop-runner 删除。
+- ~~Agents SDK routes only `ask_info` (feature flag `CHATTY_AGENTS_SDK=1`)~~ 2026-07 更新：
+  Agents SDK lane 已整体删除（零生产调用方），全部走 direct Chat Completions。
 - Stack-level decisions (Next.js first, SQLite, no Fastify, Temporal deferred,
   Chatwoot as reference, runtime concepts are not called skills): see
   [tech-stack-decisions.md](tech-stack-decisions.md).
@@ -328,7 +342,7 @@ Settled:
 - `packages/shared` defines minimal loop DTOs.
 - `packages/db` defines SQLite MVP schema.
 - `packages/agent-core` defines loop and legacy adapter boundaries.
-- `packages/llm` defines Agents SDK and Chat Completions adapter boundaries.
+- `packages/llm` defines the Chat Completions adapter boundary（Agents SDK 边界已于 2026-07 删除）.
 - `pnpm build:rag-service` still passes or its existing failures are documented.
 
 ## 16. Legacy Migration Ledger
@@ -340,7 +354,7 @@ Settled:
 | 回答路径 answerQuestion | compose 步的 `CustomerServiceModelFn`（playground route 注入 Chat Completions adapter） | 🟡 部分接线——`CHATTY_LLM=1` 且配置 `OPENAI_API_KEY` 时 compose 走真 LLM，未开启或模型调用失败回退确定性 `createCustomerServiceModelOutput`；尚未接 legacy 的知识检索。旧 loop-runner / Agents SDK lane（含 `LegacyRagService` 注入位与 `@openai/agents` 依赖）已整体删除 | 给 compose 上下文接入知识检索，再拿金标场景对齐后替换 legacy answerQuestion |
 | 评估器 LLM-judge | `Evaluator`（`loadLegacyEvaluator`，经 `apps/web/lib/eval-chain.ts`） | 🟡 已接线——playground trace 落库后 fire-and-forget 异步评分：review 落 `trace_reviews`、低分晋升 failure_case、顺带补评积压 trace（`findUnevaluated`），`/dashboard` 读真实表；依赖 `OPENAI_API_KEY`（未配置时静默跳过）；持久化由 `CHATTY_DB_PATH` 决定（未设置时落 `:memory:`，CHATTY_SQLITE 开关已退役） | 换 judge 交叉复评；补评从请求搭车升级为独立 worker |
 | 知识检索 searchKnowledge | 曾有 `KnowledgeAdapter` | ⚪ 边界已删（零消费方）；检索仍在 legacy answerQuestion 内部 | 若把检索提出 loop，再随消费方重建边界 |
-| 会话记忆 | `MemoryRepository`（SQLite + JSON 只读回退） | 🟡 仅 recentMessages 双写；profile 字段仍由 legacy 写 JSON | profile 写路径迁 SQLite JSON 列 |
+| 会话记忆 | `MemoryRepository`（SQLite + JSON 只读回退） | 🟡 新 loop 仅持久化 recentMessages（写 SQLite，JSON 保持只读回退）；profile 字段仍只在 legacy 自身运行时写 JSON | profile 写路径迁 SQLite JSON 列 |
 | 事实抽取 + 阶段状态机 | 无边界（legacy 内部） | 🔴 完全在 legacy（extractStructuredConversationFacts + orchestrator） | 状态机已有 22 个单测钉行为，可安全搬迁 |
 
 已知缺口（测试钉住待修）：`post_order_followup` stage 在 `decideStage` 中不可达，
