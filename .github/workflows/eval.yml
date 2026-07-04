@@ -44,8 +44,9 @@ jobs:
       - name: Ingest knowledge (local vector fallback, no Qdrant)
         run: pnpm --filter rental-rag-service ingest
 
-      # --repeat 3 聚合抵消 LLM judge 的评分噪声；--baseline iter4 与仓库里
-      # 提交的 11/11 基线对比，任何场景回归都会让本步骤失败。
+      # --repeat 3 聚合抵消 LLM judge 的评分噪声；--baseline iter4 与仓库里提交的
+      # 11/11 基线逐场景打印 Δ（仅观测，不按 Δ 设门禁；基线文件缺失会硬失败 exit 1）。
+      # 本步骤的失败条件：任一场景低于通过线（eval.ts 以非零码退出）。
       - name: Golden regression vs committed baseline
         run: pnpm --filter rental-rag-service eval -- --repeat 3 --baseline iter4 --save ci-latest
 

@@ -397,8 +397,10 @@ async function compareBaseline(baselineTag: string, results: ScenarioResult[]) {
   try {
     baseline = JSON.parse(await fs.readFile(file, 'utf8'))
   } catch {
-    console.warn(`baseline not found: ${file}`)
-    return
+    console.error(
+      `baseline not found: ${file} — 传了 --baseline 却读不到基线文件，拒绝静默跳过对比`,
+    )
+    process.exit(1)
   }
 
   console.log(`\n========== Compare vs ${baselineTag} (${baseline.promptVersion}) ==========`)
