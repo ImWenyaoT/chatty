@@ -29,7 +29,7 @@
   任何失败回退确定性 composer——"无 key 可跑"是不变量）。
 - **可观测 / GUI**：每步 trace 落 SQLite（`trace-repository`），playground 页即 GUI inspector
   （task / action / tool 调用 / context fragments / memory 全展开）；dashboard 是卖家后台演示视图
-  （会话/知识面板走演示数据）。质量回归由 `pnpm eval --target harness` 的朴素金标承担，
+  （会话/知识面板走演示数据）。质量回归由根级 `pnpm eval`（`eval/`）的朴素金标承担，
   不再有"每条回复自动评分"的飞轮。
 - **简化决策**：无 durable workflow 引擎（Temporal 否决记录在 tech-stack-decisions）；
   轮数上限是常量不是配置项——调整需金标证据。
@@ -68,7 +68,7 @@
 - **刻意不做**：客服 agent 没有 terminal/file 工具（harness core 明确排除）——
   它的风险面是业务动作（退款/工单），不是 shell，所以"sandbox"体现为工具 risk 分级 + 审批门。
 - **background tasks**：无。曾有的评测飞轮 fire-and-forget 已退役（过度设计，见好就收）；
-  质量回归改为离线的朴素金标（`pnpm eval --target harness`）。
+  质量回归改为朴素金标（根级 `pnpm eval`，`eval/`）。
 
 ### 2.2 terminal 读 output
 

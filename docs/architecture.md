@@ -4,12 +4,13 @@ Last updated: 2026-07-04
 Status: **重写设计提案（编号 RW-1，未实施）** — 本文档是 legacy `rag-service` 推倒重写的目标架构设计。
 曾按 §2/§3 平移出 `packages/domain` 代码骨架，但骨架从未接入 playground / 金标评测等生产路径，
 已于 2026-07 的 cleanup 中整包移除；设计本身保留，作为架构决策记录。
-若重启 RW-1：按本文档推进，以 §9 验收清单为完成定义；届时 `rag-service/` 从 main 删除（完整历史在 `legacy-extras` 分支）。
+`rag-service/` 本身已于 R5（2026-07）从 main 直接删除（实际走 harness 迁移路径，非 RW-1；
+完整历史在 git 历史 / `legacy-extras` 分支），评测资产迁至根级 `eval/`。本文档留作历史设计参考。
 
 ## 0. 设计原则
 
 1. **Specs-driven，自顶向下**：features → 架构 → 接口 → 实现，每层先定契约再写代码。
-2. **行为契约不变，实现全换**：23 种 Action、阶段词汇、profile 字段、11 个金标场景
+2. **行为契约不变，实现全换**：23 种 Action、阶段词汇、profile 字段、14 个金标场景
    是验收闸门；重写前后金标 YAML 一字不改（仅明确记录的两处行为修复除外，见 §8）。
 3. **LLM 全部走注入端口**：领域引擎是纯 TS + 注入接口，任何模块可以用 stub 离线测试。
 4. **确定性优先、LLM 受限**：fast-path 规则先行，LLM 只做受限兜底（强制 tool_choice
@@ -21,12 +22,12 @@ Status: **重写设计提案（编号 RW-1，未实施）** — 本文档是 leg
 
 | # | Feature | 验收方式 |
 |---|---|---|
-| F1 | 租衣客服多轮对话：锁品→档期→体型→尺码→库存核验→复核→引导下单→售后跟进 | 金标 11 场景结构断言（CI 离线） |
+| F1 | 租衣客服多轮对话：锁品→档期→体型→尺码→库存核验→复核→引导下单→售后跟进 | 金标 14 场景（`pnpm eval`，LLM-judge） |
 | F2 | 有界 agent loop：每请求一次路由决策，reply / handoff / tool 三种终止性 | loop 单测 + smoke |
 | F3 | 工具层：风险分级（low/medium/high）+ 审批门（Agents SDK lane 已于 2026-07 删除，安全门收敛为 policy 审批） | 安全不变量单测 |
 | F4 | 记忆：slot 化 ConversationProfile + 消息滑窗 + SQLite 持久化 | db 单测 + 金标 profile 断言 |
 | F5 | 知识检索：agentic search（SQLite FTS5 + `search_knowledge` 工具 + 有界循环），以 low-risk tool 形态暴露给 loop | search_knowledge 单测 + 金标检索场景 |
-| F6 | 质量回归：朴素金标回归（`pnpm eval --target harness`，judge 同步回填分数） | 金标场景结构+minScore 断言 |
+| F6 | 质量回归：朴素金标回归（`pnpm eval`，judge 同步回填分数） | 金标场景结构+minScore 断言 |
 | F7 | 观测：trace 落库（含真实 toolCalls 与 handoff 原因），playground 展示 loop 状态 | route 集成路径 + UI |
 
 ## 2. 包结构（模块层）
@@ -123,7 +124,7 @@ SQLite 是唯一持久层（better-sqlite3，`CHATTY_DB_PATH`，缺省 `data/cha
 现有表：agent_sessions / customer_memories / product_memories / agent_traces /
 knowledge_chunks（FTS5）/ knowledge_index_meta（trace_reviews / failure_cases 随评测飞轮
 2026-07 退役删除）。memory repository 接管完整 profile 读写
-（现状：新 loop 仅持久化 recentMessages，profile 写入仍在 legacy）。
+（现状：新 loop 仅持久化 recentMessages，profile 写入尚未迁入 SQLite，见 loop-engineering-plan §16）。
 
 ## 6. Loop 与工具
 
@@ -142,9 +143,9 @@ collect_missing_info / check_availability / follow_up / handoff。原 loop-runne
 - 结构断言 = action/actionIn/stage/stageIn/profile 字段/contains/notContains/
   notSameAsPrev；判分断言 = minScore（--repeat 聚合抗噪，--baseline 版本对比）。
 - 评测飞轮（trace 自动评分 → failure_case → golden 自动晋升）已于 2026-07 退役：
-  质量回归收敛为朴素金标（`pnpm eval --target harness`），无自喂闭环。
-- 历史报告（6/11→11/11 迭代轨迹）保留在 evals/reports/，标注产自重写前实现——
-  金标场景本身是跨实现的连续性证据。
+  质量回归收敛为朴素金标（根级 `pnpm eval`），无自喂闭环。
+- 历史迭代报告（回复质量 6/11→11/11 的轨迹）随 rag-service 于 R5 删除，只留 git 历史；
+  金标场景本身是跨实现的连续性证据，现居 `eval/golden/`（14 场景）。
 
 ## 8. 相对 legacy 的两处刻意行为变更（其余行为等价）
 
@@ -155,14 +156,14 @@ collect_missing_info / check_availability / follow_up / handoff。原 loop-runne
    {intent, mode}，每轮 LLM 调用 -1，语义不变（fast-path 命中时依旧零调用）。
 
 风险声明：两处变更均不在金标断言覆盖内（1）或有 stub 可离线验证（2），
-真实 LLM 全量金标（含 judge）需在配 key 环境跑 `pnpm eval:full` 复核 11/11。
+真实 LLM 全量金标（含 judge）需在配 key 环境跑 `pnpm eval` 复核 14/14。
 
 ## 9. 验收清单（重写完成的定义）
 
 以下条目均未开始；若重启 RW-1 实施，以此为完成定义：
 
 - [ ] `pnpm lint` / `pnpm typecheck` / `pnpm test`（全包）/ `pnpm smoke` 全绿
-- [ ] `pnpm eval`（离线结构断言）11/11 场景通过并进 CI
+- [ ] `pnpm eval`（离线结构断言）14/14 场景通过并进 CI
 - [ ] 覆盖率工程化：CI 输出各包行覆盖率，@rental/domain ≥ 85%
-- [ ] `rag-service/` 与迁移期文档从 main 删除，README/docs 描述单一架构
-- [ ] `pnpm eval:full` 在配 key 环境复核 11/11（人工步骤，重写后首个动作）
+- [x] `rag-service/` 与迁移期文档从 main 删除，README/docs 描述单一架构（R5 已执行）
+- [ ] `pnpm eval` 在配 key 环境复核 14/14（人工步骤，重写后首个动作）

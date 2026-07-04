@@ -441,20 +441,21 @@ orchestrator stage），harness lane 没有也**不应该有**——为凑断言
 
 ## 6. 决策 e：退役顺序
 
-> **状态更新（2026-07）：R4 已执行。** 检索子系统（qdrant client、embedding 调用、
-> `ingest.ts`、`chunking.ts`、local-vectors、`rag.ts` 内 `searchKnowledge`/`embedText`、
-> `@qdrant/js-client-rest` 依赖）已在单独 commit 中删除，agentic search 上线为当前检索路径。
-> 同批把评测飞轮拆回朴素金标回归（`pnpm eval --target harness`，见 §16 R4 记录）。
-> **平价门被用户决策覆盖**：本节 R3/R4 写的"11/11 平价才准删"是设计期的硬门槛；实际
-> harness lane 最好一轮 13/14，用户明确决策 RAG 直接退役、不因平价未达标而阻塞
-> （求职作品集项目，dont overdo）。R5（answerQuestion/orchestrator/memory-store 整体删）
-> 仍未做，范围外。
+> **状态更新（2026-07）：R4 与 R5 均已执行。** R4 删检索子系统（qdrant client、embedding
+> 调用、`ingest.ts`、`chunking.ts`、local-vectors、`rag.ts` 内 `searchKnowledge`/`embedText`、
+> `@qdrant/js-client-rest` 依赖），agentic search 上线为当前检索路径；同批把评测飞轮拆回
+> 朴素金标回归（`pnpm eval`，见 §16 R4 记录）。
+> **R5 紧接执行**：整个 legacy rag-service 运行时（`answerQuestion`/orchestrator/memory-store，
+> ~6300 行）与 legacy 版 golden 场景集一并删除，评测资产（judge + golden runner + 14 个场景）
+> 迁至根级 `eval/`，双目标 runner 退化为单 lane（去 `--target`）。
+> **平价门被用户决策覆盖**：本节 R3/R4/R5 写的"11/11 平价才准删"是设计期的硬门槛；实际
+> harness lane 最好一轮 13/14，用户明确决策直接退役、不因平价未达标而阻塞（求职作品集项目，
+> dont overdo，见好就收）。§16 的"事实抽取 + 阶段状态机"/"profile 写路径"两项未做即删——
+> 相关行为改由金标行为断言表达，阶段状态机不在 harness 内重建（行为简化，见 architecture §8）。
 
-范围澄清（诚实边界）：`rag-service` 的**整体**删除还依赖 §16 账本的
-"事实抽取 + 阶段状态机"（🔴）与 "profile 写路径"（🟡）两项，不属于本设计。
-本设计负责的退役对象是**检索子系统**（qdrant + embedding + ingest 链）与
-**评测资产的迁出**；answerQuestion 整体删除的门槛（金标 11/11 平价）由本设计
-的 eval 迁移铺好轨道。
+范围澄清（诚实边界，事后）：本设计原本只负责**检索子系统**（qdrant + embedding + ingest 链）
+与**评测资产的迁出**，把 answerQuestion 整体删除留给"§16 闭环后"。实际 R5 由用户决策提前执行，
+不等 §16 红黄项闭环——终态是单一 harness lane + 根级 `eval/` 朴素金标。
 
 | 步 | 动作 | 安全网 |
 |---|---|---|
@@ -462,7 +463,7 @@ orchestrator stage），harness lane 没有也**不应该有**——为凑断言
 | R2（=B4） | 评测资产迁出：golden YAML、reports 基线、eval.ts/eval-env.ts 内化为双目标 runner；judge（evaluator.ts）迁到共享包（它是留下来的部分，先迁走再删宿主） | `--target legacy` 复现 iter4 PASS 集后才算迁移完成；原 eval.ts 保留到 R4 作对照 |
 | R3（=B5 前半） | harness lane 达标：11/11（--repeat 3）+ 检索场景 PASS，`--save` 存 harness 基线报告 | 达标报告 + promptVersion 落 tests/reports/，作为 R4 的回归基线 |
 | R4（=B5 后半） | 删检索子系统：rag.ts 内 searchKnowledge 调用点、ingest.ts、chunking.ts、embedding client、qdrant 依赖、local-vectors.json 路径 | 单独一个 commit（好 revert）；删后 legacy 金标仍 11/11（检索恒空早已是事实行为，删除只是把 404 降级变成不存在）——该 11/11 平价须在 legacy 经 `LEGACY_CHAT_MODEL` 跑通、且与 harness 同一 judge 配置（`max_tokens=2000`）下重测基线后取得（§5.5 基线可比性）；`pnpm lint && pnpm test` 绿 |
-| R5（本设计范围外，前置=§16 闭环） | 删 rag-service 运行时整体（answerQuestion/orchestrator/memory-store），playground 与生产默认走 harness lane | 门槛：harness lane 金标 11/11 平价（R3 已备）+ §16 红黄项闭环；届时 legacy 版 golden YAML 一并删除，双目标 runner 退化为单目标 |
+| R5 ✅（2026-07 已执行，用户决策提前） | 删 rag-service 运行时整体（answerQuestion/orchestrator/memory-store）+ legacy golden 集；评测资产迁至根级 `eval/`；playground 与生产走唯一 harness lane | 平价门（11/11）被用户决策覆盖（best 13/14 即删）；legacy 版 golden YAML 一并删除，双目标 runner 退化为单 lane（去 `--target`）；`pnpm build:skeleton && pnpm lint && pnpm typecheck && pnpm test` 绿 + 真跑金标冒烟 |
 
 顺序设计原则：每一步删除前，被删物的**消费方先清零**（openclaw
 "Existing-solutions preflight" 的镜像：删除前先查还有谁在用）；每一步都有

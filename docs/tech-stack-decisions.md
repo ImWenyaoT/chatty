@@ -44,19 +44,20 @@ Rule: the agent loop must not run as an unbounded long-lived Next.js request han
 
 ## 3. Existing Frontend
 
-Decision: do not heavily rewrite the existing frontend.
+Decision: `apps/web` (Next.js) is the only frontend.
 
-Current frontend assets:
+The legacy rag-service frontends have been removed:
 
-- `rag-service/public/test.html`: manual test console.
-- `rag-service/dashboard`（已删除，2026-07）: legacy React/Vite dashboard source; apps/web 的 `/dashboard` 已重建同类功能，源码在 git 历史 / `legacy-extras` 分支.
+- `rag-service/public/test.html` (manual test console) and `rag-service/dashboard`
+  (React/Vite dashboard source) were deleted with the rest of rag-service in R5
+  (2026-07). `apps/web` `/playground` and `/dashboard` cover the same surface;
+  the old sources live in git history / the `legacy-extras` branch.
 
-Migration approach:
+Frontend approach:
 
-1. Keep existing pages working.
-2. Rehost or wrap them under Next.js only when useful.
-3. Optimize progressively: trace visibility, knowledge management, eval drilldown, and conversation replay.
-4. Avoid a full Chatwoot-style inbox rebuild in the first pass.
+1. `apps/web` playground drives the harness and shows the trace.
+2. Optimize progressively: trace visibility, knowledge management, eval drilldown, and conversation replay.
+3. Avoid a full Chatwoot-style inbox rebuild in the first pass.
 
 ## 4. Chatwoot Role
 
@@ -103,7 +104,7 @@ Current state (updated 2026-07):
 
 - `agent_sessions` is a real SQLite session store (`packages/db`); the playground route loads/creates a session per conversation.
 - Conversations are keyed by `customerId`, `productId`, and `conversationId`.
-- New-loop memory writes go to SQLite JSON columns (recentMessages only so far); `rag-service/data/memory-store.json` remains a read-only fallback and the legacy lane's own store.
+- New-loop memory writes go to SQLite JSON columns (recentMessages only so far). SQLite is now the sole memory source; the legacy `rag-service/data/memory-store.json` read-only fallback was dropped from `apps/web` when rag-service was retired (R5).
 - Recent messages, summaries, profile facts, orchestration state, and reviews are stored under `CustomerMemory` and `ProductMemory`.
 
 Decision:
@@ -193,11 +194,10 @@ OpenAI Agents SDK TypeScript (removed 2026-07; original rationale):
 
 OpenAI Chat Completions API:
 
-- Existing `rag-service` compatibility path.
-- Intent classification.
-- Structured fact extraction.
+- Harness compose path (`apps/web` playground, optional LLM via `CHATTY_LLM=1`).
+- Agentic search tool loop (`search_knowledge`).
 - Reply generation fallback.
-- Evaluator judge.
+- Evaluator judge (`eval/judge.ts`).
 - Direct low-level model calls when an Agents SDK run is unnecessary.
 
 All model calls should go through `packages/llm` adapters so the runtime can switch model providers (or re-introduce an SDK lane) without touching product logic.
@@ -274,15 +274,15 @@ RAG pipeline, and no vector database. Knowledge access is built from four parts:
    shaving retrieval from 0.1s to 0.01s is invisible next to a multi-second
    model call.
 
-Consequence for the legacy lane: `rag-service` is now a migration source only.
-The qdrant + embeddings retrieval subsystem was retired (R4, 2026-07): agentic
-search (FTS5 + `search_knowledge`) is the live retrieval path. The designed
-retirement gate was "harness lane at golden parity (11/11) first", but a user
-decision overrode it — the retrieval subsystem was deleted directly without
-chasing parity (harness lane best 13/14). Retiring the *whole* rag-service
-runtime (answerQuestion/orchestrator, R5) remains gated on that parity + the §16
-red/yellow items. Eval quality is the invariant; the retrieval implementation is
-what got swapped.
+Consequence: the legacy `rag-service` lane is fully retired (R5, 2026-07). The
+qdrant + embeddings retrieval subsystem went first (R4, 2026-07): agentic search
+(FTS5 + `search_knowledge`) is the live retrieval path. The designed retirement
+gate was "harness lane at golden parity (11/11) first", but a user decision
+overrode it — the *whole* rag-service runtime (answerQuestion / orchestrator /
+memory-store, ~6300 lines) was deleted directly without chasing parity (harness
+lane best 13/14), and the evaluation assets (judge + golden runner + scenarios)
+were moved to root-level `eval/`. The end state is a single harness lane. Eval
+quality is the invariant; the whole legacy runtime is what got swapped out.
 
 ## 12. Still Open
 
