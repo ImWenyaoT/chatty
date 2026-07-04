@@ -1,6 +1,10 @@
 # Architecture
 
-读这份之前先读 [README.md](./README.md)。这里只讲内部机制和扩展点。
+> **ARCHIVED（legacy lane，冻结）**：权威架构见根目录 [docs/architecture.md](../docs/architecture.md)。
+> 本目录仅为金标评测链保活，按 RW-1 计划最终从 main 删除；
+> 本文档只描述冻结实现的内部机制，供迁移期参考。
+
+读这份之前先读 [README.md](./README.md)。
 
 ---
 
@@ -297,26 +301,6 @@ return { score, issues, suggestions, suggestedReply, evaluatorModel, promptVersi
 
 ---
 
-## 8. Dashboard 数据流（dashboard/src/）
-
-```
-App.tsx 启动
-   ↓ 三个并行 fetch
-   ├── /config/info          → loaded prompt 版本 + 模型
-   ├── /reviews/summary      → 聚合（promptVersions / topIssues / topSuggestions）
-   └── /memories/all?limit=200 → 全部对话原始数据
-   ↓
-SummaryCards / VersionTable / ConversationList / FrequencyList
-   ↓
-点会话 → ConversationDetail 显示 profile + messages + reviews
-   ↓
-点"重新评估" → POST /reviews/evaluate → reload summary + customers
-```
-
-`/reviews/summary` 实现在 `memory-store.ts: getReviewSummary()`，全量遍历 memoryMap 聚合。数据量大时考虑分页或缓存。
-
----
-
 ## 9. 知识检索（src/rag.ts + src/chunking.ts）
 
 ```
@@ -349,75 +333,6 @@ query 阶段:
 2. **客户端调试展示**：作为 `references` 字段返回给前端，方便看命中了什么
 
 其它 fast-path action 不消费 references（它们的话术全是模板）。
-
----
-
-## 10. 扩展指南
-
-### 10.1 加新业务规则（如新尺码段）
-
-```yaml
-# config/catalog.yaml
-sizeRules:
-  - { minHeight: 160, maxHeight: 167, minWeight: 45, maxWeight: 54, size: S, confidence: medium }
-```
-
-不需要改代码。
-
-### 10.2 加新 SKU
-
-```yaml
-# config/catalog.yaml
-products:
-  - id: DRESS-001
-    name: 红色长裙
-    dailyPrice: 159
-    renewalDailyPrice: 79.5
-    ...
-```
-
-`server.ts: resolveProductIntentText` 里如果要加 SKU 默认意向词，也要补一行。
-
-### 10.3 加新关键词意图
-
-```ts
-// src/rag/intents.ts
-export function isReturnPolicyQuestion(q: string) {
-  return /退货|退款|怎么退|不想要了/.test(q.replace(/\s+/g, ''));
-}
-
-// src/rag/actions.ts
-| { kind: 'return_policy_info' }
-
-// src/rag/templates.ts
-case 'return_policy_info':
-  return '退货规则是...';
-
-// src/rag/action-picker.ts （在合适优先级位置）
-if (isReturnPolicyQuestion(q)) return { kind: 'return_policy_info' };
-```
-
-### 10.4 接真实库存系统
-
-修改 `src/availability-service.ts`：
-
-```ts
-export async function queryAvailability(input: AvailabilityQueryInput) {
-  const resp = await fetch('https://your-inventory-api/check', { ... });
-  return await resp.json() as AvailabilityQueryResult;
-}
-```
-
-下游（`memory-store.ts: inferAvailabilityCheck`）会自动使用真实结果。
-
-### 10.5 切换主回复模型
-
-```env
-CHAT_MODEL=gpt-4o-mini
-EVALUATOR_MODEL=gpt-4o
-```
-
-注意：如果模型不支持 OpenAI tool-calling 协议，`callClassifier` 会失败 → 整个 step 13 兜底分类器失效 → 大部分 fast-path 还能用，但 follow_flow 兜底走 ask_product。
 
 ---
 

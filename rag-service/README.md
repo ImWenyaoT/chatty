@@ -1,9 +1,13 @@
 # Rental RAG Service
 
-面向租赁服装客服场景的智能客服服务。**核心机制不是"LLM 自由发挥"**，而是 `Action 路由 + 模板渲染 + LLM 兜底` 的混合架构。已配套评测闭环（自动评分、版本对比、金标回归、Dashboard）。
+> **ARCHIVED（legacy lane，冻结）**：权威架构见根目录 [docs/architecture.md](../docs/architecture.md)。
+> 本目录仅为金标评测链（`pnpm eval` + `tests/golden/`）保活，按 RW-1 计划最终从 main 删除。
+> 原 Vite dashboard 子包已于 2026-07 删除（apps/web 的 `/dashboard` 重建了同类功能）。
 
-> 读完这份 README 你能：本地跑起来 / 改 prompt 和业务规则 / 跑回归测试 / 解读 Dashboard。
-> 想理解内部机制和扩展点，进一步看 [ARCHITECTURE.md](./ARCHITECTURE.md)。
+面向租赁服装客服场景的智能客服服务。**核心机制不是"LLM 自由发挥"**，而是 `Action 路由 + 模板渲染 + LLM 兜底` 的混合架构。已配套评测闭环（自动评分、版本对比、金标回归）。
+
+> 读完这份 README 你能：本地跑起来 / 改 prompt 和业务规则 / 跑回归测试。
+> 想理解内部机制，进一步看 [ARCHITECTURE.md](./ARCHITECTURE.md)。
 
 ---
 
@@ -22,7 +26,6 @@
 - 评估失败落 error review 不重试
 - 每条 review 自带 `promptVersion` + `chatModel` + `evaluatorModel` 标签，方便版本对比
 - 金标回归 `pnpm eval` + 版本对比 `--baseline`
-- React Dashboard `/history` 看版本指标、低分对话 drill-down、改写建议
 
 **配置化**
 - 所有 prompt 和业务规则在 `config/prompts/<version>.yaml` 和 `config/catalog.yaml`
@@ -46,10 +49,7 @@ rag-service/
 │   ├── history/
 │   └── products/
 ├── public/
-│   ├── test.html                # 手动测试页（手写 HTML）
-│   └── dashboard/               # React Dashboard 构建产物（gitignored）
-├── dashboard/                   # React + Vite 源码
-│   └── src/{App.tsx, api.ts, types.ts, styles.css, ...}
+│   └── test.html                # 手动测试页（手写 HTML）
 ├── scripts/
 │   ├── ingest.ts                # 知识入库
 │   ├── eval.ts                  # 金标回归运行器
@@ -124,7 +124,6 @@ cd rag-service
 
 pnpm qdrant:start                 # 启动 Qdrant（可选）
 pnpm ingest                       # 首次或更新知识后入库
-pnpm build:dashboard              # 构建 React Dashboard 静态产物
 pnpm dev                          # 启动 Fastify（tsx watch）
 ```
 
@@ -133,7 +132,6 @@ pnpm dev                          # 启动 Fastify（tsx watch）
 | URL | 用途 |
 |---|---|
 | http://127.0.0.1:3001/ | 手动测试页 |
-| http://127.0.0.1:3001/history | React Dashboard |
 | http://127.0.0.1:3001/health | 健康检查 |
 | http://127.0.0.1:3001/config/info | 当前 promptVersion + 模型 |
 
@@ -163,7 +161,7 @@ pnpm dev                          # 启动 Fastify（tsx watch）
 | GET | `/health` | 健康检查 |
 | GET | `/config/info` | 当前 promptVersion / 模型 / 商品目录 |
 | GET | `/` | 手动测试 HTML |
-| GET | `/history` | React Dashboard |
+| GET | `/history` | 旧 React Dashboard 路由（dashboard 子包已删除，无构建产物时 404） |
 | POST | `/chat` | 对话主入口 |
 | GET | `/memory/:customerId?productId=` | 单客户记忆 |
 | GET | `/memories/all?page=&limit=` | 所有客户记忆（Dashboard 用） |
@@ -276,17 +274,7 @@ PROMPT_VERSION=v2 pnpm eval -- --baseline v1-baseline
                追加到 productMemory.reviews（走全局锁，不与 /chat 抢写）
 ```
 
-**Dashboard 入口**：http://127.0.0.1:3001/history
-
-| 区块 | 含义 |
-|---|---|
-| 顶部 4 张卡 | 当前版本 / 评估总数 / 当前版本平均分 / 低分率 + 错误率 |
-| 版本对比表 | 多个 promptVersion 的 count / avgScore / lowScore / errorCount |
-| 版本过滤 | 只看某个版本的对话 |
-| 会话列表 | 左栏，分数徽章颜色标记（红<6 / 橙<8 / 绿≥8 / 灰错误） |
-| 对话详情 | 右栏 profile + 消息流 + 全部 review + LLM 改写建议 |
-| 重新评估 | 一键触发 `/reviews/evaluate` 重跑当前对话评分 |
-| Top 问题 / 建议 | 底部高频 issues / suggestions Top 10 |
+评分数据的可视化入口在 apps/web 的 `/dashboard`（本目录原 React Dashboard 已删除）。
 
 **金标回归**：
 
@@ -308,23 +296,6 @@ pnpm eval -- --baseline v1-base  # 对比当前 vs baseline
 | `profile: { heightCm: 180, rentalPeriod: { startDate: "*" } }` | profile 字段断言（`*` = 存在即可） |
 
 测试自动跑在隔离的 `tests/.tmp/memory-store.json`，不会污染真实数据。
-
----
-
-## 10. 改 Dashboard
-
-```bash
-pnpm dev:dashboard               # Vite 开发模式，5173 端口，自动代理 API 到 3001
-pnpm build:dashboard             # 生产构建，输出到 public/dashboard/
-```
-
-源码全在 `dashboard/src/`：
-- `App.tsx` — 单文件主应用
-- `api.ts` — fetch 封装
-- `types.ts` — TS 类型
-- `styles.css` — 已带响应式断点（≤1024/640/420 分别处理）
-
-后端调整后，先确认 `/reviews/summary` 和 `/memories/all` 返回结构没变，否则 `types.ts` 也要同步。
 
 ---
 
@@ -367,18 +338,6 @@ pnpm build:dashboard             # 生产构建，输出到 public/dashboard/
 
 ---
 
-## 13. 后续建议（按优先级）
-
-1. **接真实业务接口**：`availability-service.ts` 替换为真实库存查询；`markOrderPlaced` 接订单系统
-2. **Memory 上数据库**：当前 JSON 文件单进程方案不能扩展
-3. **多 SKU**：往 `config/catalog.yaml` 补全 products，可能需要按品类分尺码表
-4. **真实渠道接入**：微信公众号 / 抖店 / 客服 SDK；当前 HTTP API 已足够，需做 webhook 适配
-5. **加 Action 维度的金标断言**：现在只断言 substring，可加 `expect.action: 'guide_order'` 更精确
-6. **接管机制**：`handoffStatus.needed=true` 时推飞书/企业微信群提醒人工
-7. **小模型 fine-tune**：积累足够 (context, suggestedReply) 配对后，可以用小模型替代 `gpt-5.2` 做主回复，降本
-
----
-
 ## 14. 接力问题速查
 
 | 问题 | 看哪 |
@@ -386,7 +345,7 @@ pnpm build:dashboard             # 生产构建，输出到 public/dashboard/
 | 客服又问了不该问的（围度/常穿码等） | `config/prompts/v1.yaml` 的 `systemSupplement` 硬规则 + `src/rag/action-picker.ts` 的 `classifierSystemPrompt` |
 | 想加一个新的客服回复类型 | `actions.ts` + `templates.ts` + `action-picker.ts`（三处都改） |
 | 评估器评分异常偏高/偏低 | `evaluatorSystemPrompt` 改、或换 `EVALUATOR_MODEL` |
-| Dashboard 显示数据不对 | 看 `/reviews/summary` 和 `/memories/all` 的原始 JSON；`memory-store.ts` 的 `getReviewSummary` 是聚合源 |
+| 评分聚合数据不对 | 看 `/reviews/summary` 和 `/memories/all` 的原始 JSON；`memory-store.ts` 的 `getReviewSummary` 是聚合源 |
 | 流程 stage 卡在某一步推不动 | `conversation-orchestrator.ts` 看 `decideStage` 和 `decideAction`；`buildPendingSlots` 决定缺什么 |
 | 知识检索不命中 | 看 `docs/` 内容是否合理分块；`src/chunking.ts` 决定分块策略 |
 | 下单后又被推回前面 stage | `src/rag/action-picker.ts` 的 post-order branch，确认逻辑没漏 |
