@@ -11,9 +11,13 @@ dist/
 !.env.example
 .playwright-mcp/
 
-rag-service/data/memory-store.json
-rag-service/data/local-vectors.json
-rag-service/data/*.bak-*
+# 真实客户数据与运行时状态，任何情况下不入库（公开仓库红线）
+# rag-service/data/ 含真实客户记忆快照；data/ 与 *.db 覆盖 CHATTY_DB_PATH 等运行时库
+rag-service/data/
+data/
+*.db
+*.sqlite
+*.sqlite3
 rag-service/public/dashboard/
 
 # eval 产物（运行 npm run eval --save 生成的报告，不入库）；
