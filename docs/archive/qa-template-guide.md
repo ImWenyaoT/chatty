@@ -52,6 +52,6 @@ A: 不支持。
 
 ## 建议做法
 
-1. QA 一律放在 `docs/history/*.csv`
-2. 规则一律放在 `docs/rules/*`
-3. 商品说明一律放在 `docs/products/*`
+1. QA 一律放在 `knowledge/history/*.csv`
+2. 规则一律放在 `knowledge/rules/*`
+3. 商品说明一律放在 `knowledge/products/*`

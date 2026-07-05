@@ -330,9 +330,9 @@ export function createCustomerServiceModelOutput(
 }
 
 /**
- * Compose step: toolLoopFn（配 search_knowledge）时走有界搜索循环（§4），仅
- * modelFn 时单发写 action JSON；两者缺席、失败或空回复一律落回确定性 composer，
- * 无 API key 也必有回复。
+ * Compose step: answer_question 才暴露 search_knowledge 有界搜索循环（§4），
+ * 库存/转人工/跟进等业务任务不把知识检索工具放进模型上下文，避免慢路径和噪音。
+ * 仅 modelFn 时单发写 action JSON；两者缺席、失败或空回复一律落回确定性 composer。
  */
 export async function composeCustomerServiceModelOutput(
   input: ComposeCustomerServiceModelOutputInput,
@@ -340,7 +340,7 @@ export async function composeCustomerServiceModelOutput(
   const { toolLoopFn, modelFn } = input
   const searchTool = toolLoopFn && input.registry?.get('search_knowledge')
   const callModel =
-    toolLoopFn && searchTool
+    input.task.kind === 'answer_question' && toolLoopFn && searchTool
       ? () => runComposeSearchLoop(input, toolLoopFn, searchTool)
       : modelFn && (() => modelFn(input.context.prompt))
   if (callModel) {
@@ -516,12 +516,13 @@ export async function runCustomerServiceHarnessStep(
   } as unknown as JsonValue
 
   const toolCalls = [...searchTrace.toolCalls, ...executed.toolCalls]
+  const reply = replyAfterToolExecution(action, executed.toolResults)
   return {
     step: {
       sessionId: input.event.conversationId,
       traceId,
       terminality: executed.terminality,
-      reply: action.reply,
+      reply,
       toolCalls,
       nextStatus: executed.nextStatus,
       memoryPatch,
@@ -535,6 +536,33 @@ export async function runCustomerServiceHarnessStep(
       toolResults: [...searchTrace.toolResults, ...executed.toolResults],
     },
   }
+}
+
+function replyAfterToolExecution(action: CustomerServiceAction, toolResults: JsonValue[]): string {
+  if (action.action !== 'check_availability') return action.reply
+  const result = toolResults[0]
+  if (!isPlainJsonObject(result) || typeof result.available !== 'boolean') return action.reply
+
+  const size =
+    typeof result.suggestedSize === 'string'
+      ? result.suggestedSize
+      : typeof result.size === 'string'
+        ? result.size
+        : stringArg(action, 'size')
+  const sizeText = size ? `${size} 码` : '这个尺码'
+  const startDate = stringArg(action, 'startDate')
+  const endDate = stringArg(action, 'endDate')
+  const periodText = startDate && endDate ? `，${startDate} 到 ${endDate} 档期` : ''
+
+  if (result.available) {
+    return `${sizeText}${periodText}可以安排。建议下单前再做一次人工复核，我也可以继续帮您确认下单信息。`
+  }
+  return `${sizeText}${periodText}暂时查不到可用库存。您可以换个尺码或档期，我也可以帮您转人工复核。`
+}
+
+function stringArg(action: CustomerServiceAction, key: string): string | undefined {
+  const value = action.toolArgs?.[key]
+  return typeof value === 'string' && value.trim().length > 0 ? value : undefined
 }
 
 function terminalityForAction(action: CustomerServiceActionKind): {

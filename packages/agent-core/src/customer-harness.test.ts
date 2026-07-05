@@ -212,6 +212,47 @@ test('harness step returns a bounded trace with task, context, action and memory
   })
 })
 
+test('harness summarizes availability tool result in the customer reply', async () => {
+  const result = await runCustomerServiceHarnessStep({
+    event: userEvent('黑色三件套西装 2026-05-10 到 2026-05-12 L 码有货吗？'),
+    memory: memory(),
+    registry: createDefaultToolRegistry(),
+    modelOutput:
+      '{"action":"check_availability","reply":"我先帮您查一下。","toolName":"check_availability","toolArgs":{"productId":"SUIT-001","startDate":"2026-05-10","endDate":"2026-05-12","size":"L"}}',
+  })
+
+  assert.equal(result.step.terminality, 'tool_then_continue')
+  assert.equal(typeof result.step.reply, 'string')
+  assert.match(result.step.reply ?? '', /L 码/)
+  assert.match(result.step.reply ?? '', /2026-05-10 到 2026-05-12/)
+  assert.match(result.step.reply ?? '', /可以安排/)
+  assert.equal(result.trace.toolResults.length, 1)
+})
+
+test('compose step does not expose knowledge search loop for availability tasks', async () => {
+  let modelCalls = 0
+  let loopCalls = 0
+  const result = await runCustomerServiceHarnessStep({
+    event: userEvent('黑色三件套西装 2026-05-10 到 2026-05-12 L 码有货吗？'),
+    memory: memory(),
+    registry: createDefaultToolRegistry(knowledgeSearcher([])),
+    modelFn: async () => {
+      modelCalls += 1
+      return '{"action":"check_availability","reply":"我先帮您查库存。","toolName":"check_availability","toolArgs":{"productId":"SUIT-001","startDate":"2026-05-10","endDate":"2026-05-12","size":"L"}}'
+    },
+    toolLoopFn: async () => {
+      loopCalls += 1
+      return { text: '{"action":"answer_question","reply":"不应该走搜索循环。"}' }
+    },
+  })
+
+  assert.equal(modelCalls, 1)
+  assert.equal(loopCalls, 0)
+  assert.equal(result.trace.toolCalls.length, 1)
+  assert.equal(result.trace.toolCalls[0].toolName, 'check_availability')
+  assert.match(result.step.reply ?? '', /可以安排/)
+})
+
 // ---- B3 有界搜索循环（docs/archive/agentic-search-design.md §4）----
 
 /** 造一个可数命中次数的知识检索 fake，配合 createDefaultToolRegistry 注册 search_knowledge。 */
