@@ -11,7 +11,7 @@ export interface KnowledgeSearchHit {
 
 export interface KnowledgeRepository {
   /**
-   * 全文检索（docs/agentic-search-design.md §2.2 T1）：全部查询词 ≥3 字时走
+   * 全文检索（docs/archive/agentic-search-design.md §2.2 T1）：全部查询词 ≥3 字时走
    * trigram MATCH 取 bm25 相关度序（同分按 rowid 打平）；含 <3 字词或 MATCH
    * 零命中时回退 LIKE（text 与 summary 两列，词间 AND，按 rowid 稳定排序）。
    * 零命中返回空数组。查询按空白切词，MATCH 语法不暴露——词在服务端转义成短语。

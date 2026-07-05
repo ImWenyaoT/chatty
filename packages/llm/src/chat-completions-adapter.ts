@@ -43,7 +43,7 @@ export interface ChatCompletionsAdapter {
    */
   completeJson<T = unknown>(messages: ChatCompletionMessage[]): Promise<T>
   /**
-   * 带工具的单次补全（docs/agentic-search-design.md B2）：不带 response_format
+   * 带工具的单次补全（docs/archive/agentic-search-design.md B2）：不带 response_format
    * （不假设 provider 同时严格支持两者，§4.3）；tools 为空数组时省略该参数，
    * 供有界循环的收尾轮使用（§4.2）。回复解析成 tool_calls 或纯文本两种形态。
    */

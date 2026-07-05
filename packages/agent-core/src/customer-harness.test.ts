@@ -189,7 +189,7 @@ test('harness step returns a bounded trace with task, context, action and memory
   })
 })
 
-// ---- B3 有界搜索循环（docs/agentic-search-design.md §4）----
+// ---- B3 有界搜索循环（docs/archive/agentic-search-design.md §4）----
 
 /** 造一个可数命中次数的知识检索 fake，配合 createDefaultToolRegistry 注册 search_knowledge。 */
 function knowledgeSearcher(hits: Array<{ text: string; section: string }>) {

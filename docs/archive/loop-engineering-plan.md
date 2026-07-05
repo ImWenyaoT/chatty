@@ -7,7 +7,7 @@ Last updated: 2026-07-04
 This plan starts the Next.js-first Chatty agent loop foundation without rewriting the current rental RAG service.
 
 Stack and product decisions are registered once in
-[tech-stack-decisions.md](tech-stack-decisions.md); this plan does not restate them.
+[tech-stack-decisions.md](../tech-stack-decisions.md); this plan does not restate them.
 This document keeps the migration plan, phase records, and the Legacy Migration Ledger (§16).
 
 ## 1. Scope And Non-Goals

@@ -2,7 +2,7 @@
 
 Last updated: 2026-07-04
 
-This document is the single decision registry for Chatty, the agentic customer-service rewrite. It supersedes the exploratory PRD (now a short decision record in `docs/agentic-customer-service-prd.md`, full text in git history) where the two conflict.
+This document is the single decision registry for Chatty, the agentic customer-service rewrite. It supersedes the exploratory PRD (now a short decision record in `docs/archive/agentic-customer-service-prd.md`, full text in git history) where the two conflict.
 
 ## 1. Current Decision Summary
 
@@ -18,7 +18,47 @@ Temporal deferred until the product proves it needs durable workflow guarantees
 Chatwoot used as open-source product reference, not as runtime dependency
 No RAG / no vector database in the target architecture: memory + FTS indexing +
 agent search tools; legacy qdrant retrieval subsystem retired 2026-07 (R4)
+Quality gate: every automatically verifiable behavior must have automated verification
+Complexity rule: delete out-of-bounds work before optimizing it
 ```
+
+## 1.0 Complexity Boundary And Deletion Rule
+
+Decision: Chatty must stay inside the interval defined by `docs/jd.md + PRD.pdf`
+as the lower bound and local OpenClaw / Codex / Claude Code source trees as
+the upper bound.
+
+This is a deletion rule, not an optimization rule:
+
+- Below the lower bound: add the missing harness behavior.
+- Inside the interval: keep the smallest implementation that passes tests.
+- Above the upper bound or unrelated to customer-service harness: delete first.
+- Do not polish, abstract, or preserve out-of-bounds runtime code as future work.
+
+The executable version lives in `packages/shared/src/architecture-bounds.ts`.
+
+## 1.1 Agentic Coding Quality Gate
+
+Decision: treat automated verification as product infrastructure, not cleanup.
+
+In this repository, "done" means the relevant behavior is covered by the
+cheapest reliable automated check:
+
+- Pure deterministic logic: unit tests in the owning package.
+- Cross-module behavior: lightweight integration tests that use real adapters
+  where practical, especially for harness steps, policy, repositories, and
+  `search_knowledge`.
+- No-network production path: `pnpm smoke`.
+- Type and build contracts: `pnpm typecheck`, `pnpm build:skeleton`, and
+  `pnpm build`.
+- Real model behavior: manual `pnpm eval` / `.github/workflows/eval.yml`,
+  because it depends on secrets, external latency, and LLM judge noise.
+
+The executable version of this contract lives in
+`packages/shared/src/quality-gates.ts`, and
+`packages/shared/src/quality-gates.test.ts` verifies that `package.json` and CI
+still wire the required checks. If a future change adds, removes, or renames a
+quality gate, update the contract and tests in the same change.
 
 ## 2. Next.js vs Fastify
 
@@ -56,7 +96,8 @@ The legacy rag-service frontends have been removed:
 Frontend approach:
 
 1. `apps/web` playground drives the harness and shows the trace.
-2. Optimize progressively: trace visibility, knowledge management, eval drilldown, and conversation replay.
+2. Keep only frontend surfaces that make harness state observable: trace visibility,
+   knowledge hits, eval evidence, and conversation replay.
 3. Avoid a full Chatwoot-style inbox rebuild in the first pass.
 
 ## 4. Chatwoot Role
@@ -94,7 +135,7 @@ Development concepts:
 - `dev skills`: agent-side skills and plugins used while developing.
 - Project-level dev-skill files were removed in the 2026-07 simplification (history preserved on the `legacy-extras` branch); the practices they encoded live on as conventions, not files.
 - Non-trivial or high-risk development should include at least one read-only sub-agent grill before completion; sub-agent collaboration remains tree-shaped with the main agent as controller.
-- Open-source or external skills can be adopted or adapted only with recorded provenance, license compatibility, and local changes (see `docs/open-source-adoption.md`).
+- Open-source or external skills can be adopted or adapted only with recorded provenance, license compatibility, and local changes (see `archive/open-source-adoption.md`).
 
 Do not call customer-service runtime capabilities "skills" in product docs.
 
@@ -223,23 +264,28 @@ Production requirements for promoted workflows:
 - Golden eval cases.
 - Trace fields.
 
-## 9. Mermaid Architecture
+## 9. Agent-First Mermaid Architecture
+
+For the complete diagram set, use
+[current-architecture.md](current-architecture.md). The high-level architecture
+is agent-first: the framework is an edge adapter, while the stable product
+surface is the harness contract.
 
 ```mermaid
-flowchart TD
-  U["Customer / Operator"] --> W["Next.js app"]
-  W --> API["Next.js Route Handlers"]
-  API --> S["SQLite session/state"]
-  API --> AC["agent-core"]
-  AC --> CTX["Context builder"]
-  CTX --> MEM["Existing memory model in SQLite JSON"]
-  CTX --> RAG["Knowledge / media retrieval"]
-  AC --> LLM["packages/llm"]
-  LLM --> CC["OpenAI Chat Completions API"]
-  AC --> TOOLS["Runtime tools"]
-  TOOLS --> ORD["Order / inventory / media / handoff adapters"]
-  AC --> TRACE["Agent traces and eval records"]
-  TRACE --> S
+flowchart LR
+  Event["ConversationEvent"] --> Harness["agent-core harness"]
+  Harness --> Task["task scheduling"]
+  Task --> Context["context assembly"]
+  Context --> Compose["compose<br/>LLM optional"]
+  Compose --> Parser["output parser"]
+  Parser --> Executor["policy-aware executor"]
+  Executor --> Registry["runtime tool registry"]
+  Context --> Memory["SQLite memory/session"]
+  Context --> Knowledge["agentic search<br/>search_knowledge"]
+  Knowledge --> FTS["SQLite FTS5 + LIKE"]
+  Compose --> LLM["Chat Completions adapter"]
+  Executor --> Trace["trace + memory patch"]
+  Trace --> Eval["tests / smoke / golden eval"]
 ```
 
 ## 10. Design Artifacts

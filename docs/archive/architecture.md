@@ -1,6 +1,11 @@
 # Chatty MVP 架构 Spec
 
 Last updated: 2026-07-04
+
+> 当前实现入口不是本文档。先读 [current-architecture.md](../current-architecture.md)
+> 的 90-second Version，再读 [design.md](../design.md)。本文是 RW-1 历史目标架构记录，
+> 只在追溯被放弃的重写方案时使用。
+
 Status: **重写设计提案（编号 RW-1，未实施）** — 本文档是 legacy `rag-service` 推倒重写的目标架构设计。
 曾按 §2/§3 平移出 `packages/domain` 代码骨架，但骨架从未接入 playground / 金标评测等生产路径，
 已于 2026-07 的 cleanup 中整包移除；设计本身保留，作为架构决策记录。

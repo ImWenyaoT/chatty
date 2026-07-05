@@ -35,7 +35,7 @@ export interface MemoryRepository {
   appendRecentMessages(input: ProductMemoryInput, messages: JsonValue[], cap?: number): void
   /**
    * 一轮对话结束后，把该轮产生的全部记忆变更在同一个 SQLite 事务里落库
-   * （docs/architecture.md §5：memory repository 接管完整 profile 读写）：
+   * （docs/archive/architecture.md §5：memory repository 接管完整 profile 读写）：
    * - appendMessages 追加进 recentMessages 滑窗（沿用 appendRecentMessages 的
    *   截断语义，默认保留最近 `cap` 条，缺省 20）
    * - conversationProfile / summary 写 product_memories（按 conversation_id upsert）

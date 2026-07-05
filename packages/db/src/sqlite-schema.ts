@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS agent_traces (
 CREATE INDEX IF NOT EXISTS idx_agent_traces_session
   ON agent_traces (session_id, created_at);
 
--- 知识库全文索引（docs/agentic-search-design.md §2.1）：单 FTS5 虚拟表，
+-- 知识库全文索引（docs/archive/agentic-search-design.md §2.1）：单 FTS5 虚拟表，
 -- trigram tokenizer（§2.2），元数据列 UNINDEXED，chunk_id 即 rowid。
 CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_chunks USING fts5(
   text,

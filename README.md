@@ -43,12 +43,13 @@ The repository is a single, typed TypeScript customer-service harness for:
    命中知识库后把结果作为 `knowledge` context fragment 落回，最多 3 次搜索到顶强制作答；
    任何失败回退确定性 composer（"无 key 可跑"是不变量）。索引由
    [`packages/db/src/knowledge-index.ts`](packages/db/src/knowledge-index.ts) 启动时幂等同步
-   `knowledge/` 语料。完整规格见 [agentic-search-design.md](docs/agentic-search-design.md)。
+   `knowledge/` 语料。当前架构入口见 [Harness Design Map](docs/design.md)；
+   历史检索规格见 [agentic-search-design.md](docs/archive/agentic-search-design.md)。
    早先基于 embedding/qdrant 的检索子系统已退役（2026-07）。
 
 ## Current Status
 
-This is a working customer-service harness MVP: `/api/playground` runs task scheduling → context assembly → model-output composition (optional LLM via `CHATTY_LLM=1`, deterministic fallback) → parsing → action execution → trace persistence, and the UI shows the resulting harness trace. Knowledge retrieval is an agentic search step (SQLite FTS5 + `search_knowledge` tool + bounded loop). Quality is guarded by a plain golden regression check under `eval/` (`pnpm eval`). The legacy `rag-service` lane has been fully retired; the migration history is recorded in the [Legacy Migration Ledger](docs/loop-engineering-plan.md#16-legacy-migration-ledger).
+This is a working customer-service harness MVP: `/api/playground` runs task scheduling → context assembly → model-output composition (optional LLM via `CHATTY_LLM=1`, deterministic fallback) → parsing → action execution → trace persistence, and the UI shows the resulting harness trace. Knowledge retrieval is an agentic search step (SQLite FTS5 + `search_knowledge` tool + bounded loop). Quality is guarded by a plain golden regression check under `eval/` (`pnpm eval`). The legacy `rag-service` lane has been fully retired; the migration history is recorded in the [Legacy Migration Ledger](docs/archive/loop-engineering-plan.md#16-legacy-migration-ledger).
 
 ## Useful Commands
 
@@ -61,7 +62,28 @@ pnpm typecheck:skeleton
 pnpm eval                 # 朴素金标回归（harness lane，需真实 LLM）
 ```
 
+## Quality Gates
+
+Chatty follows one testing rule: in agentic coding, every behavior that can be
+automatically verified should be automatically verified.
+
+- `pnpm test` runs workspace unit tests and lightweight integration tests.
+- `pnpm smoke` runs the no-network core data path through SQLite session/trace/memory.
+- `pnpm typecheck` verifies TypeScript contracts across workspaces and eval.
+- `pnpm lint` keeps formatting and static checks stable through Biome.
+- `.github/workflows/ci.yml` runs skeleton build, lint, smoke, tests, typecheck,
+  and build on PRs and `main`.
+- `.github/workflows/eval.yml` is the manual real-LLM golden regression gate for
+  prompt, model, and judge behavior.
+
+The required command and CI-step contract is executable documentation in
+[`packages/shared/src/quality-gates.ts`](packages/shared/src/quality-gates.ts)
+and is locked by
+[`packages/shared/src/quality-gates.test.ts`](packages/shared/src/quality-gates.test.ts).
+
 ## Docs
 
-- [Architecture (RW-1 目标架构)](docs/architecture.md)
-- [Tech Stack Decisions（唯一决策登记处）](docs/tech-stack-decisions.md)
+- Agent architecture design: [Harness Design Map（设计选择 + 代码结构 + 架构图主文档）](docs/design.md)
+- Extra diagrams: [Current Architecture（agent-first 补充图集）](docs/current-architecture.md)
+- Decisions and rejected options: [Tech Stack Decisions（唯一决策登记处）](docs/tech-stack-decisions.md)
+- History only: [Architecture (RW-1 历史目标架构，不是当前实现入口)](docs/archive/architecture.md)

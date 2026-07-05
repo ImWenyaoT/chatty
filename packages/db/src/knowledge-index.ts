@@ -4,7 +4,7 @@ import { join, relative, sep } from 'node:path'
 import type { Db } from './database.js'
 import { nowIso } from './database.js'
 
-// 单 chunk 上限：markdown section 超过它才按段落再切（docs/agentic-search-design.md §2.1）。
+// 单 chunk 上限：markdown section 超过它才按段落再切（docs/archive/agentic-search-design.md §2.1）。
 const MAX_CHUNK_CHARS = 1200
 
 /** 知识语料类型，由 knowledge/ 下的顶层目录推断（§2.1 schema 的 source_type 列）。 */

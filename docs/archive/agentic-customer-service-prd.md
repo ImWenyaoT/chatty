@@ -4,8 +4,8 @@ Last updated: 2026-07-04
 
 原 504 行探索版 PRD 已归档：全文见本文件的 git 历史
 （`git log --follow -- docs/agentic-customer-service-prd.md`）或 `legacy-extras` 分支。
-现行架构以 [architecture.md](architecture.md) 与
-[tech-stack-decisions.md](tech-stack-decisions.md) 为准。此处仅保留两条被否决方案的决策记录：
+现行架构以 [design.md](../design.md) 与
+[tech-stack-decisions.md](../tech-stack-decisions.md) 为准。此处仅保留两条被否决方案的决策记录：
 
 ## 否决：Chatwoot + Agent Sidecar 作为主基座
 

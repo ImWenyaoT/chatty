@@ -36,7 +36,7 @@ type KnowledgeHit = {
 
 const PRESET_QUESTIONS = [
   '这件西装多少钱一天？',
-  '4月29到30号有货吗？',
+  '黑色三件套西装 2026-05-10 到 2026-05-12 L 码有货吗？',
   '我身高180体重70，这款能穿吗？',
   '我要退款',
 ]
@@ -166,6 +166,7 @@ export default function LegacyConsolePage() {
   )
   const recentMessages = useMemo(() => recentSellerMessages(turns), [turns])
   const toolCalls = latestAgent?.trace?.toolCalls ?? []
+  const toolResults = latestAgent?.trace?.toolResults ?? []
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' })
@@ -515,6 +516,12 @@ export default function LegacyConsolePage() {
               ) : (
                 <p className="legacy-muted">暂无工具调用</p>
               )}
+              {toolResults.length > 0 ? (
+                <details className="legacy-fragment">
+                  <summary>工具结果</summary>
+                  <pre>{JSON.stringify(toolResults, null, 2)}</pre>
+                </details>
+              ) : null}
               {fragments.map((fragment, index) => (
                 <details
                   className="legacy-fragment"

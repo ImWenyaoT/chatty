@@ -1,4 +1,4 @@
-// completeWithTools 的 mock client 测试（docs/agentic-search-design.md B2 验收）：
+// completeWithTools 的 mock client 测试（docs/archive/agentic-search-design.md B2 验收）：
 // 覆盖 tool_calls 回复与纯文本回复两种形态的解析，以及消息/工具定义到
 // Chat Completions 线格式的映射（tool_calls / role:'tool' / tools 参数省略）。
 import { test } from 'node:test'
