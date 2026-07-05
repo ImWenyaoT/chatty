@@ -204,6 +204,28 @@ test('compose step routes through the injected modelFn with the built context pr
   assert.equal(result.step.reply, '这款 L 码 5月10到12号可以安排。')
 })
 
+test('compose step passes harness runtime to modelFn for SDK-owned tool orchestration', async () => {
+  const result = await runCustomerServiceHarnessStep({
+    event: userEvent('押金怎么算'),
+    memory: memory(),
+    registry: createDefaultToolRegistry(knowledgeSearcher([])),
+    modelFn: async (_prompt, runtime) => {
+      assert.equal(runtime?.task.kind, 'answer_question')
+      assert.equal(runtime?.registry?.get('search_knowledge')?.name, 'search_knowledge')
+      runtime?.searchTrace?.toolCalls.push({
+        toolName: 'search_knowledge',
+        arguments: { query: '押金' },
+        risk: 'low',
+        approvalRequired: false,
+      })
+      return '{"action":"answer_question","reply":"押金按订单规则确认。"}'
+    },
+  })
+
+  assert.equal(result.trace.toolCalls[0].toolName, 'search_knowledge')
+  assert.equal(result.step.reply, '押金按订单规则确认。')
+})
+
 test('compose step falls back to the deterministic composer when the modelFn fails', async () => {
   const result = await runCustomerServiceHarnessStep({
     event: userEvent('这款有 L 吗，5月10到12号穿'),

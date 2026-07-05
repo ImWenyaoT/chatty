@@ -222,7 +222,7 @@ compose system prompt 的结构参考两边：
 
 `search_knowledge` 的 query 不是完全相信模型：泛词如“规则 / 信息 / 推荐”会在 harness 侧按当前商品和用户问题收敛，例如尺码问题改成 `SUIT-001 尺码`。
 Chatty 的 agent 定义为 `agent = model + harness`。model 固定为 `deepseek-v4-pro`，不切 flash，也不按 OpenAI model 能力做设计假设；harness 才是可演进部分。
-DeepSeek 官方兼容面是 Chat Completions、tool calls、JSON object、thinking/reasoning 和 context caching。OpenAI Agents SDK 可参考和复用的是 harness primitive：custom Model/ModelProvider、function tools、session、human-in-the-loop 和 tracing；但只有 DeepSeek 兼容性探针通过后才引入 SDK lane。不能把 OpenAI Responses API、OpenAI hosted tools 或 OpenAI Conversations API 当成 DeepSeek 默认能力。
+DeepSeek 官方兼容面是 Chat Completions、tool calls、JSON object、thinking/reasoning 和 context caching。Chatty 已引入 OpenAI Agents SDK 的兼容子集：用 `OpenAIChatCompletionsModel` 包装 DeepSeek endpoint，用 SDK function tools 承接 `search_knowledge` 的模型侧编排；工具执行、policy、knowledge fragment 和 trace 仍归 Chatty harness。SDK session、human-in-the-loop 和 tracing 仍只是候选适配面。不能把 OpenAI Responses API、OpenAI hosted tools 或 OpenAI Conversations API 当成 DeepSeek 默认能力。
 LLM billing/cache 参考实现选 Codex：用 cached/non-cached input token、turn usage 和 budget 思路解释 DeepSeek 账单，不引入 provider 私有 cache API。
 Chatty 对应字段是 `inputCacheHitTokens`、`inputCacheMissTokens`、`inputCacheHitRatio`、`estimatedCostCny`，用于观察 DeepSeek pro 的 prompt/KV cache 命中情况。
 
@@ -234,7 +234,7 @@ flowchart LR
   Product["product"] --> Prompt
   Knowledge["knowledge"] --> Prompt
   Prompt --> Query["query refinement"]
-  Prompt --> SDK["SDK primitive probe"]
+  Prompt --> SDK["Agents SDK<br/>model + function tools"]
   Prompt --> Cost["pro usage telemetry"]
   Cost --> Budget["call budget warning"]
   Cost --> Cache["cache hit ratio"]

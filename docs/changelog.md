@@ -4,10 +4,17 @@
 
 ## 2026-07-05
 
+### Agents SDK adoption for DeepSeek harness
+
+- 变更：重新引入 `@openai/agents`，`@rental/llm` 用 `OpenAIChatCompletionsModel` 包装 DeepSeek OpenAI-format endpoint，并把 Chatty runtime tool 转成 SDK function tool。
+- 设计选择：能交给 SDK 的模型/tool orchestration 交给 SDK；task scheduling、business policy、tool executor、memory、knowledge fragment 和 persisted trace 继续由 Chatty harness 拥有。
+- JD 对齐：把 `agent = model + harness` 落成真实代码：model 是 `deepseek-v4-pro`，harness 通过 SDK 兼容层对齐 DeepSeek，而不是为 OpenAI model 设计。
+- 自动验证：`packages/llm/src/agents-sdk-adapter.test.ts` 覆盖 SDK model/tool adapter；`packages/agent-core/src/customer-harness.test.ts` 锁住 modelFn 可接收 harness runtime；`apps/web/lib/llm.test.ts` 覆盖 `CHATTY_AGENTS_SDK=1` 路由。
+
 ### DeepSeek-first harness boundary
 
 - 变更：明确 `agent = model + harness`，model 固定为 `deepseek-v4-pro`；`OPENAI_*` env 和 `openai` npm package 只是 DeepSeek OpenAI-format Chat Completions 的兼容层。
-- 设计选择：Agents SDK 只作为 harness primitive 候选，必须通过 DeepSeek custom Model/ModelProvider 兼容性探针后才能引入；不能默认采用 OpenAI Responses、hosted tools 或 Conversations API。
+- 设计选择：Agents SDK 的 custom model 与 function tools 已用于兼容子集；Session、HITL 和 tracing 仍保持候选适配面；不能默认采用 OpenAI Responses、hosted tools 或 Conversations API。
 - JD 对齐：把“模型与 Harness 深度适配”落到 DeepSeek Chat Completions、tool calls、JSON object、thinking/reasoning、context cache 和 usage/cost telemetry 的可验证契约。
 - 自动验证：`packages/shared/src/architecture-bounds.test.ts` 锁住 DeepSeek 支持项、SDK 可探针项和 OpenAI-only 不假设项。
 

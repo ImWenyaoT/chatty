@@ -260,14 +260,15 @@ export const DEEPSEEK_HARNESS_COMPATIBILITY: readonly DeepSeekHarnessCompatibili
   },
   {
     feature: 'agents_sdk_custom_model',
-    status: 'adoptable_via_probe',
+    status: 'supported',
     decision:
-      '只有 custom Model/ModelProvider 能稳定调用 DeepSeek Chat Completions 时才引入 SDK lane。',
+      '已用 OpenAIChatCompletionsModel 包装 DeepSeek OpenAI-format endpoint；不切 OpenAI model。',
   },
   {
     feature: 'agents_sdk_function_tools',
-    status: 'adoptable_via_probe',
-    decision: '可复用 SDK function tools/approval 语义，但必须映射回现有 tool registry 和 policy。',
+    status: 'supported',
+    decision:
+      '已用 SDK function tools 承接 search_knowledge orchestration；执行仍映射回 Chatty registry、policy 和 trace。',
   },
   {
     feature: 'agents_sdk_sessions',

@@ -1,6 +1,6 @@
 # Tech Stack Decisions
 
-Last updated: 2026-07-04
+Last updated: 2026-07-05
 
 This document is the single decision registry for Chatty, the agentic customer-service rewrite. It supersedes the exploratory PRD (now a short decision record in `docs/archive/agentic-customer-service-prd.md`, full text in git history) where the two conflict.
 
@@ -11,7 +11,7 @@ Product/agent name: Chatty
 Node.js + TypeScript
 Next.js first
 Customer-service Harness Core drives /api/playground
-OpenAI Chat Completions API (only live model lane; the Agents SDK lane was removed 2026-07)
+DeepSeek OpenAI-format Chat Completions through @openai/agents where supported
 SQLite for MVP sessions/state
 Existing memory model kept mostly intact
 Temporal deferred until the product proves it needs durable workflow guarantees
@@ -216,17 +216,23 @@ The first live path is the customer-service Harness Core:
 - `runCustomerServiceHarnessStep`: returns reply, terminality, tool calls, memory patch, and trace.
 
 This keeps Chatty scoped to a rental customer-service project instead of a
-general-purpose agent runtime. SDK usage may replace parts of the harness
-adapter later, but it must not move task scheduling, executor policy, business
-memory, or trace contracts out of Chatty's control. Deliberately out of scope for
+general-purpose agent runtime. SDK usage replaces model/tool orchestration where
+DeepSeek's OpenAI-format endpoint is compatible, but it must not move task
+scheduling, executor policy, business memory, or trace contracts out of
+Chatty's control. Deliberately out of scope for
 the harness core: terminal/file tools, MCP, background workers, multi-agent
 routing, and any new GUI.
 
 Current live model path:
 
-- DeepSeek `deepseek-v4-pro` via Chat Completions (`packages/llm`).
+- DeepSeek `deepseek-v4-pro` via `@openai/agents` `OpenAIChatCompletionsModel`
+  when `CHATTY_AGENTS_SDK=1`.
+- Direct DeepSeek Chat Completions adapter remains for JSON extraction,
+  telemetry, eval, and non-SDK fallback paths.
 - Harness compose path (`apps/web` playground, optional LLM via `CHATTY_LLM=1`).
-- Agentic search tool loop (`search_knowledge`).
+- Agentic search (`search_knowledge`) uses SDK function tools in the SDK lane,
+  while execution still goes through Chatty registry, policy, knowledge
+  fragments, and persisted trace.
 - Reply generation fallback.
 - Evaluator judge (`eval/judge.ts`).
 - Usage telemetry for DeepSeek cache hit/miss tokens, output tokens, total tokens, and estimated CNY cost.
@@ -239,11 +245,11 @@ DeepSeek compatibility that is safe to rely on:
 - `thinking` and `reasoning_effort` as DeepSeek-specific tuning knobs.
 - Context-cache usage fields for observability.
 
-OpenAI Agents SDK TypeScript can be reintroduced only behind a DeepSeek
-compatibility probe:
+OpenAI Agents SDK TypeScript is adopted for the compatible parts:
 
-- Use SDK custom `Model` / `ModelProvider` only if it can call DeepSeek Chat Completions directly.
-- Use SDK function tools only if they map back to Chatty's typed tool registry and policy gate.
+- Use SDK `OpenAIChatCompletionsModel` with a DeepSeek base URL; do not switch
+  the project target to OpenAI models.
+- Use SDK function tools only when they map back to Chatty's typed tool registry and policy gate.
 - Use SDK Session only as an adapter over Chatty SQLite memory/session; do not use OpenAI server-managed state as source of truth.
 - Use SDK human-in-the-loop/interruption semantics only if decisions still persist to Chatty trace/review tables.
 - Use SDK tracing only as a secondary view; Chatty's persisted trace remains canonical.

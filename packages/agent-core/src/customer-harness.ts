@@ -83,7 +83,10 @@ export interface CreateCustomerServiceModelOutputInput extends CustomerServiceTu
  * prompt and returns the raw model reply text. Kept as a plain function so the
  * harness stays testable without any LLM package or network access.
  */
-export type CustomerServiceModelFn = (prompt: string) => Promise<string>
+export type CustomerServiceModelFn = (
+  prompt: string,
+  runtime?: ComposeCustomerServiceModelOutputInput,
+) => Promise<string>
 
 /** 模型发起的一次工具调用；arguments 为原始 JSON 字符串（结构对齐 @rental/llm）。 */
 export type CustomerServiceLoopToolCall = { id: string; name: string; arguments: string }
@@ -370,9 +373,9 @@ export async function composeCustomerServiceModelOutput(
     input.task.kind === 'answer_question'
       ? toolLoopFn && searchTool
         ? () => runComposeSearchLoop(input, toolLoopFn, searchTool)
-        : modelFn && (() => modelFn(input.context.prompt))
+        : modelFn && (() => modelFn(input.context.prompt, input))
       : input.task.kind === 'check_availability' && modelFn
-        ? () => modelFn(input.context.prompt)
+        ? () => modelFn(input.context.prompt, input)
         : undefined
   if (callModel) {
     try {

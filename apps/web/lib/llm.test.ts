@@ -238,6 +238,7 @@ test('createPlaygroundLlmRuntime stays pro-only and exposes a zero-call summary 
 
     const runtime = createPlaygroundLlmRuntime()
 
+    assert.equal(runtime.mode, 'disabled')
     assert.equal(runtime.modelFn, undefined)
     assert.equal(runtime.toolLoopFn, undefined)
     assert.deepEqual(runtime.summary(), {
@@ -257,6 +258,31 @@ test('createPlaygroundLlmRuntime stays pro-only and exposes a zero-call summary 
     process.env.CHATTY_LLM = savedLlm
     process.env.OPENAI_API_KEY = savedKey
     process.env.CHAT_MODEL = savedModel
+  }
+})
+
+test('createPlaygroundLlmRuntime selects Agents SDK compose when explicitly enabled', () => {
+  const savedLlm = process.env.CHATTY_LLM
+  const savedKey = process.env.OPENAI_API_KEY
+  const savedModel = process.env.CHAT_MODEL
+  const savedSdk = process.env.CHATTY_AGENTS_SDK
+  try {
+    process.env.CHATTY_LLM = '1'
+    process.env.OPENAI_API_KEY = 'sk-test'
+    process.env.CHAT_MODEL = 'deepseek-v4-pro'
+    process.env.CHATTY_AGENTS_SDK = '1'
+
+    const runtime = createPlaygroundLlmRuntime()
+
+    assert.equal(runtime.mode, 'agents-sdk')
+    assert.equal(typeof runtime.modelFn, 'function')
+    assert.equal(runtime.toolLoopFn, undefined)
+  } finally {
+    process.env.CHATTY_LLM = savedLlm
+    process.env.OPENAI_API_KEY = savedKey
+    process.env.CHAT_MODEL = savedModel
+    if (savedSdk === undefined) delete process.env.CHATTY_AGENTS_SDK
+    else process.env.CHATTY_AGENTS_SDK = savedSdk
   }
 })
 
