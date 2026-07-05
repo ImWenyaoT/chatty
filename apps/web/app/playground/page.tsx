@@ -34,6 +34,14 @@ type KnowledgeHit = {
   content: string
 }
 
+type TraceReviewLabel = 'pass' | 'fail' | 'flagged'
+
+type TraceReviewState = {
+  label: TraceReviewLabel
+  note: string
+  tags: string
+}
+
 const PRESET_QUESTIONS = [
   '这件西装多少钱一天？',
   '黑色三件套西装 2026-05-10 到 2026-05-12 L 码有货吗？',
@@ -54,6 +62,18 @@ const DEFAULT_PROFILE: SessionProfile = {
   nextAction: '等待客户消息',
   goal: '先把客户需求补齐，再往下推进',
 }
+
+const DEFAULT_REVIEW: TraceReviewState = {
+  label: 'pass',
+  note: '',
+  tags: '',
+}
+
+const REVIEW_LABELS: Array<{ label: TraceReviewLabel; text: string }> = [
+  { label: 'pass', text: '通过' },
+  { label: 'flagged', text: '标记' },
+  { label: 'fail', text: '失败' },
+]
 
 /** Maps a harness task into the old console's stage language. */
 function stageFromTrace(
@@ -150,6 +170,8 @@ export default function LegacyConsolePage() {
   const [debugLog, setDebugLog] = useState<string[]>(['页面已加载，等待前端事件。'])
   const [sending, setSending] = useState(false)
   const [orderSubmitting, setOrderSubmitting] = useState(false)
+  const [reviewSubmitting, setReviewSubmitting] = useState(false)
+  const [review, setReview] = useState<TraceReviewState>(DEFAULT_REVIEW)
   const nextId = useRef(1)
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -168,6 +190,7 @@ export default function LegacyConsolePage() {
   const toolCalls = latestAgent?.trace?.toolCalls ?? []
   const toolResults = latestAgent?.trace?.toolResults ?? []
   const llm = latestAgent?.trace?.llm
+  const latestTraceId = latestAgent?.traceId
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' })
@@ -278,6 +301,41 @@ export default function LegacyConsolePage() {
       log(`录单失败: ${message}`)
     } finally {
       setOrderSubmitting(false)
+    }
+  }
+
+  /** Records a human trace review for the latest assistant turn. */
+  async function submitTraceReview() {
+    if (!latestTraceId || reviewSubmitting) return
+
+    setReviewSubmitting(true)
+    setStatus('正在记录本轮 trace 复核...')
+    log(`提交 trace review: ${latestTraceId} -> ${review.label}`)
+    try {
+      const response = await fetch('/api/trace-reviews', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          traceId: latestTraceId,
+          label: review.label,
+          reviewer: 'playground',
+          note: review.note,
+          tags: review.tags
+            .split(',')
+            .map((tag) => tag.trim())
+            .filter(Boolean),
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data?.error ?? '复核失败')
+      setStatus(`✓ 复核已记录：${review.label}`)
+      log(`复核成功: total=${data?.summary?.total ?? '?'}`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setStatus(`复核失败: ${message}`)
+      log(`复核失败: ${message}`)
+    } finally {
+      setReviewSubmitting(false)
     }
   }
 
@@ -490,6 +548,17 @@ export default function LegacyConsolePage() {
           </section>
 
           <section>
+            <h2>本轮复核</h2>
+            <TraceReviewPanel
+              disabled={!latestTraceId || reviewSubmitting}
+              review={review}
+              traceId={latestTraceId}
+              onChange={setReview}
+              onSubmit={submitTraceReview}
+            />
+          </section>
+
+          <section>
             <h2>最近处理</h2>
             <div className="legacy-debug">
               {debugLog.slice(0, 6).map((line) => (
@@ -556,6 +625,61 @@ export default function LegacyConsolePage() {
           </section>
         </aside>
       </div>
+    </div>
+  )
+}
+
+/** Renders the minimal human feedback control for the latest agent trace. */
+function TraceReviewPanel({
+  disabled,
+  review,
+  traceId,
+  onChange,
+  onSubmit,
+}: {
+  disabled: boolean
+  review: TraceReviewState
+  traceId?: string
+  onChange: (review: TraceReviewState) => void
+  onSubmit: () => void
+}) {
+  return (
+    <div className="legacy-review-panel">
+      <p>{traceId ? `trace ${traceId}` : '发送一轮消息后可复核最新 trace。'}</p>
+      <div className="legacy-review-options">
+        {REVIEW_LABELS.map((option) => (
+          <button
+            data-active={review.label === option.label}
+            disabled={disabled}
+            key={option.label}
+            type="button"
+            onClick={() => onChange({ ...review, label: option.label })}
+          >
+            {option.text}
+          </button>
+        ))}
+      </div>
+      <label>
+        note
+        <textarea
+          disabled={disabled}
+          placeholder="这轮哪里好或哪里需要进金标"
+          value={review.note}
+          onChange={(event) => onChange({ ...review, note: event.target.value })}
+        />
+      </label>
+      <label>
+        tags
+        <input
+          disabled={disabled}
+          placeholder="needs_golden, policy_gap"
+          value={review.tags}
+          onChange={(event) => onChange({ ...review, tags: event.target.value })}
+        />
+      </label>
+      <button disabled={disabled} type="button" onClick={onSubmit}>
+        记录复核
+      </button>
     </div>
   )
 }

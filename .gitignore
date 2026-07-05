@@ -10,6 +10,7 @@ dist/
 .env.*
 !.env.example
 .playwright-mcp/
+.playwright-cli/
 
 # 真实客户数据与运行时状态，任何情况下不入库（公开仓库红线）
 # rag-service 已于 R5 删除；本地残留目录整体忽略，尤其 data/（真实客户记忆快照）
@@ -21,6 +22,11 @@ data/
 *.db
 *.sqlite
 *.sqlite3
+
+# 本地账单/usage 导出仅用于分析，不入公开仓库
+usage_data_*/
+usage_data_*.csv
+usage_data_*.json
 
 # eval 产物：报告（pnpm eval --save 生成）与每场景 tmp SQLite，均不入库
 eval/reports/

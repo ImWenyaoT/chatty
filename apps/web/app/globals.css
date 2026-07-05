@@ -1022,7 +1022,8 @@ textarea:focus-visible {
 .legacy-sidebar button,
 .legacy-chat-topbar button,
 .legacy-quick-list button,
-.legacy-composer button {
+.legacy-composer button,
+.legacy-review-panel button {
   min-height: 32px;
   padding: 7px 10px;
   border: 1px solid var(--border);
@@ -1038,12 +1039,14 @@ textarea:focus-visible {
 .legacy-sidebar button:hover:not(:disabled),
 .legacy-chat-topbar button:hover,
 .legacy-quick-list button:hover,
-.legacy-composer button:hover:not(:disabled) {
+.legacy-composer button:hover:not(:disabled),
+.legacy-review-panel button:hover:not(:disabled) {
   background: var(--ds-gray-100);
 }
 
 .legacy-sidebar button:disabled,
-.legacy-composer button:disabled {
+.legacy-composer button:disabled,
+.legacy-review-panel button:disabled {
   color: var(--text-disabled);
   cursor: not-allowed;
 }
@@ -1447,6 +1450,64 @@ textarea:focus-visible {
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 16px;
+}
+
+.legacy-review-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.legacy-review-panel p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+
+.legacy-review-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.legacy-review-panel button[data-active="true"] {
+  border-color: var(--accent);
+  background: var(--tone-human-bg);
+  color: var(--tone-human-fg);
+}
+
+.legacy-review-panel label {
+  display: grid;
+  gap: 5px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.legacy-review-panel input,
+.legacy-review-panel textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.legacy-review-panel input {
+  height: 32px;
+  padding: 0 8px;
+}
+
+.legacy-review-panel textarea {
+  min-height: 58px;
+  padding: 8px;
+  resize: vertical;
 }
 
 .legacy-devtools {

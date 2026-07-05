@@ -128,7 +128,7 @@ pie title 18 questions by primary reference
 | Subagent 与 Multi-Agent | Codex | 当前不实现，仅文档化上限和删除规则 | 只有真实任务证明需要时再设计 subagent runtime |
 | Prompt / Context / Harness Engineering | Codex | 结构化 fragments、query refinement、output contract、trace inspector | 优先做 cache-friendly prompt order 和 eval |
 | 评测基准与数据标注 | Codex | `pnpm test`、`pnpm smoke`、`pnpm eval`、golden YAML | 可补真实反馈到 golden 的人工流程，不做自动晋升飞轮 |
-| 真实任务反馈与产品指标 | Codex | `agent_trace_reviews` + `/api/trace-reviews` + dashboard feedback summary | 保持最小人工 review 闭环；不做自动晋升飞轮 |
+| 真实任务反馈与产品指标 | Codex | playground trace review + `agent_trace_reviews` + `/api/trace-reviews` + dashboard feedback summary | 保持最小人工 review 闭环；不做自动晋升飞轮 |
 | UI/UX 与 demo 原型 | Claude Code | playground 展示 loop、tool、trace、LLM cost/cache | 继续提高可解释性；不做大型后台 |
 
 ## 2. 核心功能
@@ -333,7 +333,7 @@ flowchart LR
 测试是 architecture 的一部分。确定性逻辑进 unit，跨包行为进 integration，无网络主链路进 smoke，真实模型行为进 manual golden eval。
 真实 LLM 调试必须带成本观测：trace 记录 model、调用次数、每轮调用预算、cache hit/miss、cache hit ratio、output tokens、估算成本和预算告警，避免只在账单 CSV 里事后发现峰值。
 这些 JD 对齐的工程化改动同步记录在 `docs/changelog.md`，让“为什么改”和“如何验证”能被持续追踪。
-真实任务反馈的最小闭环是人工 trace review：产品/运营可以对 trace 打 `pass`、`fail`、`flagged`，并用 tags 标记 `needs_golden`、`policy_gap` 等问题；dashboard 只展示汇总指标，不自动修改 prompt 或金标。
+真实任务反馈的最小闭环是人工 trace review：产品/运营可以在 playground 对最近一轮 trace 打 `pass`、`fail`、`flagged`，并用 tags 标记 `needs_golden`、`policy_gap` 等问题；dashboard 只展示汇总指标，不自动修改 prompt 或金标。
 
 ```mermaid
 flowchart LR
