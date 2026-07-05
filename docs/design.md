@@ -195,6 +195,10 @@ flowchart LR
 参考实现：Codex。
 
 Prompt 不在 route 里手写大段字符串，而是由结构化 context fragments 组成：task、user、memory、product、knowledge。
+compose system prompt 的结构参考两边：
+
+- Codex：取“清晰、务实、严谨”、范围收敛、事实优先和结果忠实的 operating style。
+- Claude Code：取 harness / tool / output contract 分层，让模型知道哪些决策由 harness 管，哪些动作必须走工具边界。
 
 ```mermaid
 flowchart LR
