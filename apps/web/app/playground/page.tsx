@@ -514,6 +514,10 @@ export default function LegacyConsolePage() {
                 <strong>
                   {llm ? `${llm.totalTokens ?? 0} · out ${llm.outputTokens ?? 0}` : '0 · out 0'}
                 </strong>
+                <span>cache hit</span>
+                <strong>
+                  {llm ? `${((llm.inputCacheHitRatio ?? 0) * 100).toFixed(1)}%` : '0.0%'}
+                </strong>
                 <span>est. cost</span>
                 <strong>{llm ? `¥${(llm.estimatedCostCny ?? 0).toFixed(6)}` : '¥0.000000'}</strong>
               </div>

@@ -7,6 +7,7 @@ export type HarnessTrace = {
     callBudget?: number
     inputCacheHitTokens?: number
     inputCacheMissTokens?: number
+    inputCacheHitRatio?: number
     outputTokens?: number
     totalTokens?: number
     estimatedCostCny?: number

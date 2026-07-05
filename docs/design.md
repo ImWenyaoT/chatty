@@ -5,6 +5,7 @@ Last updated: 2026-07-05
 本文是 Chatty 的 agent 架构设计主文档。目标不是把参考仓所有能力搬进来，而是把 18 个关键问题逐个定清楚：
 
 - 每个问题只选一个主参考实现：OpenClaw / Codex / Claude Code 三选一。
+- LLM 账单和 prompt/KV cache 设计单独选 opencode，且不扩张 agent 能力上限。
 - Chatty 只取能服务租衣客服 harness 的最小子集。
 - 改动 harness、tool、memory、parser、executor、eval 时，必须同步更新本文和
   `packages/shared/src/architecture-bounds.ts`。
@@ -18,6 +19,9 @@ Chatty 的下限是 `docs/jd.md + PRD.pdf`。上限是本地源码：
 - `/Users/edward/Documents/oss/openclaw`
 - `/Users/edward/Documents/oss/codex`
 - `/Users/edward/Documents/oss/claude-code`
+
+LLM billing/cache 的单独参考是 `/Users/edward/Documents/oss/opencode/packages/llm/DESIGN.md`。
+它只用于 usage、cache read/write、estimated cost 的 trace 设计，不作为 agent runtime 能力上限。
 
 Chatty 的位置在中间：保留 agent harness 的骨架，拒绝通用 coding agent 的能力面。
 
@@ -204,6 +208,8 @@ compose system prompt 的结构参考两边：
 
 `search_knowledge` 的 query 不是完全相信模型：泛词如“规则 / 信息 / 推荐”会在 harness 侧按当前商品和用户问题收敛，例如尺码问题改成 `SUIT-001 尺码`。
 模型层保持 `deepseek-v4-pro`，不切 flash；成本优化靠减少不必要调用、限制输出 token、把 usage/cost 和每轮调用预算写入 trace。
+LLM billing/cache 参考实现单独选 opencode：把一轮 model run 的 usage、cache read/write 和 estimated cost 归一成可展示结果。
+Chatty 对应字段是 `inputCacheHitTokens`、`inputCacheMissTokens`、`inputCacheHitRatio`、`estimatedCostCny`，用于观察 DeepSeek pro 的 prompt/KV cache 命中情况。
 
 ```mermaid
 flowchart LR
@@ -215,6 +221,7 @@ flowchart LR
   Prompt --> Query["query refinement"]
   Prompt --> Cost["pro usage telemetry"]
   Cost --> Budget["call budget warning"]
+  Cost --> Cache["cache hit ratio"]
 ```
 
 ### Q07. 如何实现 long-term memory
@@ -310,7 +317,7 @@ flowchart LR
 参考实现：Codex。
 
 测试是 architecture 的一部分。确定性逻辑进 unit，跨包行为进 integration，无网络主链路进 smoke，真实模型行为进 manual golden eval。
-真实 LLM 调试必须带成本观测：trace 记录 model、调用次数、每轮调用预算、cache hit/miss、output tokens、估算成本和预算告警，避免只在账单 CSV 里事后发现峰值。
+真实 LLM 调试必须带成本观测：trace 记录 model、调用次数、每轮调用预算、cache hit/miss、cache hit ratio、output tokens、估算成本和预算告警，避免只在账单 CSV 里事后发现峰值。
 这些 JD 对齐的工程化改动同步记录在 `docs/changelog.md`，让“为什么改”和“如何验证”能被持续追踪。
 
 ```mermaid

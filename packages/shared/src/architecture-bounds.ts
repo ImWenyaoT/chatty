@@ -1,5 +1,7 @@
 export type ArchitectureReference = 'openclaw' | 'codex' | 'claude-code'
 
+export type LlmBillingCacheReference = 'opencode'
+
 export type AgentArchitectureTopic =
   | 'task scheduling 拆分'
   | '如何实现 multi agent'
@@ -26,6 +28,11 @@ export type AgentArchitectureReferenceChoice = {
   readonly rationale: string
 }
 
+export type LlmBillingCacheDesignChoice = {
+  readonly primaryReference: LlmBillingCacheReference
+  readonly rationale: string
+}
+
 export const ARCHITECTURE_COMPLEXITY_POLICY = {
   target: 'stay-inside-bounds',
   lowerBoundAction: 'raise-to-jd-and-prd',
@@ -40,6 +47,12 @@ export const AGENT_COMPLEXITY_BOUNDS = {
     '/Users/edward/Documents/oss/codex',
     '/Users/edward/Documents/oss/claude-code',
   ],
+} as const
+
+export const LLM_BILLING_CACHE_DESIGN_CHOICE: LlmBillingCacheDesignChoice = {
+  primaryReference: 'opencode',
+  rationale:
+    'opencode 的 LLM design 把 usage、cache read/write 和 estimated cost 归一到 model run result，最贴近 Chatty 的 DeepSeek pro 账单观测。',
 } as const
 
 export const AGENT_ARCHITECTURE_REFERENCE_CHOICES: readonly AgentArchitectureReferenceChoice[] = [

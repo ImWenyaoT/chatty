@@ -7,13 +7,14 @@ import {
   AGENT_ARCHITECTURE_REFERENCE_CHOICES,
   AGENT_COMPLEXITY_BOUNDS,
   ARCHITECTURE_COMPLEXITY_POLICY,
+  LLM_BILLING_CACHE_DESIGN_CHOICE,
   getPrimaryReferenceByTopic,
   isAllowedArchitectureReference,
 } from './architecture-bounds.js'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
 const currentDocRoot = resolve(repoRoot, 'docs')
-const disallowedCurrentReferencePattern = /\b(Hermes|Pi Agent|pi agent|opencode|OpenCode)\b/
+const disallowedCurrentReferencePattern = /\b(Hermes|Pi Agent|pi agent)\b/
 
 /** 递归列出当前文档区 Markdown 文件，archive 下的历史记录不参与当前架构约束。 */
 function listCurrentMarkdownDocs(dir: string): string[] {
@@ -48,8 +49,16 @@ test('only explicit reference agents can be used in architecture design choices'
   assert.ok(isAllowedArchitectureReference('openclaw'))
   assert.ok(isAllowedArchitectureReference('codex'))
   assert.ok(isAllowedArchitectureReference('claude-code'))
+  assert.equal(isAllowedArchitectureReference('opencode'), false)
   assert.equal(isAllowedArchitectureReference('hermes'), false)
   assert.equal(isAllowedArchitectureReference('pi'), false)
+})
+
+test('llm billing cache design chooses opencode without expanding agent architecture bounds', () => {
+  assert.equal(LLM_BILLING_CACHE_DESIGN_CHOICE.primaryReference, 'opencode')
+  assert.match(LLM_BILLING_CACHE_DESIGN_CHOICE.rationale, /usage/)
+  assert.match(LLM_BILLING_CACHE_DESIGN_CHOICE.rationale, /cache/)
+  assert.match(LLM_BILLING_CACHE_DESIGN_CHOICE.rationale, /cost/)
 })
 
 test('each documented agent architecture topic declares exactly one primary reference', () => {

@@ -17,6 +17,7 @@ export type LlmTelemetrySummary = {
   callBudget: number
   inputCacheHitTokens: number
   inputCacheMissTokens: number
+  inputCacheHitRatio: number
   outputTokens: number
   totalTokens: number
   estimatedCostCny: number
@@ -29,6 +30,13 @@ type LlmRuntimeOptions = {
 }
 
 const DEFAULT_LLM_CALL_BUDGET = 3
+
+/** Calculates the normalized prompt/KV cache hit ratio for input tokens. */
+function calculateInputCacheHitRatio(hitTokens: number, missTokens: number): number {
+  const totalInputTokens = hitTokens + missTokens
+  if (totalInputTokens <= 0) return 0
+  return Number((hitTokens / totalInputTokens).toFixed(4))
+}
 
 /**
  * Wraps a Chat Completions adapter into the harness compose modelFn.
@@ -94,7 +102,7 @@ export function createLlmTelemetrySummary(
   options: LlmRuntimeOptions = {},
 ): LlmTelemetrySummary {
   const callBudget = options.callBudget ?? DEFAULT_LLM_CALL_BUDGET
-  const summary = records.reduce<Omit<LlmTelemetrySummary, 'warnings'>>(
+  const summary = records.reduce<Omit<LlmTelemetrySummary, 'inputCacheHitRatio' | 'warnings'>>(
     (summary, record) => ({
       model,
       calls: summary.calls + 1,
@@ -120,7 +128,14 @@ export function createLlmTelemetrySummary(
   )
   const warnings =
     summary.calls > callBudget ? [`llm_call_budget_exceeded: ${summary.calls}/${callBudget}`] : []
-  return { ...summary, warnings }
+  return {
+    ...summary,
+    inputCacheHitRatio: calculateInputCacheHitRatio(
+      summary.inputCacheHitTokens,
+      summary.inputCacheMissTokens,
+    ),
+    warnings,
+  }
 }
 
 /**

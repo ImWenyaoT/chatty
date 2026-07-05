@@ -176,6 +176,7 @@ test('createLlmTelemetrySummary aggregates pro usage and estimated cost', () => 
     callBudget: 3,
     inputCacheHitTokens: 1500,
     inputCacheMissTokens: 300,
+    inputCacheHitRatio: 0.8333,
     outputTokens: 75,
     totalTokens: 1875,
     estimatedCostCny: 0.0013875,
@@ -200,6 +201,7 @@ test('createLlmTelemetrySummary warns when one turn exceeds the pro call budget'
 
   assert.equal(summary.calls, 4)
   assert.equal(summary.callBudget, 3)
+  assert.equal(summary.inputCacheHitRatio, 0.5)
   assert.deepEqual(summary.warnings, ['llm_call_budget_exceeded: 4/3'])
   assert.equal(summary.estimatedCostCny, 0.0000361)
 })
@@ -244,6 +246,7 @@ test('createPlaygroundLlmRuntime stays pro-only and exposes a zero-call summary 
       callBudget: 3,
       inputCacheHitTokens: 0,
       inputCacheMissTokens: 0,
+      inputCacheHitRatio: 0,
       outputTokens: 0,
       totalTokens: 0,
       estimatedCostCny: 0,
