@@ -19,6 +19,7 @@ const rootPackageJson = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'
 
 const ciWorkflow = readFileSync(resolve(repoRoot, '.github/workflows/ci.yml'), 'utf8')
 const evalWorkflow = readFileSync(resolve(repoRoot, '.github/workflows/eval.yml'), 'utf8')
+const agentInstructions = readFileSync(resolve(repoRoot, 'AGENTS.md'), 'utf8')
 
 test('quality policy states that every automatically verifiable behavior needs automated verification', () => {
   assert.match(AUTOMATED_BEHAVIOR_COVERAGE_RULE, /所有能被自动验证的行为/)
@@ -74,4 +75,9 @@ test('manual LLM golden eval remains documented as the integration gate for mode
   assert.match(evalWorkflow, /workflow_dispatch/)
   assert.match(evalWorkflow, /pnpm eval -- --repeat 3 --save ci-latest/)
   assert.match(evalWorkflow, /OPENAI_API_KEY/)
+})
+
+test('repository maintenance rules protect read-only inputs and ignore boundaries', () => {
+  assert.match(agentInstructions, /docs\/jd\.md.*只读/)
+  assert.match(agentInstructions, /\.gitignore.*随项目演进维护/)
 })
