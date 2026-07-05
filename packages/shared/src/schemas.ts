@@ -20,3 +20,16 @@ export const legacyChatInputSchema = z
   .refine((data) => data.question.trim().length > 0 || data.imageUrl, {
     message: 'question 或 imageUrl 至少要提供一项',
   })
+
+/** Validates human trace review feedback at the API boundary. */
+export const traceReviewInputSchema = z.object({
+  traceId: z.string().min(1),
+  label: z.enum(['pass', 'fail', 'flagged']),
+  reviewer: z.string().trim().min(1),
+  note: z.string().trim().optional().default(''),
+  tags: z
+    .array(z.string())
+    .optional()
+    .default([])
+    .transform((tags) => [...new Set(tags.map((tag) => tag.trim()).filter(Boolean))].sort()),
+})

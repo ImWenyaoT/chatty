@@ -6,12 +6,14 @@ import {
   createMemoryRepository,
   createSessionRepository,
   createTraceRepository,
+  createTraceReviewRepository,
   openDatabase,
   syncKnowledgeIndex,
   type KnowledgeRepository,
   type MemoryRepository,
   type SessionRepository,
   type TraceRepository,
+  type TraceReviewRepository,
 } from '@rental/db'
 
 // One SQLite connection per server process. The agent loop is single-process
@@ -22,6 +24,7 @@ import {
 interface Repos {
   sessions: SessionRepository
   traces: TraceRepository
+  reviews: TraceReviewRepository
   memory: MemoryRepository
   knowledge: KnowledgeRepository
 }
@@ -43,6 +46,7 @@ function ensureInitialized(): Repos {
   repos = {
     sessions: createSessionRepository(db),
     traces: createTraceRepository(db),
+    reviews: createTraceReviewRepository(db),
     memory: createMemoryRepository(db),
     knowledge: createKnowledgeRepository(db),
   }

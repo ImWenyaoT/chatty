@@ -4,6 +4,13 @@
 
 ## 2026-07-05
 
+### Trace review feedback loop
+
+- 变更：新增 `agent_trace_reviews`、`/api/trace-reviews` 和 dashboard 反馈汇总，把单条 trace 的人工判断记录为 `pass`、`fail` 或 `flagged`，并保留可统计 tags。
+- 设计选择：参考 Codex 的 trace/usage/analytics 事件思路，做最小人工 review 闭环；不做自动 prompt 修改、自动金标晋升或复杂反馈平台。
+- JD 对齐：补上产品方向要求里的真实任务反馈、产品指标、异常分支嗅觉和项目复盘证据；技术方向也能展示 eval/feedback loop 的工程落点。
+- 自动验证：`packages/db/src/db.test.ts` 覆盖 review upsert、重复覆盖、summary 和 route-bundle external trace id；`packages/shared/src/schemas.test.ts` 覆盖 API 输入 schema。
+
 ### New JD architecture review
 
 - 变更：按新版 `docs/jd.md` 增加 JD 能力覆盖矩阵，把 LLM API、KV Cache、Agent Loop、Tool Use、Reasoning、Planning、Skills、MCP、Memory、Subagent、Multi-Agent、Prompt / Context / Harness Engineering、评测、真实任务反馈和 UI/UX demo 逐项映射到当前代码状态。

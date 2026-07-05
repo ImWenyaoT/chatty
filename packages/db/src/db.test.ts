@@ -5,7 +5,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { JsonValue } from '@rental/shared'
 import { openDatabase } from './database.js'
-import { createMemoryRepository, createSessionRepository, createTraceRepository } from './index.js'
+import {
+  createMemoryRepository,
+  createSessionRepository,
+  createTraceRepository,
+  createTraceReviewRepository,
+} from './index.js'
 
 function freshDb() {
   return openDatabase(':memory:')
@@ -109,6 +114,87 @@ test('trace repository: append returns the inserted row directly (no re-query de
   assert.deepEqual(last!.output, { reply: 'r149' })
   assert.equal(last!.toolCalls.length, 0)
   assert.ok(last!.createdAt.length > 0, 'createdAt should be populated')
+})
+
+test('trace review repository: upsert review and summarize product feedback labels', () => {
+  const db = freshDb()
+  const sessions = createSessionRepository(db)
+  const traces = createTraceRepository(db)
+  const reviews = createTraceReviewRepository(db)
+  sessions.create({ id: 'sess-review', customerId: 'c', conversationId: 'c:p' })
+  traces.append({
+    id: 'tr-review-1',
+    sessionId: 'sess-review',
+    eventType: 'agent_reply_sent',
+    action: 'answer_question',
+    input: { question: '押金多少' },
+    output: { reply: '押金需要确认' },
+  })
+  traces.append({
+    id: 'tr-review-2',
+    sessionId: 'sess-review',
+    eventType: 'agent_reply_sent',
+    action: 'handoff',
+    input: { question: '我要投诉' },
+    output: { reply: '转人工' },
+  })
+
+  reviews.upsert({
+    traceId: 'tr-review-1',
+    label: 'fail',
+    reviewer: 'pm',
+    note: '没有回答押金规则',
+    tags: ['missing_policy', 'needs_golden'],
+  })
+  reviews.upsert({
+    traceId: 'tr-review-1',
+    label: 'flagged',
+    reviewer: 'pm',
+    note: '可接受但应补金标',
+    tags: ['needs_golden'],
+  })
+  reviews.upsert({
+    traceId: 'tr-review-2',
+    label: 'pass',
+    reviewer: 'pm',
+    tags: ['handoff_ok'],
+  })
+
+  const list = reviews.listBySession('sess-review')
+  assert.equal(list.length, 2)
+  assert.equal(list[0].traceId, 'tr-review-1')
+  assert.equal(list[0].label, 'flagged')
+  assert.deepEqual(list[0].tags, ['needs_golden'])
+  assert.equal(list[1].label, 'pass')
+
+  assert.deepEqual(reviews.summarize(), {
+    total: 2,
+    pass: 1,
+    fail: 0,
+    flagged: 1,
+    tags: { handoff_ok: 1, needs_golden: 1 },
+  })
+})
+
+test('trace review repository: accepts external trace ids for route-bundle feedback', () => {
+  const db = freshDb()
+  const reviews = createTraceReviewRepository(db)
+
+  const review = reviews.upsert({
+    traceId: 'tr-external',
+    label: 'fail',
+    reviewer: 'pm',
+    tags: ['missing_trace_context'],
+  })
+
+  assert.equal(review.traceId, 'tr-external')
+  assert.deepEqual(reviews.summarize(), {
+    total: 1,
+    pass: 0,
+    fail: 1,
+    flagged: 0,
+    tags: { missing_trace_context: 1 },
+  })
 })
 
 test('memory repository: upsert + snapshot round-trip', () => {

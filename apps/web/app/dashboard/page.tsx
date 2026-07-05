@@ -1,10 +1,11 @@
 import Link from 'next/link'
 import { SellerNavigation } from '../components/seller/SellerNavigation'
 import { SELLER_ORDERS } from '../components/seller/orderData'
+import { getRepos } from '@/lib/db'
 
-// 纯演示后台：会话/知识面板沿用卖家演示数据，无按请求变化的数据源，可静态渲染。
-// 质量回归不在此页——由根级 `pnpm eval` 的朴素金标回归承担
-// （报告落 eval/reports/），评测飞轮已退役。
+// 后台仍以演示会话/知识面板为主，但会读取 trace review 汇总，展示真实任务
+// 反馈闭环的最小产品指标。质量回归仍由根级 `pnpm eval` 的朴素金标回归承担。
+export const dynamic = 'force-dynamic'
 
 const KNOWLEDGE_BUCKETS = [
   { label: '规则政策', value: 12, hint: '租赁、押金、物流、退换' },
@@ -15,6 +16,11 @@ const KNOWLEDGE_BUCKETS = [
 /** 后台视图：卖家会话与知识库总览（演示数据），实时问答在 Playground。 */
 export default function DashboardPage() {
   const selected = SELLER_ORDERS[0]
+  const reviewSummary = getRepos().reviews.summarize()
+  const topTags = Object.entries(reviewSummary.tags)
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, 3)
+
   return (
     <main className="seller-dashboard">
       <SellerNavigation active="dashboard" />
@@ -91,6 +97,35 @@ export default function DashboardPage() {
                 <p>{bucket.hint}</p>
               </article>
             ))}
+          </div>
+        </section>
+
+        <section className="dashboard-panel">
+          <div className="dashboard-panel-head">
+            <h2>反馈闭环</h2>
+            <span>TRACE REVIEW</span>
+          </div>
+          <div className="dashboard-detail-grid">
+            <div>
+              <span>已复核</span>
+              <strong>{reviewSummary.total}</strong>
+            </div>
+            <div>
+              <span>通过</span>
+              <strong>{reviewSummary.pass}</strong>
+            </div>
+            <div>
+              <span>需处理</span>
+              <strong>{reviewSummary.fail + reviewSummary.flagged}</strong>
+            </div>
+            <div>
+              <span>标签</span>
+              <strong>
+                {topTags.length
+                  ? topTags.map(([tag, count]) => `${tag} ${count}`).join(' / ')
+                  : '暂无'}
+              </strong>
+            </div>
           </div>
         </section>
       </section>
