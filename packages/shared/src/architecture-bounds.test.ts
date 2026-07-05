@@ -7,14 +7,15 @@ import {
   AGENT_ARCHITECTURE_REFERENCE_CHOICES,
   AGENT_COMPLEXITY_BOUNDS,
   ARCHITECTURE_COMPLEXITY_POLICY,
-  LLM_BILLING_CACHE_DESIGN_CHOICE,
+  JD_CAPABILITY_REFERENCE_CHOICES,
+  getPrimaryReferenceByJdCapability,
   getPrimaryReferenceByTopic,
   isAllowedArchitectureReference,
 } from './architecture-bounds.js'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
 const currentDocRoot = resolve(repoRoot, 'docs')
-const disallowedCurrentReferencePattern = /\b(Hermes|Pi Agent|pi agent)\b/
+const disallowedCurrentReferencePattern = /\b(Hermes|Pi Agent|pi agent|opencode|OpenCode)\b/
 
 /** 递归列出当前文档区 Markdown 文件，archive 下的历史记录不参与当前架构约束。 */
 function listCurrentMarkdownDocs(dir: string): string[] {
@@ -29,8 +30,8 @@ function listCurrentMarkdownDocs(dir: string): string[] {
   return entries.sort()
 }
 
-test('agent complexity bounds stay between jd plus PRD and the reference agent source code', () => {
-  assert.deepEqual(AGENT_COMPLEXITY_BOUNDS.lowerBound, ['docs/jd.md', 'PRD.pdf'])
+test('agent complexity bounds stay between the current jd and reference agent source code', () => {
+  assert.deepEqual(AGENT_COMPLEXITY_BOUNDS.lowerBound, ['docs/jd.md'])
   assert.deepEqual(AGENT_COMPLEXITY_BOUNDS.upperBound, [
     '/Users/edward/Documents/oss/openclaw',
     '/Users/edward/Documents/oss/codex',
@@ -52,13 +53,6 @@ test('only explicit reference agents can be used in architecture design choices'
   assert.equal(isAllowedArchitectureReference('opencode'), false)
   assert.equal(isAllowedArchitectureReference('hermes'), false)
   assert.equal(isAllowedArchitectureReference('pi'), false)
-})
-
-test('llm billing cache design chooses opencode without expanding agent architecture bounds', () => {
-  assert.equal(LLM_BILLING_CACHE_DESIGN_CHOICE.primaryReference, 'opencode')
-  assert.match(LLM_BILLING_CACHE_DESIGN_CHOICE.rationale, /usage/)
-  assert.match(LLM_BILLING_CACHE_DESIGN_CHOICE.rationale, /cache/)
-  assert.match(LLM_BILLING_CACHE_DESIGN_CHOICE.rationale, /cost/)
 })
 
 test('each documented agent architecture topic declares exactly one primary reference', () => {
@@ -103,6 +97,34 @@ test('each documented agent architecture topic declares exactly one primary refe
   assert.equal(byTopic['如何管理 background tasks'], 'codex')
   assert.equal(byTopic['terminal 读 output'], 'codex')
   assert.equal(byTopic['基本 file I/O（读、写、搜）'], 'claude-code')
+})
+
+test('new jd capability review declares one allowed primary reference per capability', () => {
+  const topics = JD_CAPABILITY_REFERENCE_CHOICES.map((choice) => choice.topic)
+  assert.deepEqual(topics, [
+    'LLM API 与 KV Cache',
+    'Agent Loop 与 Tool Use',
+    'Reasoning 与 Planning',
+    'Skills 与 MCP',
+    'Memory',
+    'Subagent 与 Multi-Agent',
+    'Prompt / Context / Harness Engineering',
+    '评测基准与数据标注',
+    '真实任务反馈与产品指标',
+    'UI/UX 与 demo 原型',
+  ])
+
+  const byTopic = getPrimaryReferenceByJdCapability()
+  assert.equal(byTopic['LLM API 与 KV Cache'], 'codex')
+  assert.equal(byTopic['Agent Loop 与 Tool Use'], 'codex')
+  assert.equal(byTopic['Reasoning 与 Planning'], 'codex')
+  assert.equal(byTopic['Skills 与 MCP'], 'claude-code')
+  assert.equal(byTopic.Memory, 'openclaw')
+  assert.equal(byTopic['Subagent 与 Multi-Agent'], 'codex')
+  assert.equal(byTopic['Prompt / Context / Harness Engineering'], 'codex')
+  assert.equal(byTopic['评测基准与数据标注'], 'codex')
+  assert.equal(byTopic['真实任务反馈与产品指标'], 'codex')
+  assert.equal(byTopic['UI/UX 与 demo 原型'], 'claude-code')
 })
 
 test('current architecture docs do not cite retired reference agents outside archive', () => {

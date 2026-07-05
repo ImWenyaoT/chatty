@@ -5,7 +5,7 @@ Last updated: 2026-07-05
 本文是 Chatty 的 agent 架构设计主文档。目标不是把参考仓所有能力搬进来，而是把 18 个关键问题逐个定清楚：
 
 - 每个问题只选一个主参考实现：OpenClaw / Codex / Claude Code 三选一。
-- LLM 账单和 prompt/KV cache 设计单独选 opencode，且不扩张 agent 能力上限。
+- 新版 JD 的能力覆盖也只在 OpenClaw / Codex / Claude Code 里单选主参考。
 - Chatty 只取能服务租衣客服 harness 的最小子集。
 - 改动 harness、tool、memory、parser、executor、eval 时，必须同步更新本文和
   `packages/shared/src/architecture-bounds.ts`。
@@ -14,27 +14,24 @@ Last updated: 2026-07-05
 
 ## 0. 总览
 
-Chatty 的下限是 `docs/jd.md + PRD.pdf`。上限是本地源码：
+Chatty 的下限是新版 `docs/jd.md`。上限是本地源码：
 
 - `/Users/edward/Documents/oss/openclaw`
 - `/Users/edward/Documents/oss/codex`
 - `/Users/edward/Documents/oss/claude-code`
 
-LLM billing/cache 的单独参考是 `/Users/edward/Documents/oss/opencode/packages/llm/DESIGN.md`。
-它只用于 usage、cache read/write、estimated cost 的 trace 设计，不作为 agent runtime 能力上限。
-
 Chatty 的位置在中间：保留 agent harness 的骨架，拒绝通用 coding agent 的能力面。
 
 删除优先级高于优化：
 
-- 低于下限：如果能力不足以支撑 `docs/jd.md + PRD.pdf`，补到下限。
+- 低于下限：如果能力不足以支撑新版 `docs/jd.md`，补到下限。
 - 区间内：保留最小实现，并用测试锁住行为。
 - 超出上限或偏离客服 harness：先删除，不做优化、不做抽象、不留半成品。
 - 重新引入越界能力前，必须先改 `packages/shared/src/architecture-bounds.ts` 和对应测试。
 
 ```mermaid
 flowchart LR
-  Lower["下限<br/>jd.md + PRD.pdf"] --> Chatty["Chatty<br/>customer-service harness"]
+  Lower["下限<br/>jd.md"] --> Chatty["Chatty<br/>customer-service harness"]
   Upper["上限<br/>OpenClaw / Codex / Claude Code"] --> Chatty
 
   Chatty --> Keep["保留<br/>loop / tool / context / parser / executor / memory / eval / trace"]
@@ -116,6 +113,23 @@ pie title 18 questions by primary reference
   "Claude Code" : 3
   "OpenClaw" : 1
 ```
+
+## 1.1 新版 JD 能力覆盖矩阵
+
+新版 JD 的下限不只是“能跑一个客服 demo”，还要求能解释 LLM、KV Cache、Agent Loop、Tool Use、Reasoning、Planning、Skills、MCP、Memory、Subagent、Multi-Agent、Prompt / Context / Harness Engineering，并能用真实任务、评测和产品反馈持续迭代。
+
+| JD 能力项 | 主参考实现 | Chatty 当前状态 | 差距处理 |
+|---|---|---|---|
+| LLM API 与 KV Cache | Codex | `@rental/llm` 走 OpenAI-compatible Chat Completions；trace 记录 cache hit/miss、hit ratio、cost | 保留 usage telemetry；下一步只优化 prompt 稳定布局，不引入 provider 私有 cache API |
+| Agent Loop 与 Tool Use | Codex | 每轮 bounded tool loop，`search_knowledge` 最多 3 次，失败 deterministic fallback | 保持有界；复杂 workflow 先删 |
+| Reasoning 与 Planning | Codex | 以 deterministic scheduler 表达窄 planning，不暴露 chain-of-thought | 补 eval 场景验证 task choice；不做自由规划器 |
+| Skills 与 MCP | Claude Code | typed tool registry + risk/policy；无 runtime plugin/MCP | 只保留 tool contract；runtime plugin 先删 |
+| Memory | OpenClaw | SQLite memory snapshot + recent messages + business knowledge search | 继续保持 FTS/LIKE；不做 vector RAG |
+| Subagent 与 Multi-Agent | Codex | 当前不实现，仅文档化上限和删除规则 | 只有真实任务证明需要时再设计 subagent runtime |
+| Prompt / Context / Harness Engineering | Codex | 结构化 fragments、query refinement、output contract、trace inspector | 优先做 cache-friendly prompt order 和 eval |
+| 评测基准与数据标注 | Codex | `pnpm test`、`pnpm smoke`、`pnpm eval`、golden YAML | 可补真实反馈到 golden 的人工流程，不做自动晋升飞轮 |
+| 真实任务反馈与产品指标 | Codex | trace/session/memory 可回放；dashboard 仍是 demo 数据 | 差距最大：需要 trace review / feedback schema，但先做最小只读报表 |
+| UI/UX 与 demo 原型 | Claude Code | playground 展示 loop、tool、trace、LLM cost/cache | 继续提高可解释性；不做大型后台 |
 
 ## 2. 核心功能
 
@@ -208,7 +222,7 @@ compose system prompt 的结构参考两边：
 
 `search_knowledge` 的 query 不是完全相信模型：泛词如“规则 / 信息 / 推荐”会在 harness 侧按当前商品和用户问题收敛，例如尺码问题改成 `SUIT-001 尺码`。
 模型层保持 `deepseek-v4-pro`，不切 flash；成本优化靠减少不必要调用、限制输出 token、把 usage/cost 和每轮调用预算写入 trace。
-LLM billing/cache 参考实现单独选 opencode：把一轮 model run 的 usage、cache read/write 和 estimated cost 归一成可展示结果。
+LLM billing/cache 参考实现选 Codex：用 cached/non-cached input token、turn usage 和 budget 思路解释模型账单，不引入 provider 专有 cache API。
 Chatty 对应字段是 `inputCacheHitTokens`、`inputCacheMissTokens`、`inputCacheHitRatio`、`estimatedCostCny`，用于观察 DeepSeek pro 的 prompt/KV cache 命中情况。
 
 ```mermaid
