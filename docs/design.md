@@ -165,12 +165,14 @@ flowchart LR
 参考实现：Codex。
 
 控制点只有四个：搜索上限、失败回退、trace 必出、显式 eval。Chatty 不上 LangGraph、Temporal 或长期 workflow，因为 MVP 是每请求一次有界步。
+`follow_up`、`handoff` 这类 workflow action 的工具参数由 harness 确定性生成，不让 LLM 猜日期、会话 ID 或审批边界。
 
 ```mermaid
 flowchart TD
   Loop["bounded loop"] --> Cap["search cap"]
   Loop --> Fallback["deterministic fallback"]
   Loop --> Trace["trace required"]
+  Loop --> Workflow["deterministic workflow args"]
   Loop --> Eval["eval when model behavior changes"]
 ```
 
@@ -200,6 +202,8 @@ compose system prompt 的结构参考两边：
 - Codex：取“清晰、务实、严谨”、范围收敛、事实优先和结果忠实的 operating style。
 - Claude Code：取 harness / tool / output contract 分层，让模型知道哪些决策由 harness 管，哪些动作必须走工具边界。
 
+`search_knowledge` 的 query 不是完全相信模型：泛词如“规则 / 信息 / 推荐”会在 harness 侧按当前商品和用户问题收敛，例如尺码问题改成 `SUIT-001 尺码`。
+
 ```mermaid
 flowchart LR
   Task["task"] --> Prompt["prompt/messages"]
@@ -207,6 +211,7 @@ flowchart LR
   Memory["memory"] --> Prompt
   Product["product"] --> Prompt
   Knowledge["knowledge"] --> Prompt
+  Prompt --> Query["query refinement"]
 ```
 
 ### Q07. 如何实现 long-term memory
@@ -271,6 +276,7 @@ flowchart LR
 参考实现：Codex。
 
 Executor 是副作用边界。模型不能直接执行业务动作，必须经过 action、registry、policy。
+当 policy 要求审批或拒绝执行时，trace 仍保留候选 tool call；这样 demo 和后台能解释“模型想做什么、为什么没有自动执行”。
 
 ```mermaid
 flowchart LR
@@ -279,6 +285,7 @@ flowchart LR
   Policy -->|"allow"| Run["execute"]
   Policy -->|"approval"| Handoff["handoff"]
   Policy -->|"deny"| Deny["deny"]
+  Policy --> Trace["attempted call in trace"]
 ```
 
 ### Q12. 如何设计可以自由配置的 MCP

@@ -184,6 +184,7 @@ export const CUSTOMER_SERVICE_COMPOSE_INSTRUCTIONS = [
   '库存档期问题不要调用 search_knowledge；用 check_availability。退款/投诉/人工问题不要调用 search_knowledge；用 create_handoff。',
   '同一个问题最多用少量精准关键词搜索；先搜最短、最可能命中的业务词，避免用“规则”“信息”这类泛词刷工具。',
   '搜索后如果没有命中具体事实，如实说明“这条规则需要进一步确认”，不要编造；如果命中了事实，用自然中文总结，不要提知识库、搜索过程或文档出处。',
+  '没有明确工具结果或上下文证据时，不要说“系统会自动计算”“下单页会显示”“页面会自动生成”这类实现细节。',
   '面向用户的 reply 禁止出现这些内部词：知识库、搜索、检索、文档、上下文、tool、工具、trace、JSON。',
   '如果上下文里已经有 productId，就视为当前商品已确定；不要再问“哪一款”“商品编号是什么”，除非用户明确切换商品。',
   '',
@@ -366,9 +367,13 @@ export async function composeCustomerServiceModelOutput(
   const { toolLoopFn, modelFn } = input
   const searchTool = toolLoopFn && input.registry?.get('search_knowledge')
   const callModel =
-    input.task.kind === 'answer_question' && toolLoopFn && searchTool
-      ? () => runComposeSearchLoop(input, toolLoopFn, searchTool)
-      : modelFn && (() => modelFn(input.context.prompt))
+    input.task.kind === 'answer_question'
+      ? toolLoopFn && searchTool
+        ? () => runComposeSearchLoop(input, toolLoopFn, searchTool)
+        : modelFn && (() => modelFn(input.context.prompt))
+      : input.task.kind === 'check_availability' && modelFn
+        ? () => modelFn(input.context.prompt)
+        : undefined
   if (callModel) {
     try {
       const output = await callModel()
@@ -427,9 +432,17 @@ async function runSearchCall(
   if (call.name !== 'search_knowledge' || typeof query !== 'string' || query.trim().length === 0) {
     return SEARCH_BAD_ARGS
   }
+  const refinedQuery = refineKnowledgeQuery(
+    query,
+    readQuestionFromEvent(input.event),
+    input.event.productId ?? input.memory.productId,
+  )
+  if (hasSearchedQuery(input, refinedQuery)) {
+    return `已搜索过 ${refinedQuery}。请基于已有结果直接回答。`
+  }
   const result = await (input.registry as ToolRegistry).invokeWithPolicy(
     call.name,
-    { query },
+    { query: refinedQuery },
     input.policy ?? createDefaultPolicy(),
     { sessionStatus: input.sessionStatus ?? 'active' },
   )
@@ -439,12 +452,12 @@ async function runSearchCall(
       : JSON.stringify(result)
   input.context.fragments.push({
     kind: 'knowledge',
-    label: `知识库检索：${query}`,
+    label: `知识库检索：${refinedQuery}`,
     content: output,
   })
   input.searchTrace?.toolCalls.push({
     toolName: call.name,
-    arguments: { query },
+    arguments: { query: refinedQuery },
     risk: 'low',
     approvalRequired: false,
   })
@@ -505,7 +518,7 @@ export async function executeCustomerServiceAction(
       return {
         terminality: 'handoff_and_wait',
         nextStatus: 'waiting_for_human',
-        toolCalls: [],
+        toolCalls: [call],
         toolResults: [{ error: error.name, message: error.message }],
       }
     }
@@ -654,7 +667,11 @@ function actionForTask(
         action: 'schedule_followup',
         reply: '好的，我先把后续跟进事项记下来。',
         toolName: 'schedule_followup',
-        toolArgs: { conversationId, dueAt: 'next_business_day', reason: question.slice(0, 80) },
+        toolArgs: {
+          conversationId,
+          dueAt: resolveFollowupDueAt(question),
+          reason: question.slice(0, 80),
+        },
       }
     case 'collect_missing_info':
       return {
@@ -673,6 +690,52 @@ function actionForTask(
 function extractSize(question: string): string {
   const match = question.toUpperCase().match(/\b(XXL|XL|L|M|S)\b/)
   return match?.[1] ?? 'L'
+}
+
+/** 将模型给出的泛搜索词收敛到当前商品和用户问题，避免 search_knowledge 被“规则/推荐”等噪音词带偏。 */
+function refineKnowledgeQuery(query: string, question: string, productId?: string): string {
+  const cleanQuery = query.trim()
+  if (!productId) return cleanQuery
+  if (cleanQuery.includes(productId)) return cleanQuery
+  if (
+    /尺码|身高|体重|码|推荐/.test(question) &&
+    /尺码|西装码|推荐|规则|信息|西装/.test(cleanQuery)
+  ) {
+    return `${productId} 尺码`
+  }
+  if (/押金/.test(question) && /^(规则|信息|费用|商品规则)$/.test(cleanQuery)) {
+    return '押金'
+  }
+  return cleanQuery
+}
+
+/** 判断当前搜索循环里是否已经执行过同一个 query，避免并行同义 tool_calls 刷 trace。 */
+function hasSearchedQuery(input: ComposeCustomerServiceModelOutputInput, query: string): boolean {
+  return (
+    input.searchTrace?.toolCalls.some(
+      (call) => typeof call.arguments.query === 'string' && call.arguments.query === query,
+    ) ?? false
+  )
+}
+
+/** 解析 MVP 跟进时间：只处理常见相对时间，其余保留符号值，避免 LLM 猜出过期年份。 */
+function resolveFollowupDueAt(question: string): string {
+  const dueAt = new Date()
+  if (/后天/.test(question)) {
+    dueAt.setDate(dueAt.getDate() + 2)
+  } else if (/明天/.test(question)) {
+    dueAt.setDate(dueAt.getDate() + 1)
+  } else {
+    return 'next_business_day'
+  }
+  if (/下午/.test(question)) {
+    dueAt.setHours(14, 0, 0, 0)
+  } else if (/上午/.test(question)) {
+    dueAt.setHours(10, 0, 0, 0)
+  } else {
+    dueAt.setHours(9, 0, 0, 0)
+  }
+  return dueAt.toISOString()
 }
 
 function mentionsHandoff(question: string): boolean {
