@@ -7,17 +7,15 @@ export interface LlmEnvConfig {
 }
 
 /**
- * Reads the shared OpenAI-compatible model config from the environment.
+ * Reads the shared DeepSeek model config from the environment.
  *
- * These are the shared OpenAI-compatible env var names, so a single local
- * `.env` drives both the app and the eval harness. Any OpenAI-compatible
- * endpoint (DeepSeek, OpenAI, Azure-compatible, moon-bridge, etc.) is selected
- * purely via OPENAI_BASE_URL.
+ * `OPENAI_*` remains the env naming convention because the official OpenAI
+ * npm client is used as an OpenAI-format HTTP client for DeepSeek. The target
+ * model is still DeepSeek, and callers should not infer OpenAI model support
+ * from the variable names.
  *
  * Default model is unified with .env.example (deepseek-v4-pro). We pin the
- * explicit `-pro` tier rather than the `deepseek-chat` alias: the alias
- * currently resolves to `deepseek-v4-flash`, whose weaker multi-turn tool-call
- * behavior drops structured output after a tool result — pro holds format.
+ * explicit `-pro` tier rather than DeepSeek's flash/deprecated aliases.
  */
 export function readLlmEnv(env: NodeJS.ProcessEnv = process.env): LlmEnvConfig {
   return {
@@ -28,8 +26,8 @@ export function readLlmEnv(env: NodeJS.ProcessEnv = process.env): LlmEnvConfig {
 }
 
 /**
- * Builds the shared OpenAI client from environment. Re-exported so callers do
- * not depend on the `openai` package directly.
+ * Builds the shared OpenAI-format client for DeepSeek. Re-exported so callers
+ * do not depend on the `openai` package directly.
  */
 export function createOpenAiClientFromEnv(env: NodeJS.ProcessEnv = process.env): OpenAI {
   const { apiKey, baseURL } = readLlmEnv(env)
@@ -39,6 +37,8 @@ export function createOpenAiClientFromEnv(env: NodeJS.ProcessEnv = process.env):
 /** Keeps Chatty on DeepSeek v4 pro even when an alias or old env points at flash. */
 function normalizeChatModel(model: string | undefined): string {
   if (!model) return 'deepseek-v4-pro'
-  if (/^deepseek-v4-flash$/i.test(model)) return 'deepseek-v4-pro'
+  if (/^(deepseek-v4-flash|deepseek-chat|deepseek-reasoner)$/i.test(model)) {
+    return 'deepseek-v4-pro'
+  }
   return model
 }

@@ -120,7 +120,7 @@ pie title 18 questions by primary reference
 
 | JD 能力项 | 主参考实现 | Chatty 当前状态 | 差距处理 |
 |---|---|---|---|
-| LLM API 与 KV Cache | Codex | `@rental/llm` 走 OpenAI-compatible Chat Completions；trace 记录 cache hit/miss、hit ratio、cost | 保留 usage telemetry；下一步只优化 prompt 稳定布局，不引入 provider 私有 cache API |
+| LLM API 与 KV Cache | Codex | model 固定 `deepseek-v4-pro`；`@rental/llm` 走 DeepSeek OpenAI-format Chat Completions；trace 记录 cache hit/miss、hit ratio、cost | 保留 usage telemetry；下一步只优化 prompt 稳定布局，不引入 provider 私有 cache API |
 | Agent Loop 与 Tool Use | Codex | 每轮 bounded tool loop，`search_knowledge` 最多 3 次，失败 deterministic fallback | 保持有界；复杂 workflow 先删 |
 | Reasoning 与 Planning | Codex | 以 deterministic scheduler 表达窄 planning，不暴露 chain-of-thought | 补 eval 场景验证 task choice；不做自由规划器 |
 | Skills 与 MCP | Claude Code | typed tool registry + risk/policy；无 runtime plugin/MCP | 只保留 tool contract；runtime plugin 先删 |
@@ -221,8 +221,9 @@ compose system prompt 的结构参考两边：
 - Claude Code：取 harness / tool / output contract 分层，让模型知道哪些决策由 harness 管，哪些动作必须走工具边界。
 
 `search_knowledge` 的 query 不是完全相信模型：泛词如“规则 / 信息 / 推荐”会在 harness 侧按当前商品和用户问题收敛，例如尺码问题改成 `SUIT-001 尺码`。
-模型层保持 `deepseek-v4-pro`，不切 flash；成本优化靠减少不必要调用、限制输出 token、把 usage/cost 和每轮调用预算写入 trace。
-LLM billing/cache 参考实现选 Codex：用 cached/non-cached input token、turn usage 和 budget 思路解释模型账单，不引入 provider 专有 cache API。
+Chatty 的 agent 定义为 `agent = model + harness`。model 固定为 `deepseek-v4-pro`，不切 flash，也不按 OpenAI model 能力做设计假设；harness 才是可演进部分。
+DeepSeek 官方兼容面是 Chat Completions、tool calls、JSON object、thinking/reasoning 和 context caching。OpenAI Agents SDK 可参考和复用的是 harness primitive：custom Model/ModelProvider、function tools、session、human-in-the-loop 和 tracing；但只有 DeepSeek 兼容性探针通过后才引入 SDK lane。不能把 OpenAI Responses API、OpenAI hosted tools 或 OpenAI Conversations API 当成 DeepSeek 默认能力。
+LLM billing/cache 参考实现选 Codex：用 cached/non-cached input token、turn usage 和 budget 思路解释 DeepSeek 账单，不引入 provider 私有 cache API。
 Chatty 对应字段是 `inputCacheHitTokens`、`inputCacheMissTokens`、`inputCacheHitRatio`、`estimatedCostCny`，用于观察 DeepSeek pro 的 prompt/KV cache 命中情况。
 
 ```mermaid
@@ -233,9 +234,11 @@ flowchart LR
   Product["product"] --> Prompt
   Knowledge["knowledge"] --> Prompt
   Prompt --> Query["query refinement"]
+  Prompt --> SDK["SDK primitive probe"]
   Prompt --> Cost["pro usage telemetry"]
   Cost --> Budget["call budget warning"]
   Cost --> Cache["cache hit ratio"]
+  SDK --> Harness["harness-owned loop/tools"]
 ```
 
 ### Q07. 如何实现 long-term memory

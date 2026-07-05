@@ -47,7 +47,7 @@ Keep the architecture boring:
 
 - One active agent harness path.
 - One knowledge-search mechanism: `search_knowledge` over SQLite FTS5/LIKE.
-- One model integration surface: OpenAI-compatible Chat Completions adapter.
+- One model integration surface: DeepSeek `deepseek-v4-pro` through OpenAI-format Chat Completions.
 - One persistence family for MVP state: SQLite repositories.
 - One quality story: automated tests + smoke + manual real-LLM golden eval.
 
@@ -94,7 +94,7 @@ sequenceDiagram
   participant Harness as agent-core harness
   participant Memory as SQLite memory/session
   participant Search as search_knowledge
-  participant LLM as Chat Completions adapter
+  participant LLM as DeepSeek Chat Completions adapter
   participant Tools as Tool registry + policy
   participant Eval as Tests / smoke / eval
 
@@ -137,7 +137,7 @@ flowchart TD
   end
 
   subgraph LLM["packages/llm"]
-    Chat["Chat Completions adapter"]
+    Chat["DeepSeek Chat Completions adapter"]
     Env["env reader"]
     JSON["tolerant JSON extraction"]
   end

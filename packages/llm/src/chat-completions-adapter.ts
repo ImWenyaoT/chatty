@@ -50,8 +50,7 @@ export interface ChatCompletionsAdapter {
   complete(messages: ChatCompletionMessage[]): Promise<string>
   /**
    * Asks the model for a single JSON object. Falls back to parsing the first
-   * {...} block in the reply so providers that don't strictly honour
-   * response_format still work (e.g. some OpenAI-compatible endpoints).
+   * {...} block in the reply so DeepSeek JSON-mode edge cases still work.
    */
   completeJson<T = unknown>(messages: ChatCompletionMessage[]): Promise<T>
   /**
@@ -66,7 +65,7 @@ export interface ChatCompletionsAdapter {
 }
 
 /**
- * Creates a direct Chat Completions adapter for extraction, eval, and legacy fallback paths.
+ * Creates a direct DeepSeek Chat Completions adapter for extraction, eval, and fallback paths.
  */
 export function createChatCompletionsAdapter(
   options: ChatCompletionsAdapterOptions,
@@ -141,7 +140,7 @@ function emitTelemetry(
   if (record) options.telemetry(record)
 }
 
-/** Normalizes OpenAI-compatible usage fields, including DeepSeek cache hit/miss counters. */
+/** Normalizes DeepSeek OpenAI-format usage fields, including cache hit/miss counters. */
 function normalizeUsage(
   model: string,
   operation: ChatCompletionTelemetry['operation'],

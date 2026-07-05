@@ -4,6 +4,13 @@
 
 ## 2026-07-05
 
+### DeepSeek-first harness boundary
+
+- 变更：明确 `agent = model + harness`，model 固定为 `deepseek-v4-pro`；`OPENAI_*` env 和 `openai` npm package 只是 DeepSeek OpenAI-format Chat Completions 的兼容层。
+- 设计选择：Agents SDK 只作为 harness primitive 候选，必须通过 DeepSeek custom Model/ModelProvider 兼容性探针后才能引入；不能默认采用 OpenAI Responses、hosted tools 或 Conversations API。
+- JD 对齐：把“模型与 Harness 深度适配”落到 DeepSeek Chat Completions、tool calls、JSON object、thinking/reasoning、context cache 和 usage/cost telemetry 的可验证契约。
+- 自动验证：`packages/shared/src/architecture-bounds.test.ts` 锁住 DeepSeek 支持项、SDK 可探针项和 OpenAI-only 不假设项。
+
 ### Trace review feedback loop
 
 - 变更：新增 `agent_trace_reviews`、`/api/trace-reviews`、playground 本轮复核控件和 dashboard 反馈汇总，把单条 trace 的人工判断记录为 `pass`、`fail` 或 `flagged`，并保留可统计 tags。

@@ -199,10 +199,12 @@ agent_traces
 
 Postgres can replace SQLite later when multi-user concurrency, deployment topology, or data volume requires it.
 
-## 7. Harness Core, OpenAI Agents SDK, and Chat Completions
+## 7. DeepSeek Model Lane, Agents SDK, and Harness Core
 
-Decision: keep product orchestration in `packages/agent-core`, with model providers
-behind adapter boundaries.
+Decision: `agent = model + harness`. Chatty's model is `deepseek-v4-pro`; the
+harness is the part we design and evolve. `OPENAI_*` env names and the `openai`
+npm package are compatibility plumbing for DeepSeek's OpenAI-format Chat
+Completions API, not a product decision to target OpenAI models.
 
 The first live path is the customer-service Harness Core:
 
@@ -214,34 +216,48 @@ The first live path is the customer-service Harness Core:
 - `runCustomerServiceHarnessStep`: returns reply, terminality, tool calls, memory patch, and trace.
 
 This keeps Chatty scoped to a rental customer-service project instead of a
-general-purpose agent runtime. LLM/SDK usage can replace the model-output
-composer later without changing task scheduling, executor policy, or trace
-contracts. Deliberately out of scope for the harness core: terminal/file tools,
-MCP, background workers, multi-agent routing, and any new GUI.
+general-purpose agent runtime. SDK usage may replace parts of the harness
+adapter later, but it must not move task scheduling, executor policy, business
+memory, or trace contracts out of Chatty's control. Deliberately out of scope for
+the harness core: terminal/file tools, MCP, background workers, multi-agent
+routing, and any new GUI.
 
-Decision (2026-06): use both. **Revised 2026-07: the Agents SDK lane (adapter,
-`CHATTY_AGENTS_SDK` flag, `@openai/agents` dependency) was removed with zero
-production callers; Chat Completions is the only live model path. Re-adopt the
-SDK only when a concrete consumer needs run/handoff/guardrail semantics.**
+Current live model path:
 
-OpenAI Agents SDK TypeScript (removed 2026-07; original rationale):
-
-- Agent run abstraction.
-- Tools.
-- Handoffs.
-- Guardrails.
-- Tracing.
-- Agent-level orchestration for bounded runs.
-
-OpenAI Chat Completions API:
-
+- DeepSeek `deepseek-v4-pro` via Chat Completions (`packages/llm`).
 - Harness compose path (`apps/web` playground, optional LLM via `CHATTY_LLM=1`).
 - Agentic search tool loop (`search_knowledge`).
 - Reply generation fallback.
 - Evaluator judge (`eval/judge.ts`).
-- Direct low-level model calls when an Agents SDK run is unnecessary.
+- Usage telemetry for DeepSeek cache hit/miss tokens, output tokens, total tokens, and estimated CNY cost.
 
-All model calls should go through `packages/llm` adapters so the runtime can switch model providers (or re-introduce an SDK lane) without touching product logic.
+DeepSeek compatibility that is safe to rely on:
+
+- Chat Completions request/response shape.
+- Function tool calls and `role: "tool"` result messages.
+- `response_format: { "type": "json_object" }`, with explicit JSON instruction in prompt and parser fallback.
+- `thinking` and `reasoning_effort` as DeepSeek-specific tuning knobs.
+- Context-cache usage fields for observability.
+
+OpenAI Agents SDK TypeScript can be reintroduced only behind a DeepSeek
+compatibility probe:
+
+- Use SDK custom `Model` / `ModelProvider` only if it can call DeepSeek Chat Completions directly.
+- Use SDK function tools only if they map back to Chatty's typed tool registry and policy gate.
+- Use SDK Session only as an adapter over Chatty SQLite memory/session; do not use OpenAI server-managed state as source of truth.
+- Use SDK human-in-the-loop/interruption semantics only if decisions still persist to Chatty trace/review tables.
+- Use SDK tracing only as a secondary view; Chatty's persisted trace remains canonical.
+
+Do not assume these OpenAI-only surfaces work with DeepSeek:
+
+- Responses API.
+- OpenAI hosted tools such as hosted web/file/code tools.
+- OpenAI Conversations API server-managed state.
+- OpenAI tracing export as the only telemetry backend.
+
+All model calls should go through `packages/llm` adapters so DeepSeek-specific
+compatibility stays testable and product logic remains independent of transport
+details.
 
 ## 8. AgentKit and Agent Builder
 
@@ -313,12 +329,13 @@ RAG pipeline, and no vector database. Knowledge access is built from four parts:
    at indexing time — instead of blind chunk-and-embed.
 3. **Search as an agent tool.** The model gets a `search_knowledge` tool and decides
    when and what to search across turns, replacing pipeline-fixed top-k retrieval.
-4. **Fast OpenAI-compatible inference.** The latency bottleneck is LLM inference,
-   not retrieval I/O. Providers like Groq/Cerebras plug in via `OPENAI_BASE_URL`
-   with zero code changes. Consequently the search implementation stays simple
-   (FTS/LIKE is enough) — no Redis, no caching layers, no I/O micro-optimization:
-   shaving retrieval from 0.1s to 0.01s is invisible next to a multi-second
-   model call.
+4. **DeepSeek pro inference dominates latency and cost.** The latency bottleneck
+   is the `deepseek-v4-pro` model call, not retrieval I/O. Consequently the
+   search implementation stays simple (FTS/LIKE is enough) — no Redis, no
+   caching layers, no I/O micro-optimization: shaving retrieval from 0.1s to
+   0.01s is invisible next to a multi-second model call. Optimization work goes
+   into prompt stability, context size, tool-call count, and DeepSeek cache/cost
+   telemetry.
 
 Consequence: the legacy `rag-service` lane is fully retired (R5, 2026-07). The
 qdrant + embeddings retrieval subsystem went first (R4, 2026-07): agentic search

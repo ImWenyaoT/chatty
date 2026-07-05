@@ -44,6 +44,28 @@ export type JdCapabilityReferenceChoice = {
   readonly rationale: string
 }
 
+export type DeepSeekHarnessFeature =
+  | 'chat_completions'
+  | 'tool_calls'
+  | 'json_object_output'
+  | 'thinking_and_reasoning_effort'
+  | 'context_cache_usage'
+  | 'agents_sdk_custom_model'
+  | 'agents_sdk_function_tools'
+  | 'agents_sdk_sessions'
+  | 'agents_sdk_human_in_the_loop'
+  | 'openai_responses_api'
+  | 'openai_hosted_tools'
+  | 'openai_conversations_api'
+
+export type DeepSeekHarnessFeatureStatus = 'supported' | 'adoptable_via_probe' | 'not_assumed'
+
+export type DeepSeekHarnessCompatibility = {
+  readonly feature: DeepSeekHarnessFeature
+  readonly status: DeepSeekHarnessFeatureStatus
+  readonly decision: string
+}
+
 export const ARCHITECTURE_COMPLEXITY_POLICY = {
   target: 'stay-inside-bounds',
   lowerBoundAction: 'raise-to-jd-and-prd',
@@ -209,6 +231,73 @@ export const JD_CAPABILITY_REFERENCE_CHOICES: readonly JdCapabilityReferenceChoi
   },
 ]
 
+export const DEEPSEEK_HARNESS_COMPATIBILITY: readonly DeepSeekHarnessCompatibility[] = [
+  {
+    feature: 'chat_completions',
+    status: 'supported',
+    decision: '当前唯一 live model lane；所有真实模型调用先走 DeepSeek v4 pro Chat Completions。',
+  },
+  {
+    feature: 'tool_calls',
+    status: 'supported',
+    decision: '用于 bounded search/tool loop；工具参数仍由 harness parser/policy 做容错和审批。',
+  },
+  {
+    feature: 'json_object_output',
+    status: 'supported',
+    decision: '可用于 action JSON，但必须在 prompt 明确要求 JSON，且保留 parser fallback。',
+  },
+  {
+    feature: 'thinking_and_reasoning_effort',
+    status: 'supported',
+    decision: 'DeepSeek 参数可作为 pro harness 调优项；默认不把 reasoning 文本暴露给业务 UI。',
+  },
+  {
+    feature: 'context_cache_usage',
+    status: 'supported',
+    decision:
+      '只记录 cache hit/miss、hit ratio 和 cost；优化 prompt 稳定布局，不引入私有 cache API。',
+  },
+  {
+    feature: 'agents_sdk_custom_model',
+    status: 'adoptable_via_probe',
+    decision:
+      '只有 custom Model/ModelProvider 能稳定调用 DeepSeek Chat Completions 时才引入 SDK lane。',
+  },
+  {
+    feature: 'agents_sdk_function_tools',
+    status: 'adoptable_via_probe',
+    decision: '可复用 SDK function tools/approval 语义，但必须映射回现有 tool registry 和 policy。',
+  },
+  {
+    feature: 'agents_sdk_sessions',
+    status: 'adoptable_via_probe',
+    decision: '可复用 Session 接口；业务长期记忆仍以 Chatty SQLite memory 为 source of truth。',
+  },
+  {
+    feature: 'agents_sdk_human_in_the_loop',
+    status: 'adoptable_via_probe',
+    decision: '可复用 interruption/approval 形态；产品反馈仍落 agent_trace_reviews。',
+  },
+  {
+    feature: 'openai_responses_api',
+    status: 'not_assumed',
+    decision: 'DeepSeek Chat Completions 兼容不等于 Responses API 兼容；当前不作为设计前提。',
+  },
+  {
+    feature: 'openai_hosted_tools',
+    status: 'not_assumed',
+    decision:
+      'OpenAI hosted web/file/code tools 不作为 DeepSeek harness 能力；本地工具必须由 Chatty 执行。',
+  },
+  {
+    feature: 'openai_conversations_api',
+    status: 'not_assumed',
+    decision:
+      '不依赖 OpenAI server-managed conversation state；Chatty SQLite session/memory 保持主权。',
+  },
+]
+
 /** 判断某个外部项目是否允许作为 Chatty agent 架构设计参考源。 */
 export function isAllowedArchitectureReference(value: string): value is ArchitectureReference {
   return value === 'openclaw' || value === 'codex' || value === 'claude-code'
@@ -232,4 +321,14 @@ export function getPrimaryReferenceByJdCapability(): Record<
   return Object.fromEntries(
     JD_CAPABILITY_REFERENCE_CHOICES.map((choice) => [choice.topic, choice.primaryReference]),
   ) as Record<JdCapabilityTopic, ArchitectureReference>
+}
+
+/** 将 DeepSeek harness 兼容性结论转成按能力索引的对象，方便测试和文档生成。 */
+export function getDeepSeekHarnessCompatibility(): Record<
+  DeepSeekHarnessFeature,
+  DeepSeekHarnessFeatureStatus
+> {
+  return Object.fromEntries(
+    DEEPSEEK_HARNESS_COMPATIBILITY.map((item) => [item.feature, item.status]),
+  ) as Record<DeepSeekHarnessFeature, DeepSeekHarnessFeatureStatus>
 }

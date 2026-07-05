@@ -7,7 +7,9 @@ import {
   AGENT_ARCHITECTURE_REFERENCE_CHOICES,
   AGENT_COMPLEXITY_BOUNDS,
   ARCHITECTURE_COMPLEXITY_POLICY,
+  DEEPSEEK_HARNESS_COMPATIBILITY,
   JD_CAPABILITY_REFERENCE_CHOICES,
+  getDeepSeekHarnessCompatibility,
   getPrimaryReferenceByJdCapability,
   getPrimaryReferenceByTopic,
   isAllowedArchitectureReference,
@@ -125,6 +127,38 @@ test('new jd capability review declares one allowed primary reference per capabi
   assert.equal(byTopic['评测基准与数据标注'], 'codex')
   assert.equal(byTopic['真实任务反馈与产品指标'], 'codex')
   assert.equal(byTopic['UI/UX 与 demo 原型'], 'claude-code')
+})
+
+test('deepseek-first harness compatibility does not assume OpenAI-only model surfaces', () => {
+  const features = DEEPSEEK_HARNESS_COMPATIBILITY.map((item) => item.feature)
+  assert.deepEqual(features, [
+    'chat_completions',
+    'tool_calls',
+    'json_object_output',
+    'thinking_and_reasoning_effort',
+    'context_cache_usage',
+    'agents_sdk_custom_model',
+    'agents_sdk_function_tools',
+    'agents_sdk_sessions',
+    'agents_sdk_human_in_the_loop',
+    'openai_responses_api',
+    'openai_hosted_tools',
+    'openai_conversations_api',
+  ])
+
+  const compatibility = getDeepSeekHarnessCompatibility()
+  assert.equal(compatibility.chat_completions, 'supported')
+  assert.equal(compatibility.tool_calls, 'supported')
+  assert.equal(compatibility.json_object_output, 'supported')
+  assert.equal(compatibility.thinking_and_reasoning_effort, 'supported')
+  assert.equal(compatibility.context_cache_usage, 'supported')
+  assert.equal(compatibility.agents_sdk_custom_model, 'adoptable_via_probe')
+  assert.equal(compatibility.agents_sdk_function_tools, 'adoptable_via_probe')
+  assert.equal(compatibility.agents_sdk_sessions, 'adoptable_via_probe')
+  assert.equal(compatibility.agents_sdk_human_in_the_loop, 'adoptable_via_probe')
+  assert.equal(compatibility.openai_responses_api, 'not_assumed')
+  assert.equal(compatibility.openai_hosted_tools, 'not_assumed')
+  assert.equal(compatibility.openai_conversations_api, 'not_assumed')
 })
 
 test('current architecture docs do not cite retired reference agents outside archive', () => {
