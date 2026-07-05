@@ -26,7 +26,7 @@ harness:
 - **Context builder** assembles task, user message, product, memory, and
   knowledge fragments.
 - **Compose** asks DeepSeek pro through the Agents SDK by default when a key is
-  present, with deterministic fallback when disabled, absent, or failed.
+  present, with deterministic fallback when absent or failed.
 - **search_knowledge** is the only agentic knowledge loop, bounded to 3 calls.
 - **Parser** turns model text into a safe `CustomerServiceAction`.
 - **Executor** applies tool policy and risk gates before any side effect.
@@ -62,7 +62,7 @@ flowchart LR
   Input["User utterance<br/>ConversationEvent"] --> Session["Session + Memory<br/>SQLite snapshot"]
   Session --> Scheduler["Task Scheduler<br/>scheduleCustomerServiceTask"]
   Scheduler --> Context["Context Builder<br/>task + user + memory + product + knowledge"]
-  Context --> Compose["Compose Step<br/>LLM optional, deterministic fallback"]
+  Context --> Compose["Compose Step<br/>DeepSeek SDK, deterministic fallback"]
   Compose --> SearchLoop{"Need knowledge?"}
   SearchLoop -->|yes, <= 3 calls| SearchTool["search_knowledge<br/>FTS5 + LIKE"]
   SearchTool --> Knowledge["knowledge ContextFragment"]

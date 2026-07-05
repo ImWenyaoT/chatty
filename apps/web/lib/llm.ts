@@ -7,7 +7,6 @@ import {
 import {
   type ChatCompletionTelemetry,
   type ChatCompletionsAdapter,
-  createChatCompletionsAdapterFromEnv,
   createDeepSeekAgentsSdkToolLoop,
   parseJsonObject,
   readLlmEnv,
@@ -31,19 +30,9 @@ type LlmRuntimeOptions = {
   callBudget?: number
 }
 
-type LlmRuntimeMode = 'disabled' | 'chat-completions' | 'agents-sdk'
+type LlmRuntimeMode = 'disabled' | 'agents-sdk'
 
 const DEFAULT_LLM_CALL_BUDGET = 3
-
-/** True only when the developer explicitly disables live DeepSeek calls. */
-function isLlmExplicitlyDisabled(): boolean {
-  return process.env.CHATTY_LLM === '0'
-}
-
-/** SDK is the default live lane; this flag exists only for direct-adapter debugging. */
-function isAgentsSdkExplicitlyDisabled(): boolean {
-  return process.env.CHATTY_AGENTS_SDK === '0'
-}
 
 /** Calculates the normalized prompt/KV cache hit ratio for input tokens. */
 function calculateInputCacheHitRatio(hitTokens: number, missTokens: number): number {
@@ -78,15 +67,12 @@ export function createComposeModelFn(adapter: ChatCompletionsAdapter): CustomerS
  *
  * Builds the live DeepSeek compose call for the playground harness step.
  *
- * DeepSeek is the default when an API key is present. Set CHATTY_LLM=0 only
- * when deterministic fallback is desired; set CHATTY_AGENTS_SDK=0 only for
- * direct Chat Completions adapter debugging.
+ * DeepSeek is enabled whenever an API key is present; otherwise the harness
+ * runs the deterministic composer and keeps no-key demo/smoke behavior.
  */
 export function createPlaygroundModelFn(): CustomerServiceModelFn | undefined {
-  if (isLlmExplicitlyDisabled()) return undefined
   if (!readLlmEnv().apiKey) return undefined
-  if (!isAgentsSdkExplicitlyDisabled()) return createAgentsSdkComposeModelFn()
-  return createComposeModelFn(createChatCompletionsAdapterFromEnv())
+  return createAgentsSdkComposeModelFn()
 }
 
 /** Wraps the Agents SDK run loop into the existing harness modelFn contract. */
@@ -192,12 +178,9 @@ export function createComposeToolLoopFn(
   }
 }
 
-/** playground direct Chat Completions 搜索循环：仅在显式关闭 SDK 时使用。 */
+/** SDK lane owns playground tool orchestration; direct tool loop is no longer env-routable. */
 export function createPlaygroundToolLoopFn(): CustomerServiceToolLoopFn | undefined {
-  if (isLlmExplicitlyDisabled()) return undefined
-  if (!readLlmEnv().apiKey) return undefined
-  if (!isAgentsSdkExplicitlyDisabled()) return undefined
-  return createComposeToolLoopFn(createChatCompletionsAdapterFromEnv())
+  return undefined
 }
 
 /** Aggregates per-call LLM telemetry into a compact trace payload for the playground inspector. */
@@ -256,7 +239,7 @@ export function createPlaygroundLlmRuntime(options: LlmRuntimeOptions = {}): {
   const env = readLlmEnv()
   const records: ChatCompletionTelemetry[] = []
   const callBudget = options.callBudget ?? DEFAULT_LLM_CALL_BUDGET
-  if (isLlmExplicitlyDisabled() || !env.apiKey) {
+  if (!env.apiKey) {
     return {
       mode: 'disabled',
       modelFn: undefined,
@@ -264,22 +247,10 @@ export function createPlaygroundLlmRuntime(options: LlmRuntimeOptions = {}): {
       summary: () => createLlmTelemetrySummary(env.chatModel, records, { callBudget }),
     }
   }
-  if (!isAgentsSdkExplicitlyDisabled()) {
-    return {
-      mode: 'agents-sdk',
-      modelFn: createAgentsSdkComposeModelFn(),
-      toolLoopFn: undefined,
-      summary: () => createLlmTelemetrySummary(env.chatModel, records, { callBudget }),
-    }
-  }
-  const adapter = createChatCompletionsAdapterFromEnv({
-    maxOutputTokens: 320,
-    telemetry: (record) => records.push(record),
-  })
   return {
-    mode: 'chat-completions',
-    modelFn: createComposeModelFn(adapter),
-    toolLoopFn: createComposeToolLoopFn(adapter),
+    mode: 'agents-sdk',
+    modelFn: createAgentsSdkComposeModelFn(),
+    toolLoopFn: undefined,
     summary: () => createLlmTelemetrySummary(env.chatModel, records, { callBudget }),
   }
 }

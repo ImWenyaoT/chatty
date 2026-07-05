@@ -81,8 +81,8 @@ export async function POST(request: Request) {
   })
 
   // 4. Run one bounded customer-service Harness step. Compose is LLM-backed by
-  // default when a DeepSeek API key is configured; CHATTY_LLM=0 forces the
-  // deterministic composer, and model failure still falls back safely.
+  // default when a DeepSeek API key is configured; missing key or model failure
+  // falls back to the deterministic composer.
   // The snapshot record is a structural superset of the harness MemorySnapshot.
   // SDK lane owns model/tool orchestration; search_knowledge execution still
   // goes through registry policy and lands knowledge fragments in trace.

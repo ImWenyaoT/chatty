@@ -9,7 +9,7 @@
 - 变更：重新引入 `@openai/agents`，`@rental/llm` 用 `OpenAIChatCompletionsModel` 包装 DeepSeek OpenAI-format endpoint，并把 Chatty runtime tool 转成 SDK function tool。
 - 设计选择：能交给 SDK 的模型/tool orchestration 交给 SDK；task scheduling、business policy、tool executor、memory、knowledge fragment 和 persisted trace 继续由 Chatty harness 拥有。
 - JD 对齐：把 `agent = model + harness` 落成真实代码：model 是 `deepseek-v4-pro`，harness 通过 SDK 兼容层对齐 DeepSeek，而不是为 OpenAI model 设计。
-- 自动验证：`packages/llm/src/agents-sdk-adapter.test.ts` 覆盖 SDK model/tool adapter；`packages/agent-core/src/customer-harness.test.ts` 锁住 modelFn 可接收 harness runtime；`apps/web/lib/llm.test.ts` 覆盖 SDK 默认开启、`CHATTY_LLM=0` 禁用和 `CHATTY_AGENTS_SDK=0` direct adapter 退路。
+- 自动验证：`packages/llm/src/agents-sdk-adapter.test.ts` 覆盖 SDK model/tool adapter；`packages/agent-core/src/customer-harness.test.ts` 锁住 modelFn 可接收 harness runtime；`apps/web/lib/llm.test.ts` 覆盖 runtime 只由 DeepSeek key 决定，不再保留 LLM/SDK 环境开关。
 
 ### DeepSeek-first harness boundary
 
