@@ -173,13 +173,56 @@ test('createLlmTelemetrySummary aggregates pro usage and estimated cost', () => 
   assert.deepEqual(summary, {
     model: 'deepseek-v4-pro',
     calls: 2,
+    callBudget: 3,
     inputCacheHitTokens: 1500,
     inputCacheMissTokens: 300,
     outputTokens: 75,
     totalTokens: 1875,
     estimatedCostCny: 0.0013875,
     operations: ['completeWithTools', 'completeJson'],
+    warnings: [],
   })
+})
+
+test('createLlmTelemetrySummary warns when one turn exceeds the pro call budget', () => {
+  const record = {
+    model: 'deepseek-v4-pro',
+    operation: 'completeWithTools' as const,
+    inputCacheHitTokens: 1,
+    inputCacheMissTokens: 1,
+    outputTokens: 1,
+    totalTokens: 3,
+    estimatedCostCny: 0.000009025,
+  }
+  const summary = createLlmTelemetrySummary('deepseek-v4-pro', [record, record, record, record], {
+    callBudget: 3,
+  })
+
+  assert.equal(summary.calls, 4)
+  assert.equal(summary.callBudget, 3)
+  assert.deepEqual(summary.warnings, ['llm_call_budget_exceeded: 4/3'])
+  assert.equal(summary.estimatedCostCny, 0.0000361)
+})
+
+test('createPlaygroundLlmRuntime accepts a custom pro call budget for trace warnings', () => {
+  const savedLlm = process.env.CHATTY_LLM
+  const savedKey = process.env.OPENAI_API_KEY
+  const savedModel = process.env.CHAT_MODEL
+  try {
+    process.env.CHATTY_LLM = ''
+    process.env.OPENAI_API_KEY = ''
+    process.env.CHAT_MODEL = 'deepseek-v4-pro'
+
+    const runtime = createPlaygroundLlmRuntime({ callBudget: 2 })
+
+    assert.equal(runtime.modelFn, undefined)
+    assert.equal(runtime.toolLoopFn, undefined)
+    assert.equal(runtime.summary().callBudget, 2)
+  } finally {
+    process.env.CHATTY_LLM = savedLlm
+    process.env.OPENAI_API_KEY = savedKey
+    process.env.CHAT_MODEL = savedModel
+  }
 })
 
 test('createPlaygroundLlmRuntime stays pro-only and exposes a zero-call summary when disabled', () => {
@@ -198,12 +241,14 @@ test('createPlaygroundLlmRuntime stays pro-only and exposes a zero-call summary 
     assert.deepEqual(runtime.summary(), {
       model: 'deepseek-v4-pro',
       calls: 0,
+      callBudget: 3,
       inputCacheHitTokens: 0,
       inputCacheMissTokens: 0,
       outputTokens: 0,
       totalTokens: 0,
       estimatedCostCny: 0,
       operations: [],
+      warnings: [],
     })
   } finally {
     process.env.CHATTY_LLM = savedLlm

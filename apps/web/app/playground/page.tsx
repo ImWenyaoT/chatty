@@ -509,7 +509,7 @@ export default function LegacyConsolePage() {
                 <span>model</span>
                 <strong>{llm?.model ?? 'not called'}</strong>
                 <span>LLM calls</span>
-                <strong>{llm?.calls ?? 0}</strong>
+                <strong>{llm ? `${llm.calls ?? 0}/${llm.callBudget ?? 0}` : '0/0'}</strong>
                 <span>tokens</span>
                 <strong>
                   {llm ? `${llm.totalTokens ?? 0} · out ${llm.outputTokens ?? 0}` : '0 · out 0'}
@@ -519,6 +519,9 @@ export default function LegacyConsolePage() {
               </div>
               {llm?.operations?.length ? (
                 <p className="legacy-muted">LLM ops: {llm.operations.join(' → ')}</p>
+              ) : null}
+              {llm?.warnings?.length ? (
+                <p className="legacy-muted">LLM warnings: {llm.warnings.join(' · ')}</p>
               ) : null}
               {toolCalls.length > 0 ? (
                 toolCalls.map((call, index) => (

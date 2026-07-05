@@ -203,7 +203,7 @@ compose system prompt 的结构参考两边：
 - Claude Code：取 harness / tool / output contract 分层，让模型知道哪些决策由 harness 管，哪些动作必须走工具边界。
 
 `search_knowledge` 的 query 不是完全相信模型：泛词如“规则 / 信息 / 推荐”会在 harness 侧按当前商品和用户问题收敛，例如尺码问题改成 `SUIT-001 尺码`。
-模型层保持 `deepseek-v4-pro`，不切 flash；成本优化靠减少不必要调用、限制输出 token、把 usage/cost 写入 trace。
+模型层保持 `deepseek-v4-pro`，不切 flash；成本优化靠减少不必要调用、限制输出 token、把 usage/cost 和每轮调用预算写入 trace。
 
 ```mermaid
 flowchart LR
@@ -214,6 +214,7 @@ flowchart LR
   Knowledge["knowledge"] --> Prompt
   Prompt --> Query["query refinement"]
   Prompt --> Cost["pro usage telemetry"]
+  Cost --> Budget["call budget warning"]
 ```
 
 ### Q07. 如何实现 long-term memory
@@ -309,7 +310,8 @@ flowchart LR
 参考实现：Codex。
 
 测试是 architecture 的一部分。确定性逻辑进 unit，跨包行为进 integration，无网络主链路进 smoke，真实模型行为进 manual golden eval。
-真实 LLM 调试必须带成本观测：trace 记录 model、调用次数、cache hit/miss、output tokens 和估算成本，避免只在账单 CSV 里事后发现峰值。
+真实 LLM 调试必须带成本观测：trace 记录 model、调用次数、每轮调用预算、cache hit/miss、output tokens、估算成本和预算告警，避免只在账单 CSV 里事后发现峰值。
+这些 JD 对齐的工程化改动同步记录在 `docs/changelog.md`，让“为什么改”和“如何验证”能被持续追踪。
 
 ```mermaid
 flowchart LR
@@ -318,6 +320,7 @@ flowchart LR
   Change --> Smoke["pnpm smoke"]
   Change --> Eval["pnpm eval"]
   Eval --> Cost["usage / cost trace"]
+  Cost --> Budget["call budget warning"]
   Unit --> CI["CI gates"]
   Integration --> CI
   Smoke --> CI

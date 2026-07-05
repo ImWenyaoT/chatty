@@ -14,13 +14,21 @@ import {
 export type LlmTelemetrySummary = {
   model: string
   calls: number
+  callBudget: number
   inputCacheHitTokens: number
   inputCacheMissTokens: number
   outputTokens: number
   totalTokens: number
   estimatedCostCny: number
   operations: Array<ChatCompletionTelemetry['operation']>
+  warnings: string[]
 }
+
+type LlmRuntimeOptions = {
+  callBudget?: number
+}
+
+const DEFAULT_LLM_CALL_BUDGET = 3
 
 /**
  * Wraps a Chat Completions adapter into the harness compose modelFn.
@@ -83,11 +91,14 @@ export function createPlaygroundToolLoopFn(): CustomerServiceToolLoopFn | undefi
 export function createLlmTelemetrySummary(
   model: string,
   records: ChatCompletionTelemetry[],
+  options: LlmRuntimeOptions = {},
 ): LlmTelemetrySummary {
-  return records.reduce<LlmTelemetrySummary>(
+  const callBudget = options.callBudget ?? DEFAULT_LLM_CALL_BUDGET
+  const summary = records.reduce<Omit<LlmTelemetrySummary, 'warnings'>>(
     (summary, record) => ({
       model,
       calls: summary.calls + 1,
+      callBudget,
       inputCacheHitTokens: summary.inputCacheHitTokens + record.inputCacheHitTokens,
       inputCacheMissTokens: summary.inputCacheMissTokens + record.inputCacheMissTokens,
       outputTokens: summary.outputTokens + record.outputTokens,
@@ -98,6 +109,7 @@ export function createLlmTelemetrySummary(
     {
       model,
       calls: 0,
+      callBudget,
       inputCacheHitTokens: 0,
       inputCacheMissTokens: 0,
       outputTokens: 0,
@@ -106,24 +118,28 @@ export function createLlmTelemetrySummary(
       operations: [],
     },
   )
+  const warnings =
+    summary.calls > callBudget ? [`llm_call_budget_exceeded: ${summary.calls}/${callBudget}`] : []
+  return { ...summary, warnings }
 }
 
 /**
  * Builds the playground LLM hooks as one per-request runtime so modelFn and
  * toolLoopFn share the same pro-model telemetry collector.
  */
-export function createPlaygroundLlmRuntime(): {
+export function createPlaygroundLlmRuntime(options: LlmRuntimeOptions = {}): {
   modelFn: CustomerServiceModelFn | undefined
   toolLoopFn: CustomerServiceToolLoopFn | undefined
   summary: () => LlmTelemetrySummary
 } {
   const env = readLlmEnv()
   const records: ChatCompletionTelemetry[] = []
+  const callBudget = options.callBudget ?? DEFAULT_LLM_CALL_BUDGET
   if (process.env.CHATTY_LLM !== '1' || !env.apiKey) {
     return {
       modelFn: undefined,
       toolLoopFn: undefined,
-      summary: () => createLlmTelemetrySummary(env.chatModel, records),
+      summary: () => createLlmTelemetrySummary(env.chatModel, records, { callBudget }),
     }
   }
   const adapter = createChatCompletionsAdapterFromEnv({
@@ -133,6 +149,6 @@ export function createPlaygroundLlmRuntime(): {
   return {
     modelFn: createComposeModelFn(adapter),
     toolLoopFn: createComposeToolLoopFn(adapter),
-    summary: () => createLlmTelemetrySummary(env.chatModel, records),
+    summary: () => createLlmTelemetrySummary(env.chatModel, records, { callBudget }),
   }
 }

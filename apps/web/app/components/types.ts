@@ -4,12 +4,14 @@ export type HarnessTrace = {
   llm?: {
     model?: string
     calls?: number
+    callBudget?: number
     inputCacheHitTokens?: number
     inputCacheMissTokens?: number
     outputTokens?: number
     totalTokens?: number
     estimatedCostCny?: number
     operations?: string[]
+    warnings?: string[]
   }
   task?: {
     kind?: string
