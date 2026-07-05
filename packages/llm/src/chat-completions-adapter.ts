@@ -4,6 +4,8 @@ import { createOpenAiClientFromEnv, readLlmEnv } from './client-from-env.js'
 export interface ChatCompletionsAdapterOptions {
   client: OpenAI
   model: string
+  maxOutputTokens?: number
+  telemetry?: (record: ChatCompletionTelemetry) => void
 }
 
 export interface ChatCompletionMessage {
@@ -33,6 +35,16 @@ export type ToolLoopMessage =
 
 /** completeWithTools 的两种回复形态：模型要么请求工具调用，要么给出纯文本。 */
 export type CompleteWithToolsResult = { toolCalls: ToolCallRequest[] } | { text: string }
+
+export interface ChatCompletionTelemetry {
+  model: string
+  operation: 'complete' | 'completeJson' | 'completeWithTools'
+  inputCacheHitTokens: number
+  inputCacheMissTokens: number
+  outputTokens: number
+  totalTokens: number
+  estimatedCostCny: number
+}
 
 export interface ChatCompletionsAdapter {
   complete(messages: ChatCompletionMessage[]): Promise<string>
@@ -64,7 +76,9 @@ export function createChatCompletionsAdapter(
       const response = await options.client.chat.completions.create({
         model: options.model,
         messages,
+        ...(options.maxOutputTokens ? { max_tokens: options.maxOutputTokens } : {}),
       })
+      emitTelemetry(options, 'complete', response.usage)
 
       return response.choices[0]?.message?.content?.trim() ?? ''
     },
@@ -75,7 +89,9 @@ export function createChatCompletionsAdapter(
         messages,
         // Hint only; non-strict providers ignore this and we still parse below.
         response_format: { type: 'json_object' },
+        ...(options.maxOutputTokens ? { max_tokens: options.maxOutputTokens } : {}),
       })
+      emitTelemetry(options, 'completeJson', response.usage)
 
       const raw = response.choices[0]?.message?.content?.trim() ?? ''
       return parseJsonObject<T>(raw)
@@ -85,6 +101,7 @@ export function createChatCompletionsAdapter(
       const response = await options.client.chat.completions.create({
         model: options.model,
         messages: messages.map(toOpenAiMessage),
+        ...(options.maxOutputTokens ? { max_tokens: options.maxOutputTokens } : {}),
         ...(tools.length > 0
           ? {
               tools: tools.map((tool) => ({
@@ -98,6 +115,7 @@ export function createChatCompletionsAdapter(
             }
           : {}),
       })
+      emitTelemetry(options, 'completeWithTools', response.usage)
       const message = response.choices[0]?.message
       const toolCalls = (message?.tool_calls ?? [])
         .filter((call) => call.type === 'function')
@@ -110,6 +128,69 @@ export function createChatCompletionsAdapter(
       return { text: message?.content?.trim() ?? '' }
     },
   }
+}
+
+/** Emits normalized provider usage plus a CNY estimate using observed July 2026 DeepSeek rates. */
+function emitTelemetry(
+  options: ChatCompletionsAdapterOptions,
+  operation: ChatCompletionTelemetry['operation'],
+  usage: unknown,
+) {
+  if (!options.telemetry) return
+  const record = normalizeUsage(options.model, operation, usage)
+  if (record) options.telemetry(record)
+}
+
+/** Normalizes OpenAI-compatible usage fields, including DeepSeek cache hit/miss counters. */
+function normalizeUsage(
+  model: string,
+  operation: ChatCompletionTelemetry['operation'],
+  usage: unknown,
+): ChatCompletionTelemetry | undefined {
+  if (!usage || typeof usage !== 'object') return undefined
+  const source = usage as Record<string, unknown>
+  const inputCacheHitTokens = numberField(source, 'prompt_cache_hit_tokens')
+  const inputCacheMissTokens =
+    numberField(source, 'prompt_cache_miss_tokens') ||
+    Math.max(0, numberField(source, 'prompt_tokens') - inputCacheHitTokens)
+  const outputTokens = numberField(source, 'completion_tokens')
+  const totalTokens =
+    numberField(source, 'total_tokens') || inputCacheHitTokens + inputCacheMissTokens + outputTokens
+  return {
+    model,
+    operation,
+    inputCacheHitTokens,
+    inputCacheMissTokens,
+    outputTokens,
+    totalTokens,
+    estimatedCostCny: estimateCostCny(model, {
+      inputCacheHitTokens,
+      inputCacheMissTokens,
+      outputTokens,
+    }),
+  }
+}
+
+function numberField(source: Record<string, unknown>, key: string): number {
+  const value = source[key]
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+function estimateCostCny(
+  model: string,
+  usage: Pick<
+    ChatCompletionTelemetry,
+    'inputCacheHitTokens' | 'inputCacheMissTokens' | 'outputTokens'
+  >,
+): number {
+  const rates = model.includes('flash')
+    ? { hit: 0.00000002, miss: 0.000001, output: 0.000002 }
+    : { hit: 0.000000025, miss: 0.000003, output: 0.000006 }
+  const cost =
+    usage.inputCacheHitTokens * rates.hit +
+    usage.inputCacheMissTokens * rates.miss +
+    usage.outputTokens * rates.output
+  return Number(cost.toFixed(12))
 }
 
 /** 把工具循环消息转成 Chat Completions 线格式（camelCase → snake_case）。 */
@@ -137,11 +218,14 @@ function toOpenAiMessage(
  * Convenience builder that wires the adapter from the shared env config, so
  * agent-core and route handlers do not each construct an OpenAI client.
  */
-export function createChatCompletionsAdapterFromEnv(): ChatCompletionsAdapter {
+export function createChatCompletionsAdapterFromEnv(
+  options: Pick<ChatCompletionsAdapterOptions, 'maxOutputTokens' | 'telemetry'> = {},
+): ChatCompletionsAdapter {
   const { chatModel } = readLlmEnv()
   return createChatCompletionsAdapter({
     client: createOpenAiClientFromEnv(),
     model: chatModel,
+    ...options,
   })
 }
 

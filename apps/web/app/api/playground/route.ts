@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { isPlaygroundAuthorized, legacyChatInputSchema } from '@rental/shared'
 import { createDefaultToolRegistry, runCustomerServiceHarnessStep } from '@rental/agent-core'
 import { getRepos, newId } from '@/lib/db'
-import { createPlaygroundModelFn, createPlaygroundToolLoopFn } from '@/lib/llm'
+import { createPlaygroundLlmRuntime } from '@/lib/llm'
 
 // Playground endpoint: drives one bounded customer-service Harness step end to end.
 // Request:  POST { customerId, productId?, conversationId?, question, imageUrl? }
@@ -55,6 +55,7 @@ export async function POST(request: Request) {
 
   const traceId = newId('tr')
   const occurredAt = new Date().toISOString()
+  const llm = createPlaygroundLlmRuntime()
 
   // 2. Build the ConversationEvent the loop consumes.
   const payload: Record<string, unknown> = { question: input.question }
@@ -92,10 +93,11 @@ export async function POST(request: Request) {
     memory: snapshot,
     registry: createDefaultToolRegistry(knowledge),
     sessionStatus: session.status,
-    modelFn: createPlaygroundModelFn(),
-    toolLoopFn: createPlaygroundToolLoopFn(),
+    modelFn: llm.modelFn,
+    toolLoopFn: llm.toolLoopFn,
   })
   const result = harness.step
+  const harnessTrace = { ...harness.trace, llm: llm.summary() }
 
   // 5. Persist trace + update session status. One trace row per user turn.
   traces.append({
@@ -115,7 +117,7 @@ export async function POST(request: Request) {
         ? {
             ...(result.reply ? { reply: result.reply } : {}),
             ...(result.memoryPatch !== undefined ? { memoryPatch: result.memoryPatch } : {}),
-            harnessTrace: harness.trace as unknown as import('@rental/shared').JsonValue,
+            harnessTrace: harnessTrace as unknown as import('@rental/shared').JsonValue,
           }
         : undefined,
     toolCalls: result.toolCalls,
@@ -147,6 +149,6 @@ export async function POST(request: Request) {
     sessionId: session.id,
     status: result.nextStatus,
     terminality: result.terminality,
-    harnessTrace: harness.trace,
+    harnessTrace,
   })
 }

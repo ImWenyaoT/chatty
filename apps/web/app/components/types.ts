@@ -1,6 +1,16 @@
 // Shared UI types for the Chatty concierge surface.
 
 export type HarnessTrace = {
+  llm?: {
+    model?: string
+    calls?: number
+    inputCacheHitTokens?: number
+    inputCacheMissTokens?: number
+    outputTokens?: number
+    totalTokens?: number
+    estimatedCostCny?: number
+    operations?: string[]
+  }
   task?: {
     kind?: string
     goal?: string
@@ -9,6 +19,7 @@ export type HarnessTrace = {
   action?: {
     action?: string
     toolName?: string
+    toolArgs?: Record<string, unknown>
   }
   context?: {
     fragments?: Array<{

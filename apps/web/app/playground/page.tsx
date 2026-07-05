@@ -167,6 +167,7 @@ export default function LegacyConsolePage() {
   const recentMessages = useMemo(() => recentSellerMessages(turns), [turns])
   const toolCalls = latestAgent?.trace?.toolCalls ?? []
   const toolResults = latestAgent?.trace?.toolResults ?? []
+  const llm = latestAgent?.trace?.llm
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' })
@@ -505,7 +506,20 @@ export default function LegacyConsolePage() {
                 <strong>{latestAgent?.traceId ?? '等待首轮消息'}</strong>
                 <span>terminality</span>
                 <strong>{latestAgent?.terminality ?? 'idle'}</strong>
+                <span>model</span>
+                <strong>{llm?.model ?? 'not called'}</strong>
+                <span>LLM calls</span>
+                <strong>{llm?.calls ?? 0}</strong>
+                <span>tokens</span>
+                <strong>
+                  {llm ? `${llm.totalTokens ?? 0} · out ${llm.outputTokens ?? 0}` : '0 · out 0'}
+                </strong>
+                <span>est. cost</span>
+                <strong>{llm ? `¥${(llm.estimatedCostCny ?? 0).toFixed(6)}` : '¥0.000000'}</strong>
               </div>
+              {llm?.operations?.length ? (
+                <p className="legacy-muted">LLM ops: {llm.operations.join(' → ')}</p>
+              ) : null}
               {toolCalls.length > 0 ? (
                 toolCalls.map((call, index) => (
                   <div className="legacy-tool" key={`${call.toolName}-${call.risk}-${index}`}>

@@ -19,3 +19,8 @@ test('readLlmEnv reads OPENAI_* and CHAT_MODEL', () => {
   assert.equal(env.baseURL, 'https://api.deepseek.com/v1')
   assert.equal(env.chatModel, 'deepseek-reasoner')
 })
+
+test('readLlmEnv pins DeepSeek v4 flash aliases back to pro for agent stability', () => {
+  const env = readLlmEnv({ CHAT_MODEL: 'deepseek-v4-flash' })
+  assert.equal(env.chatModel, 'deepseek-v4-pro')
+})

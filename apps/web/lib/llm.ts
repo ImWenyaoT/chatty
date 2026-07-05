@@ -4,11 +4,23 @@ import {
   type CustomerServiceToolLoopFn,
 } from '@rental/agent-core'
 import {
+  type ChatCompletionTelemetry,
   type ChatCompletionsAdapter,
   createChatCompletionsAdapterFromEnv,
   parseJsonObject,
   readLlmEnv,
 } from '@rental/llm'
+
+export type LlmTelemetrySummary = {
+  model: string
+  calls: number
+  inputCacheHitTokens: number
+  inputCacheMissTokens: number
+  outputTokens: number
+  totalTokens: number
+  estimatedCostCny: number
+  operations: Array<ChatCompletionTelemetry['operation']>
+}
 
 /**
  * Wraps a Chat Completions adapter into the harness compose modelFn.
@@ -65,4 +77,62 @@ export function createPlaygroundToolLoopFn(): CustomerServiceToolLoopFn | undefi
   if (process.env.CHATTY_LLM !== '1') return undefined
   if (!readLlmEnv().apiKey) return undefined
   return createComposeToolLoopFn(createChatCompletionsAdapterFromEnv())
+}
+
+/** Aggregates per-call LLM telemetry into a compact trace payload for the playground inspector. */
+export function createLlmTelemetrySummary(
+  model: string,
+  records: ChatCompletionTelemetry[],
+): LlmTelemetrySummary {
+  return records.reduce<LlmTelemetrySummary>(
+    (summary, record) => ({
+      model,
+      calls: summary.calls + 1,
+      inputCacheHitTokens: summary.inputCacheHitTokens + record.inputCacheHitTokens,
+      inputCacheMissTokens: summary.inputCacheMissTokens + record.inputCacheMissTokens,
+      outputTokens: summary.outputTokens + record.outputTokens,
+      totalTokens: summary.totalTokens + record.totalTokens,
+      estimatedCostCny: Number((summary.estimatedCostCny + record.estimatedCostCny).toFixed(12)),
+      operations: [...summary.operations, record.operation],
+    }),
+    {
+      model,
+      calls: 0,
+      inputCacheHitTokens: 0,
+      inputCacheMissTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      estimatedCostCny: 0,
+      operations: [],
+    },
+  )
+}
+
+/**
+ * Builds the playground LLM hooks as one per-request runtime so modelFn and
+ * toolLoopFn share the same pro-model telemetry collector.
+ */
+export function createPlaygroundLlmRuntime(): {
+  modelFn: CustomerServiceModelFn | undefined
+  toolLoopFn: CustomerServiceToolLoopFn | undefined
+  summary: () => LlmTelemetrySummary
+} {
+  const env = readLlmEnv()
+  const records: ChatCompletionTelemetry[] = []
+  if (process.env.CHATTY_LLM !== '1' || !env.apiKey) {
+    return {
+      modelFn: undefined,
+      toolLoopFn: undefined,
+      summary: () => createLlmTelemetrySummary(env.chatModel, records),
+    }
+  }
+  const adapter = createChatCompletionsAdapterFromEnv({
+    maxOutputTokens: 320,
+    telemetry: (record) => records.push(record),
+  })
+  return {
+    modelFn: createComposeModelFn(adapter),
+    toolLoopFn: createComposeToolLoopFn(adapter),
+    summary: () => createLlmTelemetrySummary(env.chatModel, records),
+  }
 }

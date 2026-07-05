@@ -23,7 +23,7 @@ export function readLlmEnv(env: NodeJS.ProcessEnv = process.env): LlmEnvConfig {
   return {
     apiKey: env.OPENAI_API_KEY ?? '',
     baseURL: env.OPENAI_BASE_URL || undefined,
-    chatModel: env.CHAT_MODEL ?? 'deepseek-v4-pro',
+    chatModel: normalizeChatModel(env.CHAT_MODEL),
   }
 }
 
@@ -34,4 +34,11 @@ export function readLlmEnv(env: NodeJS.ProcessEnv = process.env): LlmEnvConfig {
 export function createOpenAiClientFromEnv(env: NodeJS.ProcessEnv = process.env): OpenAI {
   const { apiKey, baseURL } = readLlmEnv(env)
   return new OpenAI({ apiKey, baseURL })
+}
+
+/** Keeps Chatty on DeepSeek v4 pro even when an alias or old env points at flash. */
+function normalizeChatModel(model: string | undefined): string {
+  if (!model) return 'deepseek-v4-pro'
+  if (/^deepseek-v4-flash$/i.test(model)) return 'deepseek-v4-pro'
+  return model
 }
