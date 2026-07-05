@@ -60,6 +60,29 @@ test('scheduler routes complaints and refunds to handoff instead of auto reply',
   assert.equal(task.risk, 'medium')
 })
 
+test('scheduler routes answerable policy questions to answer_question before slot collection', () => {
+  const task = scheduleCustomerServiceTask({
+    event: userEvent('西装押金规则是什么？请先查知识库再回答'),
+    memory: memory(),
+  })
+
+  assert.equal(task.kind, 'answer_question')
+  assert.equal(task.terminality, 'reply_and_wait')
+})
+
+test('scheduler still collects missing product for product-specific price questions', () => {
+  const event = {
+    ...userEvent('这款多少钱一天？'),
+    productId: undefined,
+  }
+  const task = scheduleCustomerServiceTask({
+    event,
+    memory: memory({ productId: undefined }),
+  })
+
+  assert.equal(task.kind, 'collect_missing_info')
+})
+
 test('context builder keeps ordered fragments for prompt assembly and inspection', () => {
   const task = scheduleCustomerServiceTask({
     event: userEvent('这款多少钱'),

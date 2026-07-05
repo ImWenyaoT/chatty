@@ -210,6 +210,15 @@ export function scheduleCustomerServiceTask(input: CustomerServiceTurnInput): Cu
       risk: 'low',
     }
   }
+  if (mentionsAnswerableFactQuestion(question, input.event.productId)) {
+    return {
+      kind: 'answer_question',
+      goal: '回答当前客服问题，并保持下一步流程清晰',
+      terminality: 'reply_and_wait',
+      requiredContext: ['userMessage', 'recentMessages'],
+      risk: 'low',
+    }
+  }
   if (!input.event.productId || !hasEnoughRentalContext(question, input.memory)) {
     return {
       kind: 'collect_missing_info',
@@ -618,6 +627,15 @@ function mentionsHandoff(question: string): boolean {
 
 function mentionsFollowUp(question: string): boolean {
   return /提醒|跟进|到期|明天|后天|稍后/.test(question)
+}
+
+function mentionsAnswerableFactQuestion(question: string, productId?: string): boolean {
+  if (
+    /押金|规则|怎么租|如何租|流程|租期|计费|续租|售后|换码|换货|店名|电话|地址|营业/.test(question)
+  ) {
+    return true
+  }
+  return Boolean(productId) && /价格|多少钱|租金|一天|费用|尺码|材质|颜色|款式/.test(question)
 }
 
 function hasRentalPeriod(question: string): boolean {
