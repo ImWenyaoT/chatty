@@ -507,8 +507,8 @@ export default function LegacyConsolePage() {
                 <strong>{latestAgent?.terminality ?? 'idle'}</strong>
               </div>
               {toolCalls.length > 0 ? (
-                toolCalls.map((call) => (
-                  <div className="legacy-tool" key={`${call.toolName}-${call.risk}`}>
+                toolCalls.map((call, index) => (
+                  <div className="legacy-tool" key={`${call.toolName}-${call.risk}-${index}`}>
                     <strong>{call.toolName}</strong>
                     <span>{call.risk}</span>
                   </div>
