@@ -5,6 +5,7 @@ import {
   buildCustomerServiceContext,
   createDefaultToolRegistry,
   createCustomerServiceModelOutput,
+  CUSTOMER_SERVICE_COMPOSE_INSTRUCTIONS,
   executeCustomerServiceAction,
   MAX_SEARCH_CALLS,
   parseCustomerServiceOutput,
@@ -47,6 +48,18 @@ test('scheduler maps size-and-date slot collection to check_availability when re
   assert.equal(task.kind, 'check_availability')
   assert.equal(task.terminality, 'tool_then_continue')
   assert.deepEqual(task.requiredContext, ['productId', 'rentalPeriod', 'bodyMeasurements'])
+})
+
+test('compose instructions define harness, output, action and tool contracts', () => {
+  assert.match(CUSTOMER_SERVICE_COMPOSE_INSTRUCTIONS, /## Harness contract/)
+  assert.match(CUSTOMER_SERVICE_COMPOSE_INSTRUCTIONS, /## Output contract/)
+  assert.match(CUSTOMER_SERVICE_COMPOSE_INSTRUCTIONS, /## Action contract/)
+  assert.match(CUSTOMER_SERVICE_COMPOSE_INSTRUCTIONS, /## Tool contract/)
+  assert.match(CUSTOMER_SERVICE_COMPOSE_INSTRUCTIONS, /最终只能输出一个 JSON 对象/)
+  assert.match(CUSTOMER_SERVICE_COMPOSE_INSTRUCTIONS, /库存档期问题不要调用 search_knowledge/)
+  assert.match(CUSTOMER_SERVICE_COMPOSE_INSTRUCTIONS, /禁止出现这些内部词/)
+  assert.match(CUSTOMER_SERVICE_COMPOSE_INSTRUCTIONS, /已经有 productId/)
+  assert.match(CUSTOMER_SERVICE_COMPOSE_INSTRUCTIONS, /不要编造/)
 })
 
 test('scheduler routes complaints and refunds to handoff instead of auto reply', () => {
