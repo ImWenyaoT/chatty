@@ -10,7 +10,7 @@ The repository is a single, typed TypeScript customer-service harness for:
 - policy-aware action execution;
 - agentic knowledge search (SQLite FTS5 + `search_knowledge` tool + bounded loop);
 - SQLite-backed session and trace state;
-- an optional LLM compose path (OpenAI-compatible Chat Completions, `CHATTY_LLM=1`) with a deterministic fallback;
+- a default DeepSeek pro compose path through Agents SDK, with deterministic fallback when explicitly disabled or unavailable;
 - a plain golden regression check under `eval/`;
 - documentation-first architecture decisions under `docs/`.
 
@@ -26,8 +26,8 @@ The repository is a single, typed TypeScript customer-service harness for:
    context fragments、JSON output parser、policy-aware executor、trace/memory patch 的第一条可运行闭环。
 2. **Playground 主链路** — [`apps/web/app/api/playground/route.ts`](apps/web/app/api/playground/route.ts)
    把用户输入接入 harness，持久化 `harnessTrace`，并在 UI 展示 task/action/tool/context 观测信息。
-   compose 步可选走真 LLM（`CHATTY_LLM=1` + `OPENAI_API_KEY`，Chat Completions adapter），
-   未配置或模型调用失败时回退确定性 composer，demo 零配置可跑。
+   配置 `OPENAI_API_KEY` 后 compose 步默认走 DeepSeek pro + Agents SDK；
+   `CHATTY_LLM=0` 才强制回退确定性 composer，`CHATTY_AGENTS_SDK=0` 才退到 direct Chat Completions adapter。
 3. **Eval 金标回归** — [`eval/run.ts`](eval/run.ts) + [`eval/golden/`](eval/golden) +
    [`eval/judge.ts`](eval/judge.ts)：进程内直调 harness 步跑 14 个金标场景，runner 同步调
    LLM-judge 回填每场景分数。LLM-judge 的 ±2 分噪声用 `--repeat` 聚合抵消，`--save` 落基线、
@@ -49,7 +49,7 @@ The repository is a single, typed TypeScript customer-service harness for:
 
 ## Current Status
 
-This is a working customer-service harness MVP: `/api/playground` runs task scheduling → context assembly → model-output composition (optional LLM via `CHATTY_LLM=1`, deterministic fallback) → parsing → action execution → trace persistence, and the UI shows the resulting harness trace. Knowledge retrieval is an agentic search step (SQLite FTS5 + `search_knowledge` tool + bounded loop). Quality is guarded by a plain golden regression check under `eval/` (`pnpm eval`). The legacy `rag-service` lane has been fully retired; the migration history is recorded in the [Legacy Migration Ledger](docs/archive/loop-engineering-plan.md#16-legacy-migration-ledger).
+This is a working customer-service harness MVP: `/api/playground` runs task scheduling → context assembly → model-output composition (DeepSeek pro + Agents SDK by default when a key is present, deterministic fallback when disabled/unavailable) → parsing → action execution → trace persistence, and the UI shows the resulting harness trace. Knowledge retrieval is an agentic search step (SQLite FTS5 + `search_knowledge` tool + bounded loop). Quality is guarded by a plain golden regression check under `eval/` (`pnpm eval`). The legacy `rag-service` lane has been fully retired; the migration history is recorded in the [Legacy Migration Ledger](docs/archive/loop-engineering-plan.md#16-legacy-migration-ledger).
 
 ## Useful Commands
 

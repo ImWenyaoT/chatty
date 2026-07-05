@@ -35,6 +35,16 @@ type LlmRuntimeMode = 'disabled' | 'chat-completions' | 'agents-sdk'
 
 const DEFAULT_LLM_CALL_BUDGET = 3
 
+/** True only when the developer explicitly disables live DeepSeek calls. */
+function isLlmExplicitlyDisabled(): boolean {
+  return process.env.CHATTY_LLM === '0'
+}
+
+/** SDK is the default live lane; this flag exists only for direct-adapter debugging. */
+function isAgentsSdkExplicitlyDisabled(): boolean {
+  return process.env.CHATTY_AGENTS_SDK === '0'
+}
+
 /** Calculates the normalized prompt/KV cache hit ratio for input tokens. */
 function calculateInputCacheHitRatio(hitTokens: number, missTokens: number): number {
   const totalInputTokens = hitTokens + missTokens
@@ -64,17 +74,18 @@ export function createComposeModelFn(adapter: ChatCompletionsAdapter): CustomerS
 }
 
 /**
- * Builds the optional LLM compose call for the playground harness step.
+ * Builds the live LLM compose call for the playground harness step.
  *
- * Double gate: CHATTY_LLM=1 must be set explicitly AND OPENAI_API_KEY must be
- * present (client-from-env convention for DeepSeek). Returns undefined
- * otherwise, which keeps the playground on the deterministic composer with zero
- * configuration.
+ * Builds the live DeepSeek compose call for the playground harness step.
+ *
+ * DeepSeek is the default when an API key is present. Set CHATTY_LLM=0 only
+ * when deterministic fallback is desired; set CHATTY_AGENTS_SDK=0 only for
+ * direct Chat Completions adapter debugging.
  */
 export function createPlaygroundModelFn(): CustomerServiceModelFn | undefined {
-  if (process.env.CHATTY_LLM !== '1') return undefined
+  if (isLlmExplicitlyDisabled()) return undefined
   if (!readLlmEnv().apiKey) return undefined
-  if (process.env.CHATTY_AGENTS_SDK === '1') return createAgentsSdkComposeModelFn()
+  if (!isAgentsSdkExplicitlyDisabled()) return createAgentsSdkComposeModelFn()
   return createComposeModelFn(createChatCompletionsAdapterFromEnv())
 }
 
@@ -181,10 +192,11 @@ export function createComposeToolLoopFn(
   }
 }
 
-/** playground 的搜索循环注入：与 createPlaygroundModelFn 相同的双重门控。 */
+/** playground direct Chat Completions 搜索循环：仅在显式关闭 SDK 时使用。 */
 export function createPlaygroundToolLoopFn(): CustomerServiceToolLoopFn | undefined {
-  if (process.env.CHATTY_LLM !== '1') return undefined
+  if (isLlmExplicitlyDisabled()) return undefined
   if (!readLlmEnv().apiKey) return undefined
+  if (!isAgentsSdkExplicitlyDisabled()) return undefined
   return createComposeToolLoopFn(createChatCompletionsAdapterFromEnv())
 }
 
@@ -244,7 +256,7 @@ export function createPlaygroundLlmRuntime(options: LlmRuntimeOptions = {}): {
   const env = readLlmEnv()
   const records: ChatCompletionTelemetry[] = []
   const callBudget = options.callBudget ?? DEFAULT_LLM_CALL_BUDGET
-  if (process.env.CHATTY_LLM !== '1' || !env.apiKey) {
+  if (isLlmExplicitlyDisabled() || !env.apiKey) {
     return {
       mode: 'disabled',
       modelFn: undefined,
@@ -252,7 +264,7 @@ export function createPlaygroundLlmRuntime(options: LlmRuntimeOptions = {}): {
       summary: () => createLlmTelemetrySummary(env.chatModel, records, { callBudget }),
     }
   }
-  if (process.env.CHATTY_AGENTS_SDK === '1') {
+  if (!isAgentsSdkExplicitlyDisabled()) {
     return {
       mode: 'agents-sdk',
       modelFn: createAgentsSdkComposeModelFn(),

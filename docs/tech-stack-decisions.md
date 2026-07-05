@@ -226,10 +226,11 @@ routing, and any new GUI.
 Current live model path:
 
 - DeepSeek `deepseek-v4-pro` via `@openai/agents` `OpenAIChatCompletionsModel`
-  when `CHATTY_AGENTS_SDK=1`.
+  by default when an API key is present.
 - Direct DeepSeek Chat Completions adapter remains for JSON extraction,
-  telemetry, eval, and non-SDK fallback paths.
-- Harness compose path (`apps/web` playground, optional LLM via `CHATTY_LLM=1`).
+  telemetry, eval, and the `CHATTY_AGENTS_SDK=0` debug fallback path.
+- Harness compose path (`apps/web` playground, live LLM by default; `CHATTY_LLM=0`
+  forces deterministic fallback).
 - Agentic search (`search_knowledge`) uses SDK function tools in the SDK lane,
   while execution still goes through Chatty registry, policy, knowledge
   fragments, and persisted trace.

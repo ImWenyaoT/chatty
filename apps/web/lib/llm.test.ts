@@ -1,4 +1,4 @@
-// createComposeModelFn 的单元测试：CHATTY_LLM=1 的 LLM compose 接线必须复用
+// createComposeModelFn 的单元测试：LLM compose 接线必须复用
 // completeJson 的容错 JSON 提取。OpenAI 兼容端点（含默认的 DeepSeek）即使被
 // 系统提示词禁止，也常把 JSON 包进 ```json 代码块或前后夹说明文字——这类回复
 // 必须仍产出正确 action，而不是静默落到 fallbackAction 的通用话术；完全不可
@@ -126,25 +126,28 @@ test('createComposeToolLoopFn：tool_calls 轮透传，fenced JSON 文本轮宽�
   await assert.rejects(() => createComposeToolLoopFn(fixedReplyAdapter('无法 JSON 回答'))([], []))
 })
 
-test('createPlaygroundToolLoopFn 双重门控与 createPlaygroundModelFn 一致', () => {
+test('createPlaygroundToolLoopFn 默认不再暴露 direct loop，显式关闭 SDK 才使用 direct Chat Completions', () => {
   const savedLlm = process.env.CHATTY_LLM
   const savedKey = process.env.OPENAI_API_KEY
+  const savedSdk = process.env.CHATTY_AGENTS_SDK
   try {
-    process.env.CHATTY_LLM = ''
+    delete process.env.CHATTY_LLM
     process.env.OPENAI_API_KEY = 'sk-test'
     assert.equal(createPlaygroundToolLoopFn(), undefined)
 
-    process.env.CHATTY_LLM = '1'
+    process.env.CHATTY_AGENTS_SDK = '0'
+    assert.equal(typeof createPlaygroundToolLoopFn(), 'function')
+
+    process.env.CHATTY_LLM = '0'
     process.env.OPENAI_API_KEY = ''
     assert.equal(createPlaygroundToolLoopFn(), undefined)
-
-    process.env.OPENAI_API_KEY = 'sk-test'
-    assert.equal(typeof createPlaygroundToolLoopFn(), 'function')
   } finally {
     if (savedLlm === undefined) delete process.env.CHATTY_LLM
     else process.env.CHATTY_LLM = savedLlm
     if (savedKey === undefined) delete process.env.OPENAI_API_KEY
     else process.env.OPENAI_API_KEY = savedKey
+    if (savedSdk === undefined) delete process.env.CHATTY_AGENTS_SDK
+    else process.env.CHATTY_AGENTS_SDK = savedSdk
   }
 })
 
@@ -227,13 +230,13 @@ test('createPlaygroundLlmRuntime accepts a custom pro call budget for trace warn
   }
 })
 
-test('createPlaygroundLlmRuntime stays pro-only and exposes a zero-call summary when disabled', () => {
+test('createPlaygroundLlmRuntime stays pro-only and exposes a zero-call summary when explicitly disabled', () => {
   const savedLlm = process.env.CHATTY_LLM
   const savedKey = process.env.OPENAI_API_KEY
   const savedModel = process.env.CHAT_MODEL
   try {
-    process.env.CHATTY_LLM = ''
-    process.env.OPENAI_API_KEY = ''
+    process.env.CHATTY_LLM = '0'
+    process.env.OPENAI_API_KEY = 'sk-test'
     process.env.CHAT_MODEL = 'deepseek-v4-pro'
 
     const runtime = createPlaygroundLlmRuntime()
@@ -261,16 +264,16 @@ test('createPlaygroundLlmRuntime stays pro-only and exposes a zero-call summary 
   }
 })
 
-test('createPlaygroundLlmRuntime selects Agents SDK compose when explicitly enabled', () => {
+test('createPlaygroundLlmRuntime defaults to Agents SDK compose when a DeepSeek key is present', () => {
   const savedLlm = process.env.CHATTY_LLM
   const savedKey = process.env.OPENAI_API_KEY
   const savedModel = process.env.CHAT_MODEL
   const savedSdk = process.env.CHATTY_AGENTS_SDK
   try {
-    process.env.CHATTY_LLM = '1'
+    delete process.env.CHATTY_LLM
     process.env.OPENAI_API_KEY = 'sk-test'
     process.env.CHAT_MODEL = 'deepseek-v4-pro'
-    process.env.CHATTY_AGENTS_SDK = '1'
+    delete process.env.CHATTY_AGENTS_SDK
 
     const runtime = createPlaygroundLlmRuntime()
 
@@ -286,18 +289,46 @@ test('createPlaygroundLlmRuntime selects Agents SDK compose when explicitly enab
   }
 })
 
-test('createPlaygroundModelFn 双重门控：CHATTY_LLM 未开或缺 API key 时返回 undefined', () => {
+test('createPlaygroundLlmRuntime can opt out of SDK into direct Chat Completions', () => {
+  const savedLlm = process.env.CHATTY_LLM
+  const savedKey = process.env.OPENAI_API_KEY
+  const savedModel = process.env.CHAT_MODEL
+  const savedSdk = process.env.CHATTY_AGENTS_SDK
+  try {
+    delete process.env.CHATTY_LLM
+    process.env.OPENAI_API_KEY = 'sk-test'
+    process.env.CHAT_MODEL = 'deepseek-v4-pro'
+    process.env.CHATTY_AGENTS_SDK = '0'
+
+    const runtime = createPlaygroundLlmRuntime()
+
+    assert.equal(runtime.mode, 'chat-completions')
+    assert.equal(typeof runtime.modelFn, 'function')
+    assert.equal(typeof runtime.toolLoopFn, 'function')
+  } finally {
+    if (savedLlm === undefined) delete process.env.CHATTY_LLM
+    else process.env.CHATTY_LLM = savedLlm
+    if (savedKey === undefined) delete process.env.OPENAI_API_KEY
+    else process.env.OPENAI_API_KEY = savedKey
+    process.env.CHAT_MODEL = savedModel
+    if (savedSdk === undefined) delete process.env.CHATTY_AGENTS_SDK
+    else process.env.CHATTY_AGENTS_SDK = savedSdk
+  }
+})
+
+test('createPlaygroundModelFn 默认启用：缺 API key 或显式 CHATTY_LLM=0 时返回 undefined', () => {
   const savedLlm = process.env.CHATTY_LLM
   const savedKey = process.env.OPENAI_API_KEY
   try {
-    process.env.CHATTY_LLM = ''
-    process.env.OPENAI_API_KEY = 'sk-test'
-    assert.equal(createPlaygroundModelFn(), undefined)
-
-    process.env.CHATTY_LLM = '1'
+    delete process.env.CHATTY_LLM
     process.env.OPENAI_API_KEY = ''
     assert.equal(createPlaygroundModelFn(), undefined)
 
+    process.env.CHATTY_LLM = '0'
+    process.env.OPENAI_API_KEY = 'sk-test'
+    assert.equal(createPlaygroundModelFn(), undefined)
+
+    delete process.env.CHATTY_LLM
     process.env.OPENAI_API_KEY = 'sk-test'
     assert.equal(typeof createPlaygroundModelFn(), 'function')
   } finally {

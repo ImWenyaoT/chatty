@@ -25,8 +25,8 @@ harness:
 - **Scheduler** decides the narrow task for one turn.
 - **Context builder** assembles task, user message, product, memory, and
   knowledge fragments.
-- **Compose** asks the optional LLM to produce strict JSON, with deterministic
-  fallback when the LLM is absent or fails.
+- **Compose** asks DeepSeek pro through the Agents SDK by default when a key is
+  present, with deterministic fallback when disabled, absent, or failed.
 - **search_knowledge** is the only agentic knowledge loop, bounded to 3 calls.
 - **Parser** turns model text into a safe `CustomerServiceAction`.
 - **Executor** applies tool policy and risk gates before any side effect.
@@ -122,7 +122,7 @@ flowchart TD
   subgraph Core["packages/agent-core"]
     S["scheduler<br/>CustomerServiceTask"]
     C["context builder<br/>ContextFragment[]"]
-    M["model output composer<br/>deterministic + optional LLM"]
+    M["model output composer<br/>DeepSeek SDK + deterministic fallback"]
     P["parser<br/>CustomerServiceAction"]
     E["executor<br/>terminality + toolCalls"]
     R["tool registry<br/>risk + parameters + execute"]

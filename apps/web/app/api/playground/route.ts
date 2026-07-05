@@ -80,13 +80,12 @@ export async function POST(request: Request) {
     productId: input.productId,
   })
 
-  // 4. Run one bounded customer-service Harness step. Compose is LLM-backed
-  // when CHATTY_LLM=1 and an API key is configured (Chat Completions adapter);
-  // otherwise — and on any model failure — the deterministic composer answers,
-  // so scheduler/context/executor/trace contracts never depend on a provider.
+  // 4. Run one bounded customer-service Harness step. Compose is LLM-backed by
+  // default when a DeepSeek API key is configured; CHATTY_LLM=0 forces the
+  // deterministic composer, and model failure still falls back safely.
   // The snapshot record is a structural superset of the harness MemorySnapshot.
-  // toolLoopFn 在场时 compose 进入有界搜索循环（design §4）：search_knowledge 经
-  // registry policy 门执行，结果落 knowledge fragment（随 references 持久化）；
+  // SDK lane owns model/tool orchestration; search_knowledge execution still
+  // goes through registry policy and lands knowledge fragments in trace.
   // 缺 key/循环失败仍落确定性 composer，"无 key 可跑"不变量保持。
   const harness = await runCustomerServiceHarnessStep({
     event,
