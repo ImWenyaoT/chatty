@@ -19,7 +19,7 @@ Agent Harness 技术方向、Agent Harness 产品方向
 - 参与设计 llm 的 Harness 产品的技术架构与选型。
 - 参与开发 llm 的 Harness 产品。
 - 与研究员紧密合作，共同定义和实现 Harness 领域的前沿创新。
-- 与模型训练团队的工程师与研究员深度沟通与合作，参与实现模型与 Harness 的共同进化，从 Harness 的角度实现 DeepSeek 的 Harness 与模型的深度适配。
+- 与模型训练团队的工程师与研究员深度沟通与合作，参与实现模型与 Harness 的共同进化，从 Harness 的角度实现 llm 的 Harness 与模型的深度适配。
 - 以内部真实任务做为 Harness 产品和模型相关能力训练的重要反馈源，持续迭代产品能力。
 - 理解并分析团队收集到的用户反馈。在有兴趣且力所能及的前提下，协助维护 Harness 产品用户社群。
 - 协助项目管理相关工作。
@@ -46,7 +46,7 @@ Agent Harness 技术方向、Agent Harness 产品方向
 - 其它超乎常人的与此工作相关的才能。
 
 # Agent Harness 产品方向
-加入 DeepSeek Harness 团队，协助推动 Agent 开发和产品项目的高效运转。
+加入 llm Harness 团队，协助推动 Agent 开发和产品项目的高效运转。
 
 ## 主要职责
 - 规划 llm Harness 产品路线图，连接研究员、工程师、开源社区和广大用户。
