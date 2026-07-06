@@ -75,7 +75,7 @@ export const REQUIRED_PULL_REQUEST_CHECKS: readonly PullRequestCheck[] = [
   {
     name: 'Frontend experience contract',
     command: 'pnpm test:frontend',
-    purpose: '验证 seller playground 的 Vercel-first 前端体验契约',
+    purpose: '验证 seller playground 的前端体验契约',
   },
   {
     name: 'Typecheck workspaces',

@@ -20,11 +20,11 @@ export default function SellerHomePage() {
         <div>
           <p>卖家工作台</p>
           <h1>Chatty 是卖家端客服后台，不是买家聊天页。</h1>
-          <span>客服会话、客户资料、订单管理、复盘视图分开进入。</span>
+          <span>客服会话、客户资料、订单跟进分开进入；复盘视图保留在导航里。</span>
         </div>
         <div className="seller-home-actions">
           <Link href={playgroundRoute.href}>进入客服会话</Link>
-          <Link href={ordersRoute.href}>查看订单</Link>
+          <Link href={ordersRoute.href}>查看跟进</Link>
         </div>
       </section>
 

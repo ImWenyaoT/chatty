@@ -71,6 +71,11 @@ test('pull request quality checks are wired into CI in the same order as the pol
   for (const check of REQUIRED_PULL_REQUEST_CHECKS) {
     assert.ok(ciWorkflow.includes(`run: ${check.command}`), `${check.command} should be run in CI`)
   }
+
+  assert.doesNotMatch(
+    REQUIRED_PULL_REQUEST_CHECKS.map((check) => check.purpose).join('\n'),
+    /Vercel-first/,
+  )
 })
 
 test('manual LLM golden eval remains documented as the integration gate for model behavior', () => {

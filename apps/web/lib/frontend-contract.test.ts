@@ -58,13 +58,13 @@ test('seller workspace cannot regress to a chat-only page', () => {
     [
       ['home', '/', '卖家首页'],
       ['playground', '/playground', '客服会话'],
-      ['orders', '/orders', '订单管理'],
+      ['orders', '/orders', '订单跟进'],
       ['dashboard', '/dashboard', '复盘视图'],
     ],
   )
   assert.deepEqual(
     sellerWorkspaceHomeRoutes.map((route) => route.key),
-    ['playground', 'orders', 'dashboard'],
+    ['playground', 'orders'],
   )
 })
 

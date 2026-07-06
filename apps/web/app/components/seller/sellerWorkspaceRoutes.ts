@@ -1,13 +1,18 @@
 export type SellerWorkspaceRouteKey = 'home' | 'playground' | 'orders' | 'dashboard'
 
-export type SellerWorkspaceRoute = {
+type SellerWorkspaceRouteBase = {
   readonly key: SellerWorkspaceRouteKey
   readonly href: string
   readonly navLabel: string
-  readonly homeEyebrow?: string
-  readonly homeTitle?: string
-  readonly homeDescription?: string
 }
+
+export type SellerWorkspaceHomeRoute = SellerWorkspaceRouteBase & {
+  readonly homeEyebrow: string
+  readonly homeTitle: string
+  readonly homeDescription: string
+}
+
+export type SellerWorkspaceRoute = SellerWorkspaceRouteBase | SellerWorkspaceHomeRoute
 
 export const MINIMUM_SELLER_WORKSPACE_ROUTE_KEYS = ['home', 'playground', 'orders'] as const
 
@@ -28,10 +33,10 @@ export const SELLER_WORKSPACE_ROUTES: readonly SellerWorkspaceRoute[] = [
   {
     key: 'orders',
     href: '/orders',
-    navLabel: '订单管理',
-    homeEyebrow: '订单运营',
-    homeTitle: '订单管理',
-    homeDescription: '订单列表、订单详情、履约进度、手动录单表单。',
+    navLabel: '订单跟进',
+    homeEyebrow: '订单跟进',
+    homeTitle: '订单跟进',
+    homeDescription: '订单列表、履约进度和时间线，用来说明客服会话如何落到后续跟进。',
   },
   {
     key: 'dashboard',
@@ -43,13 +48,25 @@ export const SELLER_WORKSPACE_ROUTES: readonly SellerWorkspaceRoute[] = [
   },
 ] as const
 
-export const sellerWorkspaceHomeRoutes = SELLER_WORKSPACE_ROUTES.filter(
-  (route) => route.key !== 'home',
-)
+export const sellerWorkspaceHomeRoutes: readonly SellerWorkspaceHomeRoute[] = [
+  getSellerWorkspaceHomeRoute('playground'),
+  getSellerWorkspaceHomeRoute('orders'),
+]
 
 /** Finds one seller workspace route by its stable key. */
 export function getSellerWorkspaceRoute(key: SellerWorkspaceRouteKey): SellerWorkspaceRoute {
   const route = SELLER_WORKSPACE_ROUTES.find((item) => item.key === key)
   if (!route) throw new Error(`Unknown seller workspace route: ${key}`)
+  return route
+}
+
+/** Finds one seller workspace route that is safe to render as a home card. */
+function getSellerWorkspaceHomeRoute(
+  key: 'playground' | 'orders' | 'dashboard',
+): SellerWorkspaceHomeRoute {
+  const route = getSellerWorkspaceRoute(key)
+  if (!('homeEyebrow' in route) || !('homeTitle' in route) || !('homeDescription' in route)) {
+    throw new Error(`Seller workspace route is missing home card copy: ${key}`)
+  }
   return route
 }
