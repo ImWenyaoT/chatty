@@ -9,6 +9,7 @@ import {
 } from '@openai/agents'
 import OpenAI from 'openai'
 import { readLlmEnv } from './client-from-env.js'
+import { agentsSdkUsageToTelemetry, type ChatCompletionTelemetry } from './usage-telemetry.js'
 
 export type AgentsSdkRuntimeTool = {
   name: string
@@ -21,9 +22,13 @@ export type AgentsSdkRuntimeTool = {
 export type AgentsSdkToolLoopOptions = {
   instructions: string
   model: Model
+  /** 用于遥测记录的模型名（Model 对象本身不带名字）。 */
+  modelName?: string
   name?: string
   tools?: AgentsSdkRuntimeTool[]
   maxTurns?: number
+  /** 每次 SDK model 调用回传一条归一化遥测（含 KV cache 命中）。 */
+  telemetry?: (record: ChatCompletionTelemetry) => void
 }
 
 /**
@@ -74,10 +79,17 @@ export function createAgentsSdkToolLoopFn(options: AgentsSdkToolLoopOptions) {
     },
   })
 
+  const modelName = options.modelName ?? 'deepseek-v4-pro'
+
   return async (input: string): Promise<string> => {
     const result = await run(agent, input, {
       maxTurns: options.maxTurns ?? 4,
     })
+    if (options.telemetry) {
+      for (const response of result.rawResponses ?? []) {
+        options.telemetry(agentsSdkUsageToTelemetry(modelName, response.usage))
+      }
+    }
     return String(result.finalOutput ?? '')
   }
 }
@@ -90,5 +102,6 @@ export function createDeepSeekAgentsSdkToolLoop(options: Omit<AgentsSdkToolLoopO
   return createAgentsSdkToolLoopFn({
     ...options,
     model: createDeepSeekAgentsModelFromEnv(),
+    modelName: options.modelName ?? readLlmEnv().chatModel,
   })
 }
