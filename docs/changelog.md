@@ -4,6 +4,13 @@
 
 ## 2026-07-06
 
+### Customer Service Turn use-case extraction
+
+- 变更：新增 web 层 `Customer Service Turn` use-case module，`/api/playground` route 只保留鉴权、JSON parse 和 schema parse，客服回合的 session、memory、harness、trace、continuity 写入统一收束到模块内。
+- 设计选择：参考 Codex 的 adapter/use-case 分层风格，把 HTTP 边界降成薄 adapter；暂不缩 harness external interface，也不改 model、context、memory 或 multi-agent 设计。
+- JD 对齐：贴合 Agent Loop、Tool Use、Memory、Prompt / Context / Harness Engineering；后续复盘时可以直接讲清楚一次 seller-side turn 如何从输入进入 harness，再落到可观测 trace 和下一轮 memory。
+- 自动验证：新增 `apps/web/lib/customer-service-turn.test.ts`，覆盖创建 session、写 trace、返回 harnessTrace、追加 recentMessages continuity，并继续用 web route 测试锁住 API 行为。
+
 ### Search Execution seam deepening
 
 - 变更：新增 agent-core `Search Execution` module，统一低层 tool loop 与 Agents SDK function tool 的搜索执行路径。

@@ -1,6 +1,6 @@
 # Chatty
 
-Chatty is a seller-side agent demo for reviewing and explaining the product and technical shape of a rental customer-service assistant.
+Chatty is a seller-side agent workspace for reviewing and explaining the product and technical shape of a rental customer-service assistant.
 
 ## Language
 
@@ -12,24 +12,20 @@ _Avoid_: UI contract, frontend test, pixel test
 The agent runtime boundary that controls context, memory, multi-agent behavior, loop orchestration, tool use, and model-facing execution. Visual layout, accessibility affordances, and page-level interaction feedback are outside this boundary.
 _Avoid_: frontend, UI layer, page chrome
 
-**Demo Review**:
-The primary review mode for Chatty's web experience, optimized first for the maintainer's own project recap and second for product-role and technical-role interview explanation.
-_Avoid_: production launch, buyer chat, generic ChatGPT clone
-
 **Seller Workspace**:
 The web surface that lets the maintainer navigate seller-side workflows. Its minimum route set is the review entry page, the customer-service conversation page, and order operations; it must not collapse back into a single chat-only page.
 _Avoid_: chat page, chatbot page, buyer chat
 
 **Customer Service Workspace**:
-The seller-facing conversation surface for handling customer questions while inspecting memory, knowledge hits, order follow-up, and trace review. It is the product-facing name for the `/playground` route; technical review may also call the same route a Harness Playground.
+The seller-facing conversation surface for handling customer questions while inspecting memory, knowledge hits, order follow-up, and trace review. The current route path is `/playground` for compatibility, but the product concept is the customer-service workspace.
 _Avoid_: agent console, ChatGPT clone, buyer chat
 
-**Harness Playground**:
-The technical review name for the `/playground` route when discussing trace, memory, knowledge retrieval, LLM usage, and bounded harness execution. It must remain secondary to the product-facing Customer Service Workspace language in visible navigation.
-_Avoid_: product page, buyer chat, generic chatbot
+**Customer Service Turn**:
+One seller-side agent turn that receives parsed customer input, loads session and memory, runs the harness, records trace evidence, updates session state, and writes continuity memory for the next turn.
+_Avoid_: demo step, route handler, playground logic
 
 **Order Operations**:
-The seller workflow surface that shows how agent-assisted conversation connects to rental order follow-up. It is demo evidence for a seller workspace, not a full order-management product.
+The seller workflow surface that shows how agent-assisted conversation connects to rental order follow-up. It is workspace evidence for the order side of customer service, not a full order-management product.
 _Avoid_: order system, ERP, generic admin table
 
 **Review Dashboard**:
