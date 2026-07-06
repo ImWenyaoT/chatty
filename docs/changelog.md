@@ -4,6 +4,13 @@
 
 ## 2026-07-06
 
+### KV cache observability on the live Agents SDK lane
+
+- 变更：live playground（Agents SDK lane）此前从不填遥测 records，trace summary 恒为 0 token / 0 成本 / 0 cache 命中；现按 `result.rawResponses[].usage` 逐次 SDK 调用 emit 归一化遥测，KV cache 命中在真实运行的 lane 上可观测。新增 `packages/llm/src/usage-telemetry.ts` 共享成本/记录逻辑；删除只被自身测试拽着的 3 个低层工厂（`createPlaygroundToolLoopFn` / `createLowLevelToolLoopFn` / `createLowLevelJsonComposeModelFn`）。
+- 设计选择：无脑用 Agents SDK——DeepSeek 同时填 OpenAI 标准 `prompt_tokens_details.cached_tokens`，SDK 透传到 `Usage.inputTokensDetails`，无需下探 client；删除大于优化，eval lane 的 chat-completions 有界搜索循环一行未动。
+- JD 对齐：贴合 LLM API 与 KV Cache——把简历卖点的 cache 命中观测在实际运行的 lane 上做成真的。
+- 自动验证：新增 `packages/llm/src/usage-telemetry.test.ts` 覆盖 SDK-usage→record 映射（数组/对象 details、无缓存、缺失、多段）与费率成本；端到端对 `deepseek-v4-pro` 实测 summary 从全 0 → 93.89% cache 命中。
+
 ### ESLint and Prettier replace Biome
 
 - 变更：删除 Biome 配置和依赖，改用 ESLint + Prettier 作为 `pnpm lint` / `pnpm lint:fix` 的质量门禁。
