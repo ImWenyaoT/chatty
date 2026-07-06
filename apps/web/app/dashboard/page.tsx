@@ -31,7 +31,7 @@ export default function DashboardPage() {
         </div>
         <div className="dashboard-actions">
           <Link href="/playground">客服会话</Link>
-          <Link href="/orders">订单管理</Link>
+          <Link href="/orders">订单跟进</Link>
         </div>
       </header>
 

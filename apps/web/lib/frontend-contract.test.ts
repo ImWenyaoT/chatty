@@ -82,6 +82,12 @@ test('customer service workspace keeps product language with technical observabi
 })
 
 test('order operations stays as workflow evidence instead of an empty route', () => {
+  const visibleOrderCopy = [dashboardSource, ordersSource, JSON.stringify(SELLER_WORKSPACE_ROUTES)]
+    .join('\n')
+    .replaceAll(/\/\*[\s\S]*?\*\//g, '')
+
+  assert.doesNotMatch(visibleOrderCopy, /订单管理/)
+  assert.match(visibleOrderCopy, /订单跟进/)
   assert.match(ordersSource, /aria-label="搜索订单"/)
   assert.match(ordersSource, /<h3>履约进度<\/h3>/)
   assert.match(ordersSource, /<h3>订单时间线<\/h3>/)

@@ -42,7 +42,7 @@ export default function OrdersPage() {
       <header className="orders-header">
         <div>
           <p>ORDER OPS · 演示数据</p>
-          <h1>订单管理</h1>
+          <h1>订单跟进</h1>
         </div>
       </header>
 
