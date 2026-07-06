@@ -35,3 +35,11 @@ _Avoid_: order system, ERP, generic admin table
 **Review Dashboard**:
 The optional recap surface for explaining trace review, knowledge coverage, and agent behavior after a demo run. It is not part of the minimum seller workspace and should not be treated as a full operations dashboard.
 _Avoid_: backend dashboard, BI dashboard, admin console
+
+**Reference-Bound Development**:
+The engineering method for keeping Chatty between the lower bound of `docs/jd.md` and the upper bound of `openclaw`, `codex`, and `claude-code`. Each capability chooses one primary reference before implementation.
+_Avoid_: generic inspiration, mixed reference soup, rewrite without bounds
+
+**Building-Block Reproduction**:
+The debugging method for shrinking a failure to the smallest observable block before composing it back into the full harness or web demo. The smallest failing block should become an automated regression when it is deterministic.
+_Avoid_: full-demo guessing, manual-only verification

@@ -2,6 +2,15 @@
 
 本文件记录和新版 JD 对齐的架构、测试、可观测性改动。发布级变更仍以 git commit 为准。
 
+## 2026-07-06
+
+### Reference-bound development method
+
+- 变更：新增 `docs/development-method.md`，把“参考实现三选一”和“搭积木复现法”写成 repo 级开发方法，并在 `AGENTS.md`、`CONTEXT.md` 和 `packages/shared/src/quality-gates.ts` 中建立入口与契约。
+- 设计选择：参考 `ask-matt` 的 idea → ship 路线，先用 glossary 固定语言，再用 TDD 把流程要求落成 shared quality contract；不改 harness、model 或 agent 行为。
+- JD 对齐：确保未来功能先贴近 `docs/jd.md` 的 DeepSeek Harness 要求，再从 `openclaw`、`codex`、`claude-code` 单选一个主参考，避免低于下限或超出上限。
+- 自动验证：`packages/shared/src/quality-gates.test.ts` 覆盖允许参考源、单选参考、最小复现和文档入口。
+
 ## 2026-07-05
 
 ### Agents SDK adoption for DeepSeek harness

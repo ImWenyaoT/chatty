@@ -41,6 +41,7 @@
 
 - `.gitignore` 是随项目演进维护的边界文件；新增本地数据、生成物、缓存、数据库、评测输出或工具产物时，先判断是否需要同步更新 `.gitignore`。
 - 删除比优化重要：发现低于下限或超出上限的历史残留，优先删除或归档，再考虑抽象和重构。
+- 功能实现遵守 `docs/development-method.md`：先贴近 `docs/jd.md`，再从 `openclaw`、`codex`、`claude-code` 做参考实现三选一；调试采用搭积木复现法，最小失败块必须沉淀为自动化回归。
 
 ## 代码风格
 
@@ -58,6 +59,7 @@
 - 架构设计主文档：`docs/design.md`（设计选择 + 代码结构 + 架构图；改动 harness 组件必须同步更新）
 - 补充图集：`docs/current-architecture.md`
 - 技术决策：`docs/tech-stack-decisions.md`
+- 开发方法：`docs/development-method.md`（参考实现三选一 + 搭积木复现法）
 - 历史文档：`docs/archive/`
 
 ## Agent skills

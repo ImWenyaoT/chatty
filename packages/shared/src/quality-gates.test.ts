@@ -5,6 +5,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   AUTOMATED_BEHAVIOR_COVERAGE_RULE,
+  DEVELOPMENT_METHOD_RULE,
+  REFERENCE_DEBUGGING_METHOD,
   REQUIRED_LOCAL_QUALITY_COMMANDS,
   REQUIRED_PULL_REQUEST_CHECKS,
   getRequiredQualityCommandNames,
@@ -20,6 +22,7 @@ const rootPackageJson = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'
 const ciWorkflow = readFileSync(resolve(repoRoot, '.github/workflows/ci.yml'), 'utf8')
 const evalWorkflow = readFileSync(resolve(repoRoot, '.github/workflows/eval.yml'), 'utf8')
 const agentInstructions = readFileSync(resolve(repoRoot, 'AGENTS.md'), 'utf8')
+const developmentMethodDoc = readFileSync(resolve(repoRoot, 'docs/development-method.md'), 'utf8')
 
 test('quality policy states that every automatically verifiable behavior needs automated verification', () => {
   assert.match(AUTOMATED_BEHAVIOR_COVERAGE_RULE, /所有能被自动验证的行为/)
@@ -87,4 +90,27 @@ test('manual LLM golden eval remains documented as the integration gate for mode
 test('repository maintenance rules protect read-only inputs and ignore boundaries', () => {
   assert.match(agentInstructions, /docs\/jd\.md.*只读/)
   assert.match(agentInstructions, /\.gitignore.*随项目演进维护/)
+})
+
+test('development method keeps implementation inside the reference bounds', () => {
+  assert.match(DEVELOPMENT_METHOD_RULE, /jd\.md/)
+  assert.match(DEVELOPMENT_METHOD_RULE, /openclaw/)
+  assert.match(DEVELOPMENT_METHOD_RULE, /codex/)
+  assert.match(DEVELOPMENT_METHOD_RULE, /claude-code/)
+
+  assert.deepEqual(REFERENCE_DEBUGGING_METHOD.allowedReferences, [
+    'openclaw',
+    'codex',
+    'claude-code',
+  ])
+  assert.equal(REFERENCE_DEBUGGING_METHOD.requiresSingleReferenceChoice, true)
+  assert.equal(REFERENCE_DEBUGGING_METHOD.requiresSmallestReproduction, true)
+})
+
+test('reference debugging method is documented for future agent work', () => {
+  assert.match(agentInstructions, /参考实现三选一/)
+  assert.match(agentInstructions, /搭积木复现法/)
+  assert.match(developmentMethodDoc, /参考实现三选一/)
+  assert.match(developmentMethodDoc, /搭积木复现法/)
+  assert.match(developmentMethodDoc, /自动化回归/)
 })
