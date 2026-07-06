@@ -36,8 +36,8 @@ export const REQUIRED_LOCAL_QUALITY_COMMANDS: readonly QualityCommand[] = [
   },
   {
     scriptName: 'lint',
-    command: 'biome check .',
-    purpose: '用 Biome 固定格式、导入与基础静态规则',
+    command: 'eslint . && prettier "**/*.{js,jsx,ts,tsx,json,css,yml,yaml}" --check',
+    purpose: '用 ESLint 和 Prettier 固定格式与基础静态规则',
   },
   {
     scriptName: 'smoke',
@@ -73,7 +73,7 @@ export const REQUIRED_PULL_REQUEST_CHECKS: readonly PullRequestCheck[] = [
     purpose: '先发现 shared/db/agent-core/llm 的接口破坏',
   },
   {
-    name: 'Lint (biome)',
+    name: 'Lint and format',
     command: 'pnpm lint',
     purpose: '阻断格式和基础静态检查回退',
   },

@@ -39,8 +39,7 @@ export function syncKnowledgeIndex(db: Db, knowledgeDir: string): KnowledgeSyncR
   const sourceHash = hash.digest('hex')
 
   const meta = db.prepare('SELECT source_hash FROM knowledge_index_meta WHERE id = 1').get() as
-    | { source_hash: string }
-    | undefined
+    { source_hash: string } | undefined
   if (meta?.source_hash === sourceHash) {
     const row = db.prepare('SELECT count(*) AS n FROM knowledge_chunks').get() as { n: number }
     return { rebuilt: false, chunks: row.n }

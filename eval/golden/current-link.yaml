@@ -2,7 +2,7 @@
 # - action current_link_confirm → answer_question（§5.3 映射表）；
 # - 确认语气与不追问围度的行为断言原样保留。
 name: current-link
-description: "用户问 \"当前链接就是这款吗\" 时应直接确认商品并引导下一步"
+description: '用户问 "当前链接就是这款吗" 时应直接确认商品并引导下一步'
 customerId: golden-current-link
 productId: SUIT-001
 conversationId: golden-current-link-v1
@@ -10,5 +10,5 @@ steps:
   - user: 就是当前链接这款吗
     expect:
       action: answer_question
-      containsAny: ["这款", "就是", "对"]
-      notContains: ["胸围", "常穿"]
+      containsAny: ['这款', '就是', '对']
+      notContains: ['胸围', '常穿']

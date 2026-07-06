@@ -53,8 +53,7 @@ export function createSessionRepository(db: Db): SessionRepository {
   return {
     get(id) {
       const row = db.prepare('SELECT * FROM agent_sessions WHERE id = ?').get(id) as
-        | SessionRow
-        | undefined
+        SessionRow | undefined
       return row ? toSession(row) : undefined
     },
 

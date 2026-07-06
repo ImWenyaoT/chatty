@@ -9,6 +9,6 @@ conversationId: golden-memory-empty-v1
 steps:
   - user: 我身高体重多少来着？
     expect:
-      containsAny: ["没有", "还没", "暂", "未", "记录", "提供", "发我"]
-      notContains: ["身高180", "体重70"]
+      containsAny: ['没有', '还没', '暂', '未', '记录', '提供', '发我']
+      notContains: ['身高180', '体重70']
       minScore: 6

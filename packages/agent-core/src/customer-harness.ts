@@ -16,11 +16,7 @@ import { ApprovalRequiredError, PolicyDenyError } from './tools/registry.js'
 import { executeSearchRequest } from './search-execution.js'
 
 export type CustomerServiceTaskKind =
-  | 'collect_missing_info'
-  | 'answer_question'
-  | 'check_availability'
-  | 'handoff'
-  | 'follow_up'
+  'collect_missing_info' | 'answer_question' | 'check_availability' | 'handoff' | 'follow_up'
 
 export type CustomerServiceActionKind =
   | 'ask_missing_info'
@@ -116,8 +112,7 @@ export const MAX_SEARCH_CALLS = 3
 // 达上限收尾指令（§4.2，兼作超额并行调用的回填）与坏参数重试提示（§4.3 层 2）
 const SEARCH_BUDGET_EXHAUSTED = '知识库搜索次数已用完。基于以上搜索结果，直接输出 action JSON。'
 
-export interface ComposeCustomerServiceModelOutputInput
-  extends CreateCustomerServiceModelOutputInput {
+export interface ComposeCustomerServiceModelOutputInput extends CreateCustomerServiceModelOutputInput {
   context: CustomerServiceContext
   modelFn?: CustomerServiceModelFn
   toolLoopFn?: CustomerServiceToolLoopFn

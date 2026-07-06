@@ -75,7 +75,7 @@ test('pull request quality checks are wired into CI in the same order as the pol
   const checkNames = getRequiredPullRequestCheckNames()
   assert.deepEqual(checkNames, [
     'Build package skeleton',
-    'Lint (biome)',
+    'Lint and format',
     'Smoke test (core data path, no network)',
     'Test workspaces',
     'Frontend experience contract',

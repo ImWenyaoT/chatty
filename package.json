@@ -16,8 +16,8 @@
     "build": "pnpm -r --if-present build",
     "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r --if-present typecheck && tsc -p eval/tsconfig.json --noEmit",
-    "lint": "biome check .",
-    "lint:fix": "biome check --write .",
+    "lint": "eslint . && prettier \"**/*.{js,jsx,ts,tsx,json,css,yml,yaml}\" --check",
+    "lint:fix": "eslint . --fix && prettier \"**/*.{js,jsx,ts,tsx,json,css,yml,yaml}\" --write",
     "test:frontend": "pnpm --filter @chatty/web test:frontend",
     "build:skeleton": "tsc -b packages/shared packages/db packages/agent-core packages/llm --pretty false",
     "typecheck:skeleton": "pnpm build:skeleton && pnpm --filter @rental/agent-core typecheck && pnpm --filter @rental/llm typecheck",
@@ -25,15 +25,20 @@
     "eval": "pnpm build:skeleton && node --import tsx eval/run.ts"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@rental/agent-core": "workspace:*",
     "@rental/db": "workspace:*",
     "@rental/llm": "workspace:*",
     "@rental/shared": "workspace:*",
-    "@biomejs/biome": "^2.5.2",
     "@types/node": "^22.13.10",
     "dotenv": "^16.4.7",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^16.2.10",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.4",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2",
+    "typescript-eslint": "^8.62.1",
     "yaml": "^2.8.3"
   },
   "allowScripts": {

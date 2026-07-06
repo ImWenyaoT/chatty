@@ -69,9 +69,7 @@ export type DeepSeekHarnessCompatibility = {
 export type RetrievalHarnessCapability = 'memory' | 'chunk_index_summary' | 'agent_search_tool'
 
 export type DisallowedRetrievalRuntimeLane =
-  | 'vector_database'
-  | 'embedding_rag_pipeline'
-  | 'provider_side_retrieval'
+  'vector_database' | 'embedding_rag_pipeline' | 'provider_side_retrieval'
 
 export type RetrievalHarnessStrategy = {
   readonly principle: string

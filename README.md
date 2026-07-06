@@ -70,7 +70,7 @@ automatically verified should be automatically verified.
 - `pnpm test` runs workspace unit tests and lightweight integration tests.
 - `pnpm smoke` runs the no-network core data path through SQLite session/trace/memory.
 - `pnpm typecheck` verifies TypeScript contracts across workspaces and eval.
-- `pnpm lint` keeps formatting and static checks stable through Biome.
+- `pnpm lint` keeps formatting and static checks stable through ESLint and Prettier.
 - `.github/workflows/ci.yml` runs skeleton build, lint, smoke, tests, typecheck,
   and build on PRs and `main`.
 - `.github/workflows/eval.yml` is the manual real-LLM golden regression gate for

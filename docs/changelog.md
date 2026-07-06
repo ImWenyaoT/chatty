@@ -4,6 +4,13 @@
 
 ## 2026-07-06
 
+### ESLint and Prettier replace Biome
+
+- 变更：删除 Biome 配置和依赖，改用 ESLint + Prettier 作为 `pnpm lint` / `pnpm lint:fix` 的质量门禁。
+- 设计选择：采用更常见的 TypeScript/Next.js 工具链，保持规则轻量；这不是 harness、model 或 agent loop 改动。
+- JD 对齐：服务 CI/CD 和工程可维护性；减少面试/协作时对小众工具选择的解释成本。
+- 自动验证：质量门禁契约、CI step 名称和 package scripts 同步更新，`pnpm lint` 已由 ESLint + Prettier 通过。
+
 ### Legacy memory fallback deletion
 
 - 变更：删除 `MemoryRepository` 的 `memory-store.json` read-only fallback、相关类型和测试；SQLite JSON columns 成为 memory 唯一读写路径。

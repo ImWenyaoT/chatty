@@ -23,11 +23,7 @@ export type AgentSessionStatus =
   | 'failed'
 
 export type AgentStepTerminality =
-  | 'reply_and_wait'
-  | 'tool_then_continue'
-  | 'schedule_and_wait'
-  | 'handoff_and_wait'
-  | 'close'
+  'reply_and_wait' | 'tool_then_continue' | 'schedule_and_wait' | 'handoff_and_wait' | 'close'
 
 export type RuntimeToolRisk = 'low' | 'medium' | 'high'
 

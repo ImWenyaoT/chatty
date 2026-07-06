@@ -13,4 +13,4 @@ steps:
   - user: 5月9号到10号用
     expect:
       action: ask_missing_info
-      contains: ["身高"]
+      contains: ['身高']

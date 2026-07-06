@@ -9,6 +9,6 @@ steps:
   - user: 我想租个衣服
     expect:
       action: ask_missing_info
-      containsAny: ["款式", "编号", "哪一款", "哪款", "商品号", "链接"]
-      notContains: ["身高"]
+      containsAny: ['款式', '编号', '哪一款', '哪款', '商品号', '链接']
+      notContains: ['身高']
       minScore: 6

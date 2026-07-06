@@ -64,8 +64,8 @@
 
   /* 字体：Geist Sans / Mono（latin），CJK 回退系统栈 */
   --font-sans:
-    var(--font-geist-sans), -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
-    "Microsoft YaHei", sans-serif;
+    var(--font-geist-sans), -apple-system, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
@@ -829,11 +829,11 @@ textarea:focus-visible {
   background: var(--ds-gray-200);
 }
 
-.fulfillment-steps div[data-state="done"] span {
+.fulfillment-steps div[data-state='done'] span {
   background: var(--tone-active-dot);
 }
 
-.fulfillment-steps div[data-state="active"] span {
+.fulfillment-steps div[data-state='active'] span {
   background: var(--tone-wait-dot);
 }
 
@@ -909,7 +909,7 @@ textarea:focus-visible {
 
 .legacy-console {
   height: 100vh;
-  /* biome-ignore lint/suspicious/noDuplicateProperties: dvh 渐进增强，vh 为旧浏览器回退 */
+  /* dvh 渐进增强，vh 为旧浏览器回退 */
   height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -1220,12 +1220,12 @@ textarea:focus-visible {
   background: var(--bg-subtle);
 }
 
-.legacy-stage-steps span[data-tone="ok"] {
+.legacy-stage-steps span[data-tone='ok'] {
   background: var(--tone-active-bg);
   color: var(--tone-active-fg);
 }
 
-.legacy-stage-steps span[data-tone="pending"] {
+.legacy-stage-steps span[data-tone='pending'] {
   background: var(--tone-wait-bg);
   color: var(--tone-wait-fg);
 }
@@ -1507,7 +1507,7 @@ textarea:focus-visible {
   line-height: 16px;
 }
 
-.legacy-review-panel button[data-active="true"] {
+.legacy-review-panel button[data-active='true'] {
   border-color: var(--accent);
   background: var(--tone-human-bg);
   color: var(--tone-human-fg);

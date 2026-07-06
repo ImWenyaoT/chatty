@@ -16,4 +16,4 @@ steps:
   - user: 这个款好看吗
     expect:
       # 还没下单时此问题应该走兜底，不得声称"已下单"
-      notContains: ["已下单"]
+      notContains: ['已下单']

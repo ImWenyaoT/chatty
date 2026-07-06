@@ -41,7 +41,7 @@ jobs:
       - name: Build package skeleton
         run: pnpm build:skeleton
 
-      - name: Lint (biome)
+      - name: Lint and format
         run: pnpm lint
 
       - name: Smoke test (core data path, no network)

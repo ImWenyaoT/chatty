@@ -14,7 +14,7 @@
 - 安装依赖：`pnpm install --frozen-lockfile`
 - 开发服务：`pnpm dev`（Next.js app `@chatty/web`）
 - 测试：`pnpm test`（workspace 全包，node 原生 `node --test --import tsx`，没有 vitest/turbo）
-- Lint：`pnpm lint`（Biome，`pnpm lint:fix` 自动修）
+- Lint / format：`pnpm lint`（ESLint + Prettier，`pnpm lint:fix` 自动修）
 - 类型检查：`pnpm typecheck`
 - 核心包快速构建：`pnpm build:skeleton`
 - 冒烟（无 LLM 核心数据链路）：`pnpm smoke`

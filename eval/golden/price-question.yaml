@@ -11,6 +11,6 @@ steps:
   - user: 这款多少钱一天？
     expect:
       action: answer_question
-      contains: ["199"]
-      notContains: ["不知道"]
+      contains: ['199']
+      notContains: ['不知道']
       minScore: 6

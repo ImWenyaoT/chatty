@@ -14,16 +14,16 @@ steps:
   - user: 身高175 体重70kg
     expect:
       actionIn: [recommend_size, check_availability, answer_question]
-      containsAny: ["L"]
-      contains: ["码"]
+      containsAny: ['L']
+      contains: ['码']
       notContains:
-        - "胸围"
-        - "腰围"
-        - "肩宽"
-        - "三围"
-        - "软尺"
-        - "常穿"
-        - "几XL"
-        - "整套还是"
-        - "两件套"
+        - '胸围'
+        - '腰围'
+        - '肩宽'
+        - '三围'
+        - '软尺'
+        - '常穿'
+        - '几XL'
+        - '整套还是'
+        - '两件套'
       minScore: 7
