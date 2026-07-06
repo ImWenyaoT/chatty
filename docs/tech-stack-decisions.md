@@ -1,6 +1,6 @@
 # Tech Stack Decisions
 
-Last updated: 2026-07-05
+Last updated: 2026-07-06
 
 This document is the single decision registry for Chatty, the agentic customer-service rewrite. It supersedes the exploratory PRD (now a short decision record in `docs/archive/agentic-customer-service-prd.md`, full text in git history) where the two conflict.
 
@@ -145,7 +145,7 @@ Current state (updated 2026-07):
 
 - `agent_sessions` is a real SQLite session store (`packages/db`); the playground route loads/creates a session per conversation.
 - Conversations are keyed by `customerId`, `productId`, and `conversationId`.
-- New-loop memory writes go to SQLite JSON columns (recentMessages only so far). SQLite is now the sole memory source; the legacy `rag-service/data/memory-store.json` read-only fallback was dropped from `apps/web` when rag-service was retired (R5).
+- New-loop memory reads and writes go to SQLite JSON columns (recentMessages only so far). SQLite is now the sole memory source; the legacy `rag-service/data/memory-store.json` read-only fallback has been deleted from runtime and repository code.
 - Recent messages, summaries, profile facts, orchestration state, and reviews are stored under `CustomerMemory` and `ProductMemory`.
 
 Decision:

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { JsonValue } from '@rental/shared'
@@ -256,43 +256,6 @@ test('memory repository: appendRecentMessages caps to the most recent N', () => 
   assert.equal(first.content, 'm5', 'oldest beyond the cap dropped')
 })
 
-test('memory repository: JSON fallback reads legacy memory-store.json', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'chatty-fallback-'))
-  const legacyPath = join(dir, 'memory-store.json')
-  writeFileSync(
-    legacyPath,
-    JSON.stringify({
-      c4: {
-        customerId: 'c4',
-        globalSummary: 'legacy summary',
-        sessionContext: { handoffNeeded: null },
-        bodyProfiles: [{ profileId: 'default', heightCm: 175 }],
-        productMemories: {
-          'c4:SUIT-001': {
-            productId: 'SUIT-001',
-            conversationId: 'c4:SUIT-001',
-            summary: 'legacy product',
-            recentMessages: [{ role: 'user', content: 'legacy q' }],
-            conversationProfile: { stage: 'body_collecting' },
-            reviews: [],
-          },
-        },
-      },
-    }),
-  )
-
-  const db = freshDb()
-  const memory = createMemoryRepository(db, { legacyMemoryPath: legacyPath })
-
-  const snap = memory.snapshot({
-    customerId: 'c4',
-    conversationId: 'c4:SUIT-001',
-    productId: 'SUIT-001',
-  })
-  assert.equal((snap.customerMemory as { globalSummary: string }).globalSummary, 'legacy summary')
-  assert.deepEqual(snap.recentMessages, [{ role: 'user', content: 'legacy q' }])
-})
-
 test('memory repository: empty snapshot when nothing is known', () => {
   const db = freshDb()
   const memory = createMemoryRepository(db) // no legacy path
@@ -458,43 +421,4 @@ test('memory repository: commitTurn is atomic — mid-transaction failure leaves
   assert.equal(snap.globalSummary, 'v1 全局', '失败事务里的 customer 更新必须回滚')
   assert.deepEqual(snap.conversationProfile, { turn: 1 })
   assert.equal(snap.recentMessages.length, 1)
-})
-
-// legacy JSON 回退路径也要补齐完整记忆字段，与 SQLite 路径同形状。
-test('memory repository: legacy fallback hydrates the full memory fields', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'chatty-fallback-full-'))
-  const legacyPath = join(dir, 'memory-store.json')
-  writeFileSync(
-    legacyPath,
-    JSON.stringify({
-      c25: {
-        customerId: 'c25',
-        globalSummary: 'legacy 全局摘要',
-        sessionContext: {},
-        bodyProfiles: [{ profileId: 'default', heightCm: 175 }],
-        productMemories: {
-          'c25:SUIT-001': {
-            productId: 'SUIT-001',
-            conversationId: 'c25:SUIT-001',
-            summary: 'legacy 会话摘要',
-            recentMessages: [{ role: 'user', content: 'legacy q' }],
-            conversationProfile: { heightCm: 175 },
-            reviews: [],
-          },
-        },
-      },
-    }),
-  )
-
-  const db = freshDb()
-  const memory = createMemoryRepository(db, { legacyMemoryPath: legacyPath })
-  const snap = memory.snapshot({
-    customerId: 'c25',
-    conversationId: 'c25:SUIT-001',
-    productId: 'SUIT-001',
-  })
-  assert.deepEqual(snap.conversationProfile, { heightCm: 175 })
-  assert.deepEqual(snap.bodyProfiles, [{ profileId: 'default', heightCm: 175 }])
-  assert.equal(snap.summary, 'legacy 会话摘要')
-  assert.equal(snap.globalSummary, 'legacy 全局摘要')
 })

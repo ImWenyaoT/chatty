@@ -1,15 +1,10 @@
-import { readFileSync, existsSync } from 'node:fs'
 import type { JsonValue, MemorySnapshot } from '@rental/shared'
 import type { Db } from './database.js'
 import { nowIso } from './database.js'
 
 /**
  * Memory repository: durable customer/product memory in SQLite JSON columns
- * (docs §6.3), with an optional read-only fallback to a legacy JSON
- * `memory-store.json` so a caller can read continuity without a migration.
- *
- * SQLite is the only write path; the legacy JSON store, when a path is
- * provided, is a read-only fallback for cross-migration continuity.
+ * (docs §6.3). SQLite is the only read and write path.
  */
 export interface MemoryRepository {
   getCustomer(customerId: string): CustomerMemoryRecord | undefined
@@ -19,8 +14,8 @@ export interface MemoryRepository {
     conversationId: string,
   ): ProductMemoryRecord | undefined
   /**
-   * Loads a MemorySnapshot, preferring SQLite and falling back to the legacy
-   * JSON store. Returns a minimal snapshot when nothing is known yet.
+   * Loads a MemorySnapshot from SQLite. Returns a complete empty snapshot when
+   * nothing is known yet.
    */
   snapshot(input: SnapshotInput): MemorySnapshotRecord
   upsertCustomer(customerId: string, patch: Partial<CustomerMemoryRecord>): void
@@ -105,19 +100,7 @@ export interface MemorySnapshotRecord extends MemorySnapshot {
   globalSummary: string
 }
 
-/**
- * snapshot 的基础形状（不含派生的顶层完整记忆字段）。legacy JSON 回退路径仍按
- * 这个形状产出，由 hydrateSnapshotFields 统一补齐成完整 MemorySnapshotRecord。
- */
-type MemorySnapshotBase = Omit<
-  MemorySnapshotRecord,
-  'conversationProfile' | 'bodyProfiles' | 'summary' | 'globalSummary'
->
-
-export function createMemoryRepository(
-  db: Db,
-  options: { legacyMemoryPath?: string } = {},
-): MemoryRepository {
+export function createMemoryRepository(db: Db): MemoryRepository {
   return {
     getCustomer(customerId) {
       const row = db
@@ -164,8 +147,16 @@ export function createMemoryRepository(
         }
       }
 
-      // Nothing in SQLite yet: read the legacy JSON store if present.
-      return hydrateSnapshotFields(readLegacySnapshot(options.legacyMemoryPath, input))
+      return {
+        customerId: input.customerId,
+        conversationId: input.conversationId,
+        productId: input.productId,
+        recentMessages: [],
+        conversationProfile: {},
+        bodyProfiles: [],
+        summary: '',
+        globalSummary: '',
+      }
     },
 
     upsertCustomer(customerId, patch) {
@@ -277,32 +268,6 @@ export function createMemoryRepository(
   }
 }
 
-/**
- * 从基础快照（legacy JSON 回退产出）的 customerMemory / productMemory JSON 块中
- * 派生顶层完整记忆字段，使 snapshot() 无论走 SQLite 还是 legacy 回退都返回
- * 同一形状（conversationProfile / bodyProfiles / summary / globalSummary）。
- */
-function hydrateSnapshotFields(base: MemorySnapshotBase): MemorySnapshotRecord {
-  const customer = asJsonObject(base.customerMemory)
-  const product = asJsonObject(base.productMemory)
-  return {
-    ...base,
-    conversationProfile: product?.conversationProfile ?? {},
-    bodyProfiles: customer?.bodyProfiles ?? [],
-    summary: typeof product?.summary === 'string' ? product.summary : '',
-    globalSummary: typeof customer?.globalSummary === 'string' ? customer.globalSummary : '',
-  }
-}
-
-/**
- * 把 JsonValue 收窄成普通对象（排除数组与原始类型），便于安全取字段。
- */
-function asJsonObject(value: JsonValue | undefined): Record<string, JsonValue> | undefined {
-  return value !== undefined && value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, JsonValue>)
-    : undefined
-}
-
 interface CustomerRow {
   customer_id: string
   global_summary: string
@@ -343,76 +308,4 @@ function parseProductRow(row: ProductRow): ProductMemoryRecord {
     reviews: JSON.parse(row.reviews_json) as JsonValue,
     updatedAt: row.updated_at,
   }
-}
-
-/**
- * Reads a legacy JSON memory-store.json (flat map keyed by customerId,
- * with a nested productMemories map keyed by `${customerId}:${productId}`) and
- * projects it into a MemorySnapshotRecord. Read-only: the new loop never writes
- * back to this file.
- */
-function readLegacySnapshot(
-  legacyMemoryPath: string | undefined,
-  input: SnapshotInput,
-): MemorySnapshotBase {
-  const empty: MemorySnapshotBase = {
-    customerId: input.customerId,
-    conversationId: input.conversationId,
-    productId: input.productId,
-    recentMessages: [],
-  }
-  if (!legacyMemoryPath || !existsSync(legacyMemoryPath)) return empty
-  let store: unknown
-  try {
-    store = JSON.parse(readFileSync(legacyMemoryPath, 'utf8'))
-  } catch {
-    return empty
-  }
-  const map = store as Record<string, LegacyCustomerMemory> | undefined
-  const legacy = map?.[input.customerId]
-  if (!legacy) return empty
-
-  const productKey = input.productId ? `${input.customerId}:${input.productId}` : undefined
-  const legacyProduct = productKey ? legacy.productMemories?.[productKey] : undefined
-
-  return {
-    customerId: input.customerId,
-    conversationId: input.conversationId,
-    productId: input.productId,
-    customerMemory: {
-      globalSummary: legacy.globalSummary ?? '',
-      sessionContext: legacy.sessionContext ?? {},
-      bodyProfiles: legacy.bodyProfiles ?? [],
-    } as JsonValue,
-    productMemory: legacyProduct
-      ? ({
-          productId: legacyProduct.productId ?? '',
-          conversationId: legacyProduct.conversationId ?? '',
-          summary: legacyProduct.summary ?? '',
-          recentMessages: legacyProduct.recentMessages ?? [],
-          conversationProfile: legacyProduct.conversationProfile ?? {},
-          reviews: legacyProduct.reviews ?? [],
-        } as JsonValue)
-      : undefined,
-    recentMessages: Array.isArray(legacyProduct?.recentMessages)
-      ? (legacyProduct!.recentMessages as JsonValue[])
-      : [],
-  }
-}
-
-interface LegacyCustomerMemory {
-  customerId?: string
-  globalSummary?: string
-  sessionContext?: JsonValue
-  bodyProfiles?: JsonValue
-  productMemories?: Record<string, LegacyProductMemory>
-}
-
-interface LegacyProductMemory {
-  productId?: string
-  conversationId?: string
-  summary?: string
-  recentMessages?: JsonValue
-  conversationProfile?: JsonValue
-  reviews?: JsonValue
 }

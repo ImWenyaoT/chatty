@@ -4,6 +4,13 @@
 
 ## 2026-07-06
 
+### Legacy memory fallback deletion
+
+- 变更：删除 `MemoryRepository` 的 `memory-store.json` read-only fallback、相关类型和测试；SQLite JSON columns 成为 memory 唯一读写路径。
+- 设计选择：删除大于优化；不再维护已经退出主线的 legacy 迁移兼容代码，也不为它继续做包装或抽象。
+- JD 对齐：贴合 Memory 与 Harness Engineering，但保持 less is more：只保留当前 agent loop 实际需要的 memory source。
+- 自动验证：`packages/db/src/db.test.ts` 继续覆盖 SQLite snapshot、recentMessages 滑窗、完整 memory 字段和事务原子性。
+
 ### Customer Service Turn use-case extraction
 
 - 变更：新增 web 层 `Customer Service Turn` use-case module，`/api/playground` route 只保留鉴权、JSON parse 和 schema parse，客服回合的 session、memory、harness、trace、continuity 写入统一收束到模块内。

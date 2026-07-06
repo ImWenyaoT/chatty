@@ -3,12 +3,11 @@ import assert from 'node:assert/strict'
 import { normalizeEvalHistory } from './evaluator.js'
 
 // --- normalizeEvalHistory: defensive coercion of arbitrary recentMessages ---
-// recentMessages comes from SQLite or the legacy JSON store as JsonValue[]; the
-// route used to cast it straight to {role,content}[]. This normalizer keeps only
-// well-formed message objects so the evaluator never receives garbage.
+// recentMessages comes from SQLite JSON columns as JsonValue[]; this normalizer
+// keeps only well-formed message objects so the evaluator never receives garbage.
 
 test('normalizeEvalHistory keeps well-formed messages and strips extra fields', () => {
-  // legacy MemoryMessage carries a timestamp alongside role/content
+  // Imported message shapes may carry extra fields alongside role/content.
   const out = normalizeEvalHistory([
     { role: 'user', content: '多少钱', timestamp: '2026-01-01' },
     { role: 'assistant', content: '199/天' },
@@ -22,7 +21,7 @@ test('normalizeEvalHistory keeps well-formed messages and strips extra fields', 
 test('normalizeEvalHistory drops entries lacking string role/content', () => {
   const out = normalizeEvalHistory([
     { role: 'user', content: '有效' },
-    { question: '多少钱', answer: '199' }, // legacy-other shape, no role/content
+    { question: '多少钱', answer: '199' }, // imported shape, no role/content
     { role: 'user', content: 123 }, // non-string content
     null,
     'plain string',

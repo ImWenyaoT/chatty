@@ -31,13 +31,13 @@ export interface Evaluator {
 }
 
 /**
- * Coerces an arbitrary recentMessages value (JsonValue[] from SQLite or the
- * legacy JSON store) into the {role, content} shape the evaluator expects.
+ * Coerces an arbitrary recentMessages value from SQLite JSON columns into the
+ * {role, content} shape the evaluator expects.
  *
- * Only entries with string `role` and `content` survive; extra fields (legacy
- * `timestamp`) are dropped and malformed entries are skipped, so a stray shape
- * in the memory store can never feed the evaluator garbage. Returns [] for any
- * non-array input.
+ * Only entries with string `role` and `content` survive; extra fields are
+ * dropped and malformed entries are skipped, so imported or corrupt shapes in
+ * memory can never feed the evaluator garbage. Returns [] for any non-array
+ * input.
  */
 export function normalizeEvalHistory(recentMessages: unknown): EvaluationMessage[] {
   if (!Array.isArray(recentMessages)) return []
