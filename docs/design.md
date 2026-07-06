@@ -224,7 +224,7 @@ compose system prompt 的结构参考两边：
 Chatty 的 agent 定义为 `agent = model + harness`。model 固定为 `deepseek-v4-pro`，不切 flash，也不按 OpenAI model 能力做设计假设；harness 才是可演进部分。
 DeepSeek 官方兼容面是 Chat Completions、tool calls、JSON object、thinking/reasoning 和 context caching。Chatty 已引入 OpenAI Agents SDK 的兼容子集：用 `OpenAIChatCompletionsModel` 包装 DeepSeek endpoint，用 SDK function tools 承接 `search_knowledge` 的模型侧编排；工具执行、policy、knowledge fragment 和 trace 仍归 Chatty harness。SDK session、human-in-the-loop 和 tracing 仍只是候选适配面。不能把 OpenAI Responses API、OpenAI hosted tools 或 OpenAI Conversations API 当成 DeepSeek 默认能力。
 LLM billing/cache 参考实现选 Codex：用 cached/non-cached input token、turn usage 和 budget 思路解释 DeepSeek 账单，不引入 provider 私有 cache API。
-Chatty 对应字段是 `inputCacheHitTokens`、`inputCacheMissTokens`、`inputCacheHitRatio`、`estimatedCostCny`，用于观察 DeepSeek pro 的 prompt/KV cache 命中情况。
+Chatty 对应字段是 `inputCacheHitTokens`、`inputCacheMissTokens`、`inputCacheHitRatio`、`estimatedCostCny`，用于观察 DeepSeek pro 的 prompt/KV cache 命中情况。live Agents SDK lane 的遥测按每次 SDK model 调用从 `result.rawResponses[].usage` 采集（DeepSeek 透传的标准 `prompt_tokens_details.cached_tokens`），归一化与成本估算收在共享的 `usage-telemetry` module，chat-completions 与 agents-sdk 两条 lane 共用。
 
 ```mermaid
 flowchart LR
