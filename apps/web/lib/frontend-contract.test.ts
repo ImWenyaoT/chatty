@@ -3,6 +3,11 @@ import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
+import {
+  MINIMUM_SELLER_WORKSPACE_ROUTE_KEYS,
+  SELLER_WORKSPACE_ROUTES,
+  sellerWorkspaceHomeRoutes,
+} from '../app/components/seller/sellerWorkspaceRoutes'
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -12,7 +17,6 @@ function readAppSource(path: string) {
 }
 
 const layoutSource = readAppSource('app/layout.tsx')
-const sellerNavigationSource = readAppSource('app/components/seller/SellerNavigation.tsx')
 const homeSource = readAppSource('app/page.tsx')
 const dashboardSource = readAppSource('app/dashboard/page.tsx')
 const ordersSource = readAppSource('app/orders/page.tsx')
@@ -48,16 +52,27 @@ test('frontend CSS keeps focus visible and mobile touch targets large enough', (
 })
 
 test('seller workspace cannot regress to a chat-only page', () => {
-  assert.match(sellerNavigationSource, /href: '\/'/)
-  assert.match(sellerNavigationSource, /href: '\/playground'/)
-  assert.match(sellerNavigationSource, /href: '\/orders'/)
-  assert.match(sellerNavigationSource, /label: '卖家首页'/)
-  assert.match(sellerNavigationSource, /label: '客服会话'/)
-  assert.match(sellerNavigationSource, /label: '订单管理'/)
+  assert.deepEqual(MINIMUM_SELLER_WORKSPACE_ROUTE_KEYS, ['home', 'playground', 'orders'])
+  assert.deepEqual(
+    SELLER_WORKSPACE_ROUTES.map((route) => [route.key, route.href, route.navLabel]),
+    [
+      ['home', '/', '卖家首页'],
+      ['playground', '/playground', '客服会话'],
+      ['orders', '/orders', '订单管理'],
+      ['dashboard', '/dashboard', '复盘视图'],
+    ],
+  )
+  assert.deepEqual(
+    sellerWorkspaceHomeRoutes.map((route) => route.key),
+    ['playground', 'orders', 'dashboard'],
+  )
 })
 
 test('customer service workspace keeps product language with technical observability', () => {
-  assert.match(sellerNavigationSource, /label: '客服会话'/)
+  assert.equal(
+    SELLER_WORKSPACE_ROUTES.find((route) => route.key === 'playground')?.navLabel,
+    '客服会话',
+  )
   assert.match(playgroundSource, /<h2>实时会话<\/h2>/)
   assert.match(playgroundSource, /<h2>记忆<\/h2>/)
   assert.match(playgroundSource, /<h2>知识命中<\/h2>/)
@@ -78,7 +93,11 @@ test('order operations stays as workflow evidence instead of an empty route', ()
 })
 
 test('review dashboard copy avoids generic backend-dashboard language', () => {
-  const visibleShellCopy = [homeSource, dashboardSource, sellerNavigationSource].join('\n')
+  const visibleShellCopy = [
+    homeSource,
+    dashboardSource,
+    JSON.stringify(SELLER_WORKSPACE_ROUTES),
+  ].join('\n')
   assert.doesNotMatch(visibleShellCopy, /后台视图/)
   assert.doesNotMatch(visibleShellCopy, /后台观察/)
   assert.doesNotMatch(visibleShellCopy, /智能客服后台/)

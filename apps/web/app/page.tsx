@@ -1,11 +1,17 @@
 import Link from 'next/link'
 import { SellerNavigation } from './components/seller/SellerNavigation'
 import { SELLER_ORDERS } from './components/seller/orderData'
+import {
+  getSellerWorkspaceRoute,
+  sellerWorkspaceHomeRoutes,
+} from './components/seller/sellerWorkspaceRoutes'
 
 /** Shows the seller-side home console instead of dropping users into a one-page chat demo. */
 export default function SellerHomePage() {
   const activeOrders = SELLER_ORDERS.filter((order) => order.status !== '租赁中').length
   const riskOrders = SELLER_ORDERS.filter((order) => order.risk !== '无').length
+  const playgroundRoute = getSellerWorkspaceRoute('playground')
+  const ordersRoute = getSellerWorkspaceRoute('orders')
 
   return (
     <main className="seller-home" id="main-content">
@@ -17,8 +23,8 @@ export default function SellerHomePage() {
           <span>客服会话、客户资料、订单管理、复盘视图分开进入。</span>
         </div>
         <div className="seller-home-actions">
-          <Link href="/playground">进入客服会话</Link>
-          <Link href="/orders">查看订单</Link>
+          <Link href={playgroundRoute.href}>进入客服会话</Link>
+          <Link href={ordersRoute.href}>查看订单</Link>
         </div>
       </section>
 
@@ -41,21 +47,13 @@ export default function SellerHomePage() {
       </section>
 
       <section className="seller-home-routes">
-        <Link href="/playground">
-          <span>实时会话</span>
-          <strong>客服会话</strong>
-          <p>客户信息、会话记录、订单状态和手动录单放在同一工作流里。</p>
-        </Link>
-        <Link href="/orders">
-          <span>订单运营</span>
-          <strong>订单管理</strong>
-          <p>订单列表、订单详情、履约进度、手动录单表单。</p>
-        </Link>
-        <Link href="/dashboard">
-          <span>复盘视图</span>
-          <strong>Trace Review</strong>
-          <p>查看知识覆盖、样例会话和人工 trace review 汇总，用来复盘 agent 行为。</p>
-        </Link>
+        {sellerWorkspaceHomeRoutes.map((route) => (
+          <Link href={route.href} key={route.key}>
+            <span>{route.homeEyebrow}</span>
+            <strong>{route.homeTitle}</strong>
+            <p>{route.homeDescription}</p>
+          </Link>
+        ))}
       </section>
     </main>
   )
