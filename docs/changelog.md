@@ -4,6 +4,19 @@
 
 ## 2026-07-06
 
+### Retrieval strategy clarified around model inference
+
+- 变更：把知识访问策略明确为“正确使用 memory、chunk/index/summary、agent search tool”，并清掉活代码注释里的 `RAG evidence` 历史措辞。
+- 设计选择：DeepSeek pro 的推理能力是主资源，harness 应该给模型提供可检索、可追踪、可总结的材料，而不是把判断藏在 vector database 或 embedding RAG pipeline 里。
+- JD 对齐：贴合 Memory、Tool Use、Prompt / Context / Harness Engineering，以及未来 Subagent / Multi-Agent fuzzy search 的方向。
+- 自动验证：`packages/shared/src/architecture-bounds.test.ts` 锁住禁用 vector/RAG runtime lane，并要求 memory、chunk/index/summary、agent search tool 三项能力。
+
+### Agents SDK lane naming cleanup
+
+- 变更：把 web 层 direct Chat Completions helper 重命名为 low-level adapter utility，明确它只服务 JSON extraction、telemetry、eval 和 adapter tests，不是 live runtime lane。
+- 设计选择：有 DeepSeek key 的 playground 继续默认走 Agents SDK；旧 LLM/SDK env 开关不在当前代码和当前文档中保留。
+- 自动验证：`apps/web/lib/llm.test.ts` 继续锁住有 key 即 `agents-sdk`、`createPlaygroundToolLoopFn()` 不暴露 direct loop。
+
 ### Reference-bound development method
 
 - 变更：新增 `docs/development-method.md`，把“参考实现三选一”和“搭积木复现法”写成 repo 级开发方法，并在 `AGENTS.md`、`CONTEXT.md` 和 `packages/shared/src/quality-gates.ts` 中建立入口与契约。

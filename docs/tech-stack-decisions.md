@@ -227,8 +227,8 @@ Current live model path:
 
 - DeepSeek `deepseek-v4-pro` via `@openai/agents` `OpenAIChatCompletionsModel`
   by default when an API key is present.
-- Direct DeepSeek Chat Completions adapter remains for JSON extraction,
-  telemetry, eval, and low-level adapter tests; it is not an env-routable
+- Low-level DeepSeek Chat Completions adapter utilities remain for JSON
+  extraction, telemetry, eval, and adapter tests; they are not an env-routable
   runtime lane.
 - Harness compose path (`apps/web` playground, live LLM by default when a key is
   present; no key or model failure falls back deterministically).
@@ -324,10 +324,12 @@ Recommended artifacts:
 
 The repository source of truth remains markdown under `docs/`. Figma/Canva links should be referenced from docs instead of replacing docs.
 
-## 11. Retrieval and Knowledge Access: No RAG, No Vector Database
+## 11. Retrieval and Knowledge Access: Model Inference Over RAG
 
 Decision: the target architecture uses no LangChain/LlamaIndex, no embedding-based
-RAG pipeline, and no vector database. Knowledge access is built from four parts:
+RAG pipeline, and no vector database. The model is strong enough that the
+harness should expose better materials to the model rather than hide decisions
+inside a retrieval pipeline. Knowledge access is built from four parts:
 
 1. **Memory done right.** Session/customer memory lives in SQLite repositories and
    is assembled into context deliberately (`buildCustomerServiceContext`), not
@@ -337,6 +339,9 @@ RAG pipeline, and no vector database. Knowledge access is built from four parts:
    at indexing time — instead of blind chunk-and-embed.
 3. **Search as an agent tool.** The model gets a `search_knowledge` tool and decides
    when and what to search across turns, replacing pipeline-fixed top-k retrieval.
+   This also leaves room for future multi-agent search: a subagent may perform
+   fuzzy search and report findings, but retrieval remains an explicit tool action
+   in the harness trace.
 4. **DeepSeek pro inference dominates latency and cost.** The latency bottleneck
    is the `deepseek-v4-pro` model call, not retrieval I/O. Consequently the
    search implementation stays simple (FTS/LIKE is enough) — no Redis, no

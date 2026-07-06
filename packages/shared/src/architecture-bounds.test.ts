@@ -9,6 +9,7 @@ import {
   ARCHITECTURE_COMPLEXITY_POLICY,
   DEEPSEEK_HARNESS_COMPATIBILITY,
   JD_CAPABILITY_REFERENCE_CHOICES,
+  RETRIEVAL_HARNESS_STRATEGY,
   getDeepSeekHarnessCompatibility,
   getPrimaryReferenceByJdCapability,
   getPrimaryReferenceByTopic,
@@ -159,6 +160,21 @@ test('deepseek-first harness compatibility does not assume OpenAI-only model sur
   assert.equal(compatibility.openai_responses_api, 'not_assumed')
   assert.equal(compatibility.openai_hosted_tools, 'not_assumed')
   assert.equal(compatibility.openai_conversations_api, 'not_assumed')
+})
+
+test('retrieval strategy uses model inference through memory and agent search instead of RAG', () => {
+  assert.deepEqual(RETRIEVAL_HARNESS_STRATEGY.disallowedRuntimeLanes, [
+    'vector_database',
+    'embedding_rag_pipeline',
+    'provider_side_retrieval',
+  ])
+  assert.deepEqual(RETRIEVAL_HARNESS_STRATEGY.requiredCapabilities, [
+    'memory',
+    'chunk_index_summary',
+    'agent_search_tool',
+  ])
+  assert.match(RETRIEVAL_HARNESS_STRATEGY.principle, /model inference/)
+  assert.match(RETRIEVAL_HARNESS_STRATEGY.principle, /search tool/)
 })
 
 test('current architecture docs do not cite retired reference agents outside archive', () => {

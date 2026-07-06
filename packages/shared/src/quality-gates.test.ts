@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -23,6 +23,28 @@ const ciWorkflow = readFileSync(resolve(repoRoot, '.github/workflows/ci.yml'), '
 const evalWorkflow = readFileSync(resolve(repoRoot, '.github/workflows/eval.yml'), 'utf8')
 const agentInstructions = readFileSync(resolve(repoRoot, 'AGENTS.md'), 'utf8')
 const developmentMethodDoc = readFileSync(resolve(repoRoot, 'docs/development-method.md'), 'utf8')
+
+/** 列出当前源码和当前文档文件；archive 是历史证据，不参与当前 runtime 契约。 */
+function listCurrentProjectFiles(dir: string): string[] {
+  return readdirSync(dir).flatMap((entry) => {
+    const absolute = join(dir, entry)
+    const rel = relative(repoRoot, absolute)
+    if (
+      rel === 'node_modules' ||
+      rel === '.git' ||
+      rel === '.next' ||
+      rel === 'dist' ||
+      rel === 'docs/archive' ||
+      rel.startsWith(`docs/archive/`) ||
+      rel.startsWith(`apps/web/.next/`) ||
+      rel.includes('/dist/')
+    ) {
+      return []
+    }
+    if (statSync(absolute).isDirectory()) return listCurrentProjectFiles(absolute)
+    return /\.(ts|tsx|mts|md|json|yml|yaml)$/.test(absolute) ? [absolute] : []
+  })
+}
 
 test('quality policy states that every automatically verifiable behavior needs automated verification', () => {
   assert.match(AUTOMATED_BEHAVIOR_COVERAGE_RULE, /所有能被自动验证的行为/)
@@ -113,4 +135,22 @@ test('reference debugging method is documented for future agent work', () => {
   assert.match(developmentMethodDoc, /参考实现三选一/)
   assert.match(developmentMethodDoc, /搭积木复现法/)
   assert.match(developmentMethodDoc, /自动化回归/)
+})
+
+test('deprecated LLM runtime switches stay out of current code and docs', () => {
+  const deprecatedSwitches = [
+    ['CHATTY', 'LLM'],
+    ['CHAT', 'LLM'],
+    ['CHATTY', 'AGENTS', 'SDK'],
+    ['CHAT', 'AGENTS', 'SDK'],
+    ['chat', 'llm'],
+    ['chatty', 'llm'],
+  ].map((parts) => parts.join('_'))
+  const deprecatedSwitchPattern = new RegExp(`\\b(${deprecatedSwitches.join('|')})\\b`)
+  const offenders = listCurrentProjectFiles(repoRoot).flatMap((file) => {
+    const content = readFileSync(file, 'utf8')
+    return deprecatedSwitchPattern.test(content) ? [relative(repoRoot, file)] : []
+  })
+
+  assert.deepEqual(offenders, [])
 })

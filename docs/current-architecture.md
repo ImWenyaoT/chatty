@@ -208,6 +208,9 @@ Current stance:
 
 - No vector database.
 - No embedding retrieval subsystem.
+- Use memory deliberately instead of similarity-retrieving transient state.
+- Chunk, index, and summarize knowledge before exposing it to the harness.
+- Give the model an explicit search tool so the agent can decide when to search.
 - Product prices, sizes, and exact structured facts should prefer structured
   tools over free-text knowledge search.
 - Search failure must degrade to a usable answer path instead of breaking a turn.

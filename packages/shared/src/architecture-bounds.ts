@@ -66,6 +66,19 @@ export type DeepSeekHarnessCompatibility = {
   readonly decision: string
 }
 
+export type RetrievalHarnessCapability = 'memory' | 'chunk_index_summary' | 'agent_search_tool'
+
+export type DisallowedRetrievalRuntimeLane =
+  | 'vector_database'
+  | 'embedding_rag_pipeline'
+  | 'provider_side_retrieval'
+
+export type RetrievalHarnessStrategy = {
+  readonly principle: string
+  readonly requiredCapabilities: readonly RetrievalHarnessCapability[]
+  readonly disallowedRuntimeLanes: readonly DisallowedRetrievalRuntimeLane[]
+}
+
 export const ARCHITECTURE_COMPLEXITY_POLICY = {
   target: 'stay-inside-bounds',
   lowerBoundAction: 'raise-to-jd-and-prd',
@@ -81,6 +94,13 @@ export const AGENT_COMPLEXITY_BOUNDS = {
     '/Users/edward/Documents/oss/claude-code',
   ],
 } as const
+
+export const RETRIEVAL_HARNESS_STRATEGY: RetrievalHarnessStrategy = {
+  principle:
+    'DeepSeek pro model inference is strong enough that Chatty should expose deliberate memory, indexed summaries, and a search tool instead of hiding retrieval inside a vector/RAG lane.',
+  requiredCapabilities: ['memory', 'chunk_index_summary', 'agent_search_tool'],
+  disallowedRuntimeLanes: ['vector_database', 'embedding_rag_pipeline', 'provider_side_retrieval'],
+}
 
 export const AGENT_ARCHITECTURE_REFERENCE_CHOICES: readonly AgentArchitectureReferenceChoice[] = [
   {

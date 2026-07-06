@@ -132,7 +132,7 @@ export async function POST(request: Request) {
   //     to the conversation's recentMessages so the NEXT snapshot has prior
   //     context — closing the amnesia where the loop read memory but never wrote
   //     it. Only the message log is persisted; customer profile fields and
-  //     transient RAG evidence are NOT promoted (chatty-memory-trace-migration).
+  //     transient search evidence are NOT promoted (chatty-memory-trace-migration).
   {
     const turn: import('@rental/shared').JsonValue[] = [{ role: 'user', content: input.question }]
     if (result.reply) turn.push({ role: 'assistant', content: result.reply })

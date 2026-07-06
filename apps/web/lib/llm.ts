@@ -42,7 +42,11 @@ function calculateInputCacheHitRatio(hitTokens: number, missTokens: number): num
 }
 
 /**
- * Wraps a Chat Completions adapter into the harness compose modelFn.
+ * Wraps a low-level Chat Completions adapter into a JSON compose modelFn.
+ *
+ * This is kept for adapter tests and eval-style JSON extraction paths, not as
+ * an env-selectable live runtime lane. Live playground calls use the Agents SDK
+ * when a DeepSeek key is present.
  *
  * Goes through completeJson (response_format json_object hint + tolerant
  * extraction of JSON wrapped in ```json fences or surrounding prose — common
@@ -52,7 +56,9 @@ function calculateInputCacheHitRatio(hitTokens: number, missTokens: number): num
  * completeJson throws and composeCustomerServiceModelOutput falls back to the
  * deterministic composer — never the parser's generic fallbackAction wording.
  */
-export function createComposeModelFn(adapter: ChatCompletionsAdapter): CustomerServiceModelFn {
+export function createLowLevelJsonComposeModelFn(
+  adapter: ChatCompletionsAdapter,
+): CustomerServiceModelFn {
   return async (prompt) => {
     const parsed = await adapter.completeJson<Record<string, unknown>>([
       { role: 'system', content: CUSTOMER_SERVICE_COMPOSE_INSTRUCTIONS },
@@ -168,7 +174,7 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
  * tool_calls 轮透传；纯文本轮沿用 parseJsonObject 宽容解析（fenced JSON 兜底）
  * 后再字符串化，完全不可解析时抛错，由 compose 落回确定性 composer（§4.3）。
  */
-export function createComposeToolLoopFn(
+export function createLowLevelToolLoopFn(
   adapter: ChatCompletionsAdapter,
 ): CustomerServiceToolLoopFn {
   return async (messages, tools) => {

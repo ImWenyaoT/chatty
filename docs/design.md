@@ -92,7 +92,7 @@ mindmap
 | Q04 | 如何更好控制整个 loop 和 workflow | Codex | 常量上限、失败回退、显式 trace，不上 durable workflow | `customer-harness.ts` |
 | Q05 | 如何做可视化、可观测性与 terminal UI | Codex | 不做 terminal UI，做 trace inspector | `harnessTrace` / `apps/web` |
 | Q06 | input 拼接 prompt | Codex | 结构化 context fragments | `buildCustomerServiceContext` |
-| Q07 | 如何实现 long-term memory | OpenClaw | SQLite memory + 业务知识 search，不做 embedding RAG | `memory-repository.ts` |
+| Q07 | 如何实现 long-term memory | OpenClaw | SQLite memory + chunk/index/summary + `search_knowledge`，不做 embedding RAG | `memory-repository.ts` |
 | Q08 | 如何实现 skills 和 plugins | Claude Code | 不做 runtime plugin；出现 plugin runtime 先删 | `tools/registry.ts` |
 | Q09 | 如何做好 context auto compression | Codex | 只做 recentMessages 滑窗，暂不 auto-compact | `memory-repository.ts` |
 | Q10 | output parser | Codex | JSON action parser + 安全 fallback | `parseCustomerServiceOutput` |
@@ -124,7 +124,7 @@ pie title 18 questions by primary reference
 | Agent Loop 与 Tool Use | Codex | 每轮 bounded tool loop，`search_knowledge` 最多 3 次，失败 deterministic fallback | 保持有界；复杂 workflow 先删 |
 | Reasoning 与 Planning | Codex | 以 deterministic scheduler 表达窄 planning，不暴露 chain-of-thought | 补 eval 场景验证 task choice；不做自由规划器 |
 | Skills 与 MCP | Claude Code | typed tool registry + risk/policy；无 runtime plugin/MCP | 只保留 tool contract；runtime plugin 先删 |
-| Memory | OpenClaw | SQLite memory snapshot + recent messages + business knowledge search | 继续保持 FTS/LIKE；不做 vector RAG |
+| Memory | OpenClaw | SQLite memory snapshot + recent messages + chunk/index/summary + business knowledge search | 继续保持 FTS/LIKE 和 agent search tool；不做 vector RAG |
 | Subagent 与 Multi-Agent | Codex | 当前不实现，仅文档化上限和删除规则 | 只有真实任务证明需要时再设计 subagent runtime |
 | Prompt / Context / Harness Engineering | Codex | 结构化 fragments、query refinement、output contract、trace inspector | 优先做 cache-friendly prompt order 和 eval |
 | 评测基准与数据标注 | Codex | `pnpm test`、`pnpm smoke`、`pnpm eval`、golden YAML | 可补真实反馈到 golden 的人工流程，不做自动晋升飞轮 |
@@ -245,7 +245,7 @@ flowchart LR
 
 参考实现：OpenClaw。
 
-OpenClaw 的主线是 `memory_search` 和 hybrid retrieval。Chatty 只取“长期状态可被检索并回填 prompt”这一层：SQLite memory snapshot + `search_knowledge`，暂不做 embedding/vector RAG。
+OpenClaw 的主线是 `memory_search` 和 hybrid retrieval。Chatty 只取“长期状态可被检索并回填 prompt”这一层：正确使用 memory，正确把内容分块、索引和总结，并把 `search_knowledge` 作为显式 agent tool 交给模型自己决定何时模糊搜索；暂不做 embedding/vector RAG。
 
 ```mermaid
 flowchart LR

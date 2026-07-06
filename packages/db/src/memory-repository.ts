@@ -30,7 +30,7 @@ export interface MemoryRepository {
    * capped to the most recent `cap` (default 20). This is the conservative
    * continuity write (docs §6.3 / chatty-memory-trace-migration): it touches
    * only the running message log — never customer profile fields, and it does
-   * not promote transient RAG evidence into long-term memory.
+   * not promote transient search evidence into long-term memory.
    */
   appendRecentMessages(input: ProductMemoryInput, messages: JsonValue[], cap?: number): void
   /**
