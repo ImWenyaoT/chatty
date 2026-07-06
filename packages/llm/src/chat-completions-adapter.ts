@@ -1,5 +1,6 @@
 import type OpenAI from 'openai'
 import { createOpenAiClientFromEnv, readLlmEnv } from './client-from-env.js'
+import { estimateCostCny, type ChatCompletionTelemetry } from './usage-telemetry.js'
 
 export interface ChatCompletionsAdapterOptions {
   client: OpenAI
@@ -35,16 +36,6 @@ export type ToolLoopMessage =
 
 /** completeWithTools 的两种回复形态：模型要么请求工具调用，要么给出纯文本。 */
 export type CompleteWithToolsResult = { toolCalls: ToolCallRequest[] } | { text: string }
-
-export interface ChatCompletionTelemetry {
-  model: string
-  operation: 'complete' | 'completeJson' | 'completeWithTools'
-  inputCacheHitTokens: number
-  inputCacheMissTokens: number
-  outputTokens: number
-  totalTokens: number
-  estimatedCostCny: number
-}
 
 export interface ChatCompletionsAdapter {
   complete(messages: ChatCompletionMessage[]): Promise<string>
@@ -173,23 +164,6 @@ function normalizeUsage(
 function numberField(source: Record<string, unknown>, key: string): number {
   const value = source[key]
   return typeof value === 'number' && Number.isFinite(value) ? value : 0
-}
-
-function estimateCostCny(
-  model: string,
-  usage: Pick<
-    ChatCompletionTelemetry,
-    'inputCacheHitTokens' | 'inputCacheMissTokens' | 'outputTokens'
-  >,
-): number {
-  const rates = model.includes('flash')
-    ? { hit: 0.00000002, miss: 0.000001, output: 0.000002 }
-    : { hit: 0.000000025, miss: 0.000003, output: 0.000006 }
-  const cost =
-    usage.inputCacheHitTokens * rates.hit +
-    usage.inputCacheMissTokens * rates.miss +
-    usage.outputTokens * rates.output
-  return Number(cost.toFixed(12))
 }
 
 /** 把工具循环消息转成 Chat Completions 线格式（camelCase → snake_case）。 */

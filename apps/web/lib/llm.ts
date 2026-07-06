@@ -6,7 +6,6 @@ import {
 } from '@rental/agent-core'
 import {
   type ChatCompletionTelemetry,
-  type ChatCompletionsAdapter,
   createDeepSeekAgentsSdkToolLoop,
   parseJsonObject,
   readLlmEnv,
@@ -43,33 +42,6 @@ function calculateInputCacheHitRatio(hitTokens: number, missTokens: number): num
 }
 
 /**
- * Wraps a low-level Chat Completions adapter into a JSON compose modelFn.
- *
- * This is kept for adapter tests and eval-style JSON extraction paths, not as
- * an env-selectable live runtime lane. Live playground calls use the Agents SDK
- * when a DeepSeek key is present.
- *
- * Goes through completeJson (response_format json_object hint + tolerant
- * extraction of JSON wrapped in ```json fences or surrounding prose — common
- * with DeepSeek's OpenAI-format endpoint) instead of raw complete(),
- * then re-stringifies the parsed object so parseCustomerServiceOutput always
- * receives bare JSON. When the reply contains no parseable JSON at all,
- * completeJson throws and composeCustomerServiceModelOutput falls back to the
- * deterministic composer — never the parser's generic fallbackAction wording.
- */
-export function createLowLevelJsonComposeModelFn(
-  adapter: ChatCompletionsAdapter,
-): CustomerServiceModelFn {
-  return async (prompt) => {
-    const parsed = await adapter.completeJson<Record<string, unknown>>([
-      { role: 'system', content: CUSTOMER_SERVICE_COMPOSE_INSTRUCTIONS },
-      { role: 'user', content: prompt },
-    ])
-    return JSON.stringify(parsed)
-  }
-}
-
-/**
  * Builds the live LLM compose call for the playground harness step.
  *
  * Builds the live DeepSeek compose call for the playground harness step.
@@ -83,7 +55,9 @@ export function createPlaygroundModelFn(): CustomerServiceModelFn | undefined {
 }
 
 /** Wraps the Agents SDK run loop into the existing harness modelFn contract. */
-function createAgentsSdkComposeModelFn(): CustomerServiceModelFn {
+function createAgentsSdkComposeModelFn(
+  records: ChatCompletionTelemetry[] = [],
+): CustomerServiceModelFn {
   return async (prompt, runtime) => {
     const searchTool =
       runtime?.task.kind === 'answer_question'
@@ -92,6 +66,7 @@ function createAgentsSdkComposeModelFn(): CustomerServiceModelFn {
     const runSdk = createDeepSeekAgentsSdkToolLoop({
       instructions: CUSTOMER_SERVICE_COMPOSE_INSTRUCTIONS,
       maxTurns: searchTool ? 4 : 2,
+      telemetry: (record) => records.push(record),
       tools:
         runtime && searchTool
           ? [
@@ -141,26 +116,6 @@ async function executeSdkSearchTool(
   runtime.searchTrace?.toolCalls.push(result.toolCall)
   runtime.searchTrace?.toolResults.push(result.toolResult)
   return result.output
-}
-
-/**
- * 把 completeWithTools 包装成 harness 有界搜索循环的每轮调用（design §4.1 C2）：
- * tool_calls 轮透传；纯文本轮沿用 parseJsonObject 宽容解析（fenced JSON 兜底）
- * 后再字符串化，完全不可解析时抛错，由 compose 落回确定性 composer（§4.3）。
- */
-export function createLowLevelToolLoopFn(
-  adapter: ChatCompletionsAdapter,
-): CustomerServiceToolLoopFn {
-  return async (messages, tools) => {
-    const reply = await adapter.completeWithTools(messages, tools)
-    if ('toolCalls' in reply) return reply
-    return { text: JSON.stringify(parseJsonObject<Record<string, unknown>>(reply.text)) }
-  }
-}
-
-/** SDK lane owns playground tool orchestration; direct tool loop is no longer env-routable. */
-export function createPlaygroundToolLoopFn(): CustomerServiceToolLoopFn | undefined {
-  return undefined
 }
 
 /** Aggregates per-call LLM telemetry into a compact trace payload for the playground inspector. */
@@ -229,7 +184,7 @@ export function createPlaygroundLlmRuntime(options: LlmRuntimeOptions = {}): {
   }
   return {
     mode: 'agents-sdk',
-    modelFn: createAgentsSdkComposeModelFn(),
+    modelFn: createAgentsSdkComposeModelFn(records),
     toolLoopFn: undefined,
     summary: () => createLlmTelemetrySummary(env.chatModel, records, { callBudget }),
   }

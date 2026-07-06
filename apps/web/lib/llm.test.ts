@@ -1,144 +1,13 @@
-// createLowLevelJsonComposeModelFn 的单元测试：低层 JSON adapter utility 必须复用
-// completeJson 的容错 JSON 提取。OpenAI 兼容端点（含默认的 DeepSeek）即使被
-// 系统提示词禁止，也常把 JSON 包进 ```json 代码块或前后夹说明文字——这类回复
-// 必须仍产出正确 action，而不是静默落到 fallbackAction 的通用话术；完全不可
-// 解析时 modelFn 抛错，由 composeCustomerServiceModelOutput 回退确定性 composer。
+// apps/web/lib/llm.ts 的单元测试：playground LLM runtime 的 KV cache 遥测聚合，
+// 与“仅当 DeepSeek key 存在时才启用 Agents SDK compose”的开关语义。SDK-usage→record
+// 的映射由 packages/llm/src/usage-telemetry.test.ts 单测覆盖。
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import type { ConversationEvent, MemorySnapshot } from '@rental/shared'
-import { createDefaultToolRegistry, runCustomerServiceHarnessStep } from '@rental/agent-core'
-import { type ChatCompletionsAdapter, parseJsonObject } from '@rental/llm'
 import {
-  createLowLevelJsonComposeModelFn,
-  createLowLevelToolLoopFn,
   createLlmTelemetrySummary,
-  createPlaygroundModelFn,
   createPlaygroundLlmRuntime,
-  createPlaygroundToolLoopFn,
+  createPlaygroundModelFn,
 } from './llm'
-
-/** 造一条带商品上下文的用户消息事件，复用 harness 测试的最小形状。 */
-function userEvent(question: string): ConversationEvent {
-  return {
-    eventId: 'evt_1',
-    type: 'user_message',
-    customerId: 'c',
-    conversationId: 'c:SUIT-001',
-    productId: 'SUIT-001',
-    source: 'customer',
-    payload: { question },
-    occurredAt: '2026-07-03T00:00:00.000Z',
-    traceId: 'tr_1',
-  }
-}
-
-/** 最小记忆快照：无历史消息、锁定测试商品。 */
-function memory(): MemorySnapshot {
-  return {
-    customerId: 'c',
-    conversationId: 'c:SUIT-001',
-    productId: 'SUIT-001',
-    recentMessages: [],
-  }
-}
-
-/**
- * 造一个固定回复的 fake adapter：complete 返回原始文本，completeJson 与真实
- * 适配器一致地走 parseJsonObject 容错提取——若接线回退到 complete()，fenced
- * 输出会原样穿透并在下游解析失败，从而让用例失败。
- */
-function fixedReplyAdapter(rawReply: string): ChatCompletionsAdapter {
-  return {
-    complete: async () => rawReply,
-    completeJson: async <T>() => parseJsonObject<T>(rawReply),
-    completeWithTools: async () => ({ text: rawReply }),
-  }
-}
-
-test('fenced JSON 输出仍产出正确 action（不落 fallbackAction 通用话术）', async () => {
-  const modelFn = createLowLevelJsonComposeModelFn(
-    fixedReplyAdapter(
-      '```json\n{"action":"answer_question","reply":"这款 L 码 5月10到12号可以安排。"}\n```',
-    ),
-  )
-  const result = await runCustomerServiceHarnessStep({
-    event: userEvent('这款有 L 吗，5月10到12号穿'),
-    memory: memory(),
-    registry: createDefaultToolRegistry(),
-    modelFn,
-  })
-
-  assert.equal(result.trace.action.action, 'answer_question')
-  assert.equal(result.step.reply, '这款 L 码 5月10到12号可以安排。')
-})
-
-test('JSON 前后夹杂说明文字时仍产出正确 action', async () => {
-  const modelFn = createLowLevelJsonComposeModelFn(
-    fixedReplyAdapter(
-      '好的，结论如下：{"action":"answer_question","reply":"日租 199 元。"} 请查收',
-    ),
-  )
-  const result = await runCustomerServiceHarnessStep({
-    event: userEvent('这款多少钱'),
-    memory: memory(),
-    registry: createDefaultToolRegistry(),
-    modelFn,
-  })
-
-  assert.equal(result.trace.action.action, 'answer_question')
-  assert.equal(result.step.reply, '日租 199 元。')
-})
-
-test('完全不可解析的回复让 modelFn 抛错，回退确定性 composer 而非 fallbackAction', async () => {
-  const modelFn = createLowLevelJsonComposeModelFn(fixedReplyAdapter('抱歉，我无法以 JSON 回答'))
-  const result = await runCustomerServiceHarnessStep({
-    event: userEvent('这款有 L 吗，5月10到12号穿'),
-    memory: memory(),
-    registry: createDefaultToolRegistry(),
-    modelFn,
-  })
-
-  // 同一输入下确定性 composer 会给出 check_availability 工具动作，
-  // 绝不是解析器 fallbackAction 的“我先帮您确认一下，再继续处理。”
-  assert.equal(result.trace.action.action, 'check_availability')
-  assert.equal(result.trace.action.toolName, 'check_availability')
-  assert.notEqual(result.step.reply, '我先帮您确认一下，再继续处理。')
-})
-
-test('createLowLevelToolLoopFn：tool_calls 轮透传，fenced JSON 文本轮宽容解析后字符串化', async () => {
-  const toolCall = { id: 'c1', name: 'search_knowledge', arguments: '{"query":"押金"}' }
-  const callsAdapter: ChatCompletionsAdapter = {
-    ...fixedReplyAdapter(''),
-    completeWithTools: async () => ({ toolCalls: [toolCall] }),
-  }
-  const loopFn = createLowLevelToolLoopFn(callsAdapter)
-  assert.deepEqual(await loopFn([], []), { toolCalls: [toolCall] })
-
-  const fencedAdapter = fixedReplyAdapter(
-    '```json\n{"action":"answer_question","reply":"押金按订单规则确认。"}\n```',
-  )
-  const textReply = await createLowLevelToolLoopFn(fencedAdapter)([], [])
-  assert.deepEqual(textReply, {
-    text: '{"action":"answer_question","reply":"押金按订单规则确认。"}',
-  })
-
-  // 完全不可解析的文本抛错（由 compose 落回确定性 composer）
-  await assert.rejects(() => createLowLevelToolLoopFn(fixedReplyAdapter('无法 JSON 回答'))([], []))
-})
-
-test('createPlaygroundToolLoopFn 不再由 env 开关暴露 direct loop', () => {
-  const savedKey = process.env.OPENAI_API_KEY
-  try {
-    process.env.OPENAI_API_KEY = 'sk-test'
-    assert.equal(createPlaygroundToolLoopFn(), undefined)
-
-    process.env.OPENAI_API_KEY = ''
-    assert.equal(createPlaygroundToolLoopFn(), undefined)
-  } finally {
-    if (savedKey === undefined) delete process.env.OPENAI_API_KEY
-    else process.env.OPENAI_API_KEY = savedKey
-  }
-})
 
 test('createLlmTelemetrySummary aggregates pro usage and estimated cost', () => {
   const summary = createLlmTelemetrySummary('deepseek-v4-pro', [
@@ -180,7 +49,7 @@ test('createLlmTelemetrySummary aggregates pro usage and estimated cost', () => 
 test('createLlmTelemetrySummary warns when one turn exceeds the pro call budget', () => {
   const record = {
     model: 'deepseek-v4-pro',
-    operation: 'completeWithTools' as const,
+    operation: 'agentsSdkRun' as const,
     inputCacheHitTokens: 1,
     inputCacheMissTokens: 1,
     outputTokens: 1,
