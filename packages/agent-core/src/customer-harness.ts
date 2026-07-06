@@ -13,6 +13,7 @@ import { readQuestionFromEvent } from '@rental/shared'
 import { createDefaultPolicy, type Policy } from './policies/policy.js'
 import type { ToolRegistry } from './tools/registry.js'
 import { ApprovalRequiredError, PolicyDenyError } from './tools/registry.js'
+import { executeSearchRequest } from './search-execution.js'
 
 export type CustomerServiceTaskKind =
   | 'collect_missing_info'
@@ -114,7 +115,6 @@ export type CustomerServiceToolLoopFn = (
 export const MAX_SEARCH_CALLS = 3
 // 达上限收尾指令（§4.2，兼作超额并行调用的回填）与坏参数重试提示（§4.3 层 2）
 const SEARCH_BUDGET_EXHAUSTED = '知识库搜索次数已用完。基于以上搜索结果，直接输出 action JSON。'
-const SEARCH_BAD_ARGS = 'query 参数缺失或不是字符串，请重试，只需提供 query 一个参数'
 
 export interface ComposeCustomerServiceModelOutputInput
   extends CreateCustomerServiceModelOutputInput {
@@ -428,44 +428,21 @@ async function runSearchCall(
   input: ComposeCustomerServiceModelOutputInput,
   call: CustomerServiceLoopToolCall,
 ): Promise<string> {
-  let query: unknown
-  try {
-    query = (JSON.parse(call.arguments) as Record<string, unknown>).query
-  } catch {}
-  if (call.name !== 'search_knowledge' || typeof query !== 'string' || query.trim().length === 0) {
-    return SEARCH_BAD_ARGS
-  }
-  const refinedQuery = refineKnowledgeQuery(
-    query,
-    readQuestionFromEvent(input.event),
-    input.event.productId ?? input.memory.productId,
-  )
-  if (hasSearchedQuery(input, refinedQuery)) {
-    return `已搜索过 ${refinedQuery}。请基于已有结果直接回答。`
-  }
-  const result = await (input.registry as ToolRegistry).invokeWithPolicy(
-    call.name,
-    { query: refinedQuery },
-    input.policy ?? createDefaultPolicy(),
-    { sessionStatus: input.sessionStatus ?? 'active' },
-  )
-  const output =
-    isPlainJsonObject(result) && typeof result.output === 'string'
-      ? result.output
-      : JSON.stringify(result)
-  input.context.fragments.push({
-    kind: 'knowledge',
-    label: `知识库检索：${refinedQuery}`,
-    content: output,
-  })
-  input.searchTrace?.toolCalls.push({
+  const result = await executeSearchRequest({
     toolName: call.name,
-    arguments: { query: refinedQuery },
-    risk: 'low',
-    approvalRequired: false,
+    input: call.arguments,
+    registry: input.registry as ToolRegistry,
+    question: readQuestionFromEvent(input.event),
+    productId: input.event.productId ?? input.memory.productId,
+    searchedQueries: searchedQueries(input),
+    sessionStatus: input.sessionStatus,
+    policy: input.policy,
   })
-  input.searchTrace?.toolResults.push(result)
-  return output
+  if (result.kind === 'retry') return result.output
+  input.context.fragments.push(result.fragment)
+  input.searchTrace?.toolCalls.push(result.toolCall)
+  input.searchTrace?.toolResults.push(result.toolResult)
+  return result.output
 }
 
 /**
@@ -695,29 +672,12 @@ function extractSize(question: string): string {
   return match?.[1] ?? 'L'
 }
 
-/** 将模型给出的泛搜索词收敛到当前商品和用户问题，避免 search_knowledge 被“规则/推荐”等噪音词带偏。 */
-function refineKnowledgeQuery(query: string, question: string, productId?: string): string {
-  const cleanQuery = query.trim()
-  if (!productId) return cleanQuery
-  if (cleanQuery.includes(productId)) return cleanQuery
-  if (
-    /尺码|身高|体重|码|推荐/.test(question) &&
-    /尺码|西装码|推荐|规则|信息|西装/.test(cleanQuery)
-  ) {
-    return `${productId} 尺码`
-  }
-  if (/押金/.test(question) && /^(规则|信息|费用|商品规则)$/.test(cleanQuery)) {
-    return '押金'
-  }
-  return cleanQuery
-}
-
-/** 判断当前搜索循环里是否已经执行过同一个 query，避免并行同义 tool_calls 刷 trace。 */
-function hasSearchedQuery(input: ComposeCustomerServiceModelOutputInput, query: string): boolean {
+/** 返回已经真正执行过的 refined query，避免并行同义 tool_calls 刷 trace。 */
+function searchedQueries(input: ComposeCustomerServiceModelOutputInput): string[] {
   return (
-    input.searchTrace?.toolCalls.some(
-      (call) => typeof call.arguments.query === 'string' && call.arguments.query === query,
-    ) ?? false
+    input.searchTrace?.toolCalls.flatMap((call) =>
+      typeof call.arguments.query === 'string' ? [call.arguments.query] : [],
+    ) ?? []
   )
 }
 

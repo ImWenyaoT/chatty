@@ -43,3 +43,7 @@ _Avoid_: generic inspiration, mixed reference soup, rewrite without bounds
 **Building-Block Reproduction**:
 The debugging method for shrinking a failure to the smallest observable block before composing it back into the full harness or web demo. The smallest failing block should become an automated regression when it is deterministic.
 _Avoid_: full-demo guessing, manual-only verification
+
+**Search Execution**:
+The harness-owned module that turns an agent search request into model-visible output plus optional trace and context evidence. It owns query refinement, duplicate prevention, policy gating, and audited knowledge evidence.
+_Avoid_: retrieval pipeline, RAG step, SDK search adapter

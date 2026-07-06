@@ -1,6 +1,6 @@
 import {
   CUSTOMER_SERVICE_COMPOSE_INSTRUCTIONS,
-  createDefaultPolicy,
+  executeSearchRequest,
   type CustomerServiceModelFn,
   type CustomerServiceToolLoopFn,
 } from '@rental/agent-core'
@@ -11,6 +11,7 @@ import {
   parseJsonObject,
   readLlmEnv,
 } from '@rental/llm'
+import { readQuestionFromEvent } from '@rental/shared'
 
 export type LlmTelemetrySummary = {
   model: string
@@ -121,52 +122,25 @@ async function executeSdkSearchTool(
   const registry = runtime.registry
   if (!registry)
     return '工具注册表不可用。请基于已知信息谨慎回答，不确定的内容如实告知用户无法确认。'
-  const query = readSdkSearchQuery(input)
-  if (!query) return 'query 参数缺失或不是字符串，请重试，只需提供 query 一个参数'
 
-  const result = await registry.invokeWithPolicy(
+  const result = await executeSearchRequest({
     toolName,
-    { query },
-    runtime.policy ?? createDefaultPolicy(),
-    { sessionStatus: runtime.sessionStatus ?? 'active' },
-  )
-  const output =
-    isPlainRecord(result) && typeof result.output === 'string'
-      ? result.output
-      : JSON.stringify(result)
-  runtime.context.fragments.push({
-    kind: 'knowledge',
-    label: `知识库检索：${query}`,
-    content: output,
+    input,
+    registry,
+    question: readQuestionFromEvent(runtime.event),
+    productId: runtime.event.productId ?? runtime.memory.productId,
+    searchedQueries:
+      runtime.searchTrace?.toolCalls.flatMap((call) =>
+        typeof call.arguments.query === 'string' ? [call.arguments.query] : [],
+      ) ?? [],
+    sessionStatus: runtime.sessionStatus,
+    policy: runtime.policy,
   })
-  runtime.searchTrace?.toolCalls.push({
-    toolName,
-    arguments: { query },
-    risk: 'low',
-    approvalRequired: false,
-  })
-  runtime.searchTrace?.toolResults.push(result)
-  return output
-}
-
-/** Extracts the SDK function tool input, accepting both parsed objects and raw JSON strings. */
-function readSdkSearchQuery(input: unknown): string | undefined {
-  let source = input
-  if (typeof input === 'string') {
-    try {
-      source = parseJsonObject<unknown>(input)
-    } catch {
-      return undefined
-    }
-  }
-  if (!isPlainRecord(source) || typeof source.query !== 'string') return undefined
-  const query = source.query.trim()
-  return query.length > 0 ? query : undefined
-}
-
-/** Narrows unknown values to plain records for safe tool argument/result access. */
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+  if (result.kind === 'retry') return result.output
+  runtime.context.fragments.push(result.fragment)
+  runtime.searchTrace?.toolCalls.push(result.toolCall)
+  runtime.searchTrace?.toolResults.push(result.toolResult)
+  return result.output
 }
 
 /**

@@ -1,5 +1,6 @@
 export * from './customer-harness.js'
 export * from './evaluator.js'
+export * from './search-execution.js'
 export * from './tools/registry.js'
 export * from './tools/catalog-stubs.js'
 export * from './tools/workflow-stubs.js'

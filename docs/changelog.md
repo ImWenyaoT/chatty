@@ -4,6 +4,13 @@
 
 ## 2026-07-06
 
+### Search Execution seam deepening
+
+- 变更：新增 agent-core `Search Execution` module，统一低层 tool loop 与 Agents SDK function tool 的搜索执行路径。
+- 设计选择：Search Execution 归 harness 拥有；SDK/web adapter 只转发 search request，不再复制 query refinement、duplicate guard、policy gate、context fragment 和 searchTrace 写入逻辑。
+- JD 对齐：贴合 Tool Use、Memory、Prompt / Context / Harness Engineering；把 agent search tool 变成可观测、可测试、可复用的 harness seam。
+- 自动验证：`packages/agent-core/src/search-execution.test.ts` 覆盖 refined query 去重、bad args 不写 trace、executed result 携带 fragment/toolCall/toolResult；既有搜索循环和 web LLM 测试继续通过。
+
 ### Retrieval strategy clarified around model inference
 
 - 变更：把知识访问策略明确为“正确使用 memory、chunk/index/summary、agent search tool”，并清掉活代码注释里的 `RAG evidence` 历史措辞。
