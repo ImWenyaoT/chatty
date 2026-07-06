@@ -133,6 +133,31 @@ a {
   text-decoration: none;
 }
 
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 1000;
+  transform: translateY(-160%);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-primary);
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 16px;
+  box-shadow: var(--shadow-card);
+}
+
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+:focus-visible {
+  outline: 0;
+  box-shadow: var(--focus-ring);
+}
+
 /* ----- Seller shell navigation ------------------------------------------------ */
 
 .seller-nav {
@@ -1470,6 +1495,16 @@ textarea:focus-visible {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.legacy-review-options legend {
+  grid-column: 1 / -1;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 16px;
 }
 
 .legacy-review-panel button[data-active="true"] {
@@ -1638,5 +1673,17 @@ textarea:focus-visible {
 
   .legacy-composer form button {
     width: 100%;
+  }
+
+  .seller-nav a,
+  .legacy-sidebar button,
+  .legacy-chat-topbar button,
+  .legacy-quick-list button,
+  .legacy-composer button,
+  .legacy-review-panel button,
+  .legacy-sidebar input,
+  .legacy-composer input,
+  .legacy-review-panel input {
+    min-height: 44px;
   }
 }

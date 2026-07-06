@@ -50,6 +50,9 @@ jobs:
       - name: Test workspaces
         run: pnpm test
 
+      - name: Frontend experience contract
+        run: pnpm test:frontend
+
       - name: Typecheck workspaces
         run: pnpm typecheck
 

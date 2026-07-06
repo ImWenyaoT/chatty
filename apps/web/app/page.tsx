@@ -8,13 +8,13 @@ export default function SellerHomePage() {
   const riskOrders = SELLER_ORDERS.filter((order) => order.risk !== '无').length
 
   return (
-    <main className="seller-home">
+    <main className="seller-home" id="main-content">
       <SellerNavigation active="home" />
       <section className="seller-home-hero">
         <div>
           <p>卖家工作台</p>
           <h1>Chatty 是卖家端客服后台，不是买家聊天页。</h1>
-          <span>先恢复旧行为：客服会话、客户资料、订单管理、后台观察分开进入。</span>
+          <span>客服会话、客户资料、订单管理、复盘视图分开进入。</span>
         </div>
         <div className="seller-home-actions">
           <Link href="/playground">进入客服会话</Link>
@@ -52,9 +52,9 @@ export default function SellerHomePage() {
           <p>订单列表、订单详情、履约进度、手动录单表单。</p>
         </Link>
         <Link href="/dashboard">
-          <span>后台观察</span>
-          <strong>评测 / 客户视图</strong>
-          <p>恢复旧 dashboard 的后台入口感，后续再接真实评测数据。</p>
+          <span>复盘视图</span>
+          <strong>Trace Review</strong>
+          <p>查看知识覆盖、样例会话和人工 trace review 汇总，用来复盘 agent 行为。</p>
         </Link>
       </section>
     </main>

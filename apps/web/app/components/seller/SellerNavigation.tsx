@@ -8,7 +8,7 @@ const ITEMS = [
   { key: 'home', href: '/', label: '卖家首页' },
   { key: 'playground', href: '/playground', label: '客服会话' },
   { key: 'orders', href: '/orders', label: '订单管理' },
-  { key: 'dashboard', href: '/dashboard', label: '后台视图' },
+  { key: 'dashboard', href: '/dashboard', label: '复盘视图' },
 ] as const
 
 /** Renders the seller-side route switcher restored from the old dashboard behavior. */

@@ -35,6 +35,11 @@ export const REQUIRED_LOCAL_QUALITY_COMMANDS: readonly QualityCommand[] = [
     purpose: '运行 workspace 单元测试和轻量集成测试',
   },
   {
+    scriptName: 'test:frontend',
+    command: 'pnpm --filter @chatty/web test:frontend',
+    purpose: '锁住 playground 的视觉、无障碍和交互反馈体验契约',
+  },
+  {
     scriptName: 'typecheck',
     command: 'pnpm -r --if-present typecheck && tsc -p eval/tsconfig.json --noEmit',
     purpose: '验证全部 TypeScript 契约和 eval runner 类型',
@@ -66,6 +71,11 @@ export const REQUIRED_PULL_REQUEST_CHECKS: readonly PullRequestCheck[] = [
     name: 'Test workspaces',
     command: 'pnpm test',
     purpose: '运行全部自动化单元测试和轻量集成测试',
+  },
+  {
+    name: 'Frontend experience contract',
+    command: 'pnpm test:frontend',
+    purpose: '验证 seller playground 的 Vercel-first 前端体验契约',
   },
   {
     name: 'Typecheck workspaces',

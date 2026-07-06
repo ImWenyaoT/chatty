@@ -3,7 +3,7 @@ import { SellerNavigation } from '../components/seller/SellerNavigation'
 import { SELLER_ORDERS } from '../components/seller/orderData'
 import { getRepos } from '@/lib/db'
 
-// 后台仍以演示会话/知识面板为主，但会读取 trace review 汇总，展示真实任务
+// 复盘视图以演示会话/知识面板为主，但会读取 trace review 汇总，展示真实任务
 // 反馈闭环的最小产品指标。质量回归仍由根级 `pnpm eval` 的朴素金标回归承担。
 export const dynamic = 'force-dynamic'
 
@@ -13,7 +13,7 @@ const KNOWLEDGE_BUCKETS = [
   { label: '历史问答', value: 24, hint: '客服沉淀的常见回复' },
 ]
 
-/** 后台视图：卖家会话与知识库总览（演示数据），实时问答在 Playground。 */
+/** 复盘视图：卖家会话、知识覆盖与 trace review 总览，实时问答在 Playground。 */
 export default function DashboardPage() {
   const selected = SELLER_ORDERS[0]
   const reviewSummary = getRepos().reviews.summarize()
@@ -22,12 +22,12 @@ export default function DashboardPage() {
     .slice(0, 3)
 
   return (
-    <main className="seller-dashboard">
+    <main className="seller-dashboard" id="main-content">
       <SellerNavigation active="dashboard" />
       <header className="dashboard-header">
         <div>
-          <p>NEXUS · 智能客服后台</p>
-          <h1>后台视图</h1>
+          <p>TRACE REVIEW · AGENT 复盘</p>
+          <h1>复盘视图</h1>
         </div>
         <div className="dashboard-actions">
           <Link href="/playground">客服会话</Link>

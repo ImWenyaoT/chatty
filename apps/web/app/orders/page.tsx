@@ -37,7 +37,7 @@ export default function OrdersPage() {
   }, [query])
 
   return (
-    <main className="orders-page">
+    <main className="orders-page" id="main-content">
       <SellerNavigation active="orders" />
       <header className="orders-header">
         <div>

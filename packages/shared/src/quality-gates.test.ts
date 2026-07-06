@@ -40,6 +40,7 @@ test('required local quality commands are present in package scripts', () => {
     'lint',
     'smoke',
     'test',
+    'test:frontend',
     'typecheck',
     'build',
   ])
@@ -52,6 +53,7 @@ test('pull request quality checks are wired into CI in the same order as the pol
     'Lint (biome)',
     'Smoke test (core data path, no network)',
     'Test workspaces',
+    'Frontend experience contract',
     'Typecheck workspaces',
     'Build workspaces',
   ])

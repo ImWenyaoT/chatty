@@ -348,7 +348,7 @@ export default function LegacyConsolePage() {
           <h1>智能客服 · 卖家会话工作台</h1>
           <span>客户资料 · 订单状态 · 手动录单 · 待办跟进</span>
         </div>
-        <div className="legacy-hud">
+        <div className="legacy-hud" aria-live="polite" role="status">
           <span>Reqs {turns.filter((turn) => turn.role === 'assistant').length}</span>
           <span>{status}</span>
         </div>
@@ -416,7 +416,7 @@ export default function LegacyConsolePage() {
           </section>
         </aside>
 
-        <main className="legacy-main">
+        <main className="legacy-main" id="main-content">
           <div className="legacy-chat-topbar">
             <div>
               <h2>实时会话</h2>
@@ -434,7 +434,13 @@ export default function LegacyConsolePage() {
 
           <StageRibbon profile={profile} />
 
-          <div className="legacy-chat-history">
+          <div
+            aria-busy={sending}
+            aria-label="实时会话记录"
+            aria-live="polite"
+            className="legacy-chat-history"
+            role="log"
+          >
             {turns.length === 0 ? (
               <div className="legacy-empty">
                 会话尚未开始 · 输入消息即可唤醒智能客服。对话历史、记忆画像与知识命中将实时显示。
@@ -477,12 +483,14 @@ export default function LegacyConsolePage() {
               />
             </label>
             <form
+              aria-label="发送客户消息"
               onSubmit={(event) => {
                 event.preventDefault()
                 sendMessage(question)
               }}
             >
               <textarea
+                aria-label="客户消息"
                 value={question}
                 placeholder='可直接输入；也可贴图/选图提问（如"这个穿多大？"+图片）'
                 onChange={(event) => setQuestion(event.target.value)}
@@ -646,9 +654,11 @@ function TraceReviewPanel({
   return (
     <div className="legacy-review-panel">
       <p>{traceId ? `trace ${traceId}` : '发送一轮消息后可复核最新 trace。'}</p>
-      <div className="legacy-review-options">
+      <fieldset className="legacy-review-options">
+        <legend>复核结果</legend>
         {REVIEW_LABELS.map((option) => (
           <button
+            aria-pressed={review.label === option.label}
             data-active={review.label === option.label}
             disabled={disabled}
             key={option.label}
@@ -658,7 +668,7 @@ function TraceReviewPanel({
             {option.text}
           </button>
         ))}
-      </div>
+      </fieldset>
       <label>
         note
         <textarea
