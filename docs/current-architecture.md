@@ -1,12 +1,14 @@
 # Chatty Current Architecture
 
-Last updated: 2026-07-04
+Last updated: 2026-07-07
 
 This is the supplemental diagram set for the current implementation. The main
 agent architecture design document is [design.md](design.md), which owns the
-`docs/jd.md + PRD.pdf` lower bound, OpenClaw/Codex/Claude Code upper bound,
-design choices, and code structure. This file exists so diagrams do not
-overload the design narrative.
+`docs/jd.md` lower bound, OpenClaw/Codex/Claude Code upper bound, design
+choices, the canonical harness spine, and per-component rationale. This file
+holds only the integrated views design.md's per-component decomposition does
+not draw: the one-turn sequence, cross-package component owners, and the
+tool/risk map.
 
 Update this file whenever a change alters harness flow, tool behavior, memory
 shape, knowledge access, model composition, trace fields, or eval gates.
@@ -57,23 +59,10 @@ express the required behavior and there is a test/eval showing the gap.
 
 ## 2. Agent Harness Spine
 
-```mermaid
-flowchart LR
-  Input["User utterance<br/>ConversationEvent"] --> Session["Session + Memory<br/>SQLite snapshot"]
-  Session --> Scheduler["Task Scheduler<br/>scheduleCustomerServiceTask"]
-  Scheduler --> Context["Context Builder<br/>task + user + memory + product + knowledge"]
-  Context --> Compose["Compose Step<br/>DeepSeek SDK, deterministic fallback"]
-  Compose --> SearchLoop{"Need knowledge?"}
-  SearchLoop -->|yes, <= 3 calls| SearchTool["search_knowledge<br/>FTS5 + LIKE"]
-  SearchTool --> Knowledge["knowledge ContextFragment"]
-  Knowledge --> Compose
-  SearchLoop -->|no / search cap reached| Parser["Output Parser<br/>strict JSON + safe fallback"]
-  Parser --> Executor["Policy-aware Executor"]
-  Executor --> Tools["Runtime Tool Registry"]
-  Executor --> Trace["Trace + Memory Patch"]
-  Trace --> Persist["SQLite trace/session/memory"]
-  Persist --> Reply["Reply + observable harnessTrace"]
-```
+The canonical harness spine — message → scheduler → context → compose/search →
+parser → executor → trace — is drawn once in [design.md](design.md) (§0 总览).
+This file does not re-draw it; what matters here is the contract that spine
+implements.
 
 The important boundary is not "web vs backend"; it is the harness contract:
 
@@ -194,7 +183,7 @@ terminal or file tools; its risky surface is business-side effects.
 
 ```mermaid
 flowchart TD
-  Corpus["knowledge/<br/>products, rules, history"] --> Chunker["chunkKnowledgeDocuments"]
+  Corpus["knowledge/<br/>products, rules, history"] --> Chunker["chunkKnowledgeFile"]
   Chunker --> Index["SQLite FTS5 index<br/>knowledge_chunks"]
   Query["Model decides to search"] --> SearchTool["search_knowledge(query)"]
   SearchTool --> Index
@@ -242,14 +231,15 @@ verified. The executable quality-gate contract lives in
 
 ```mermaid
 flowchart TD
-  Current["current-architecture.md<br/>agent-first architecture maps"] --> Design["design.md<br/>harness component map"]
-  Current --> Decisions["tech-stack-decisions.md<br/>decision registry"]
-  Current --> Archive["docs/archive/<br/>historical records"]
+  Design["design.md<br/>main design doc + canonical spine"] --> Current["current-architecture.md<br/>supplemental integrated diagrams"]
+  Design --> Decisions["tech-stack-decisions.md<br/>decision registry"]
+  Design --> Archive["docs/archive/<br/>historical records"]
   Archive --> SearchDesign["agentic-search-design.md<br/>search subsystem history"]
   Archive --> LoopPlan["loop-engineering-plan.md<br/>migration history"]
   Archive --> Historical["architecture.md<br/>RW-1 historical target spec"]
 ```
 
-Use this document as the diagram entry point. Use `docs/design.md` for the
-per-component harness rationale, and `docs/tech-stack-decisions.md` for why a
-technology or product direction was chosen.
+Start from `docs/design.md`: it is the main design document and owns the
+canonical harness spine. Use this file for the supplemental integrated diagrams,
+and `docs/tech-stack-decisions.md` for why a technology or product direction was
+chosen.

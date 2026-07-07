@@ -1,6 +1,6 @@
 # Chatty Harness Design Map
 
-Last updated: 2026-07-05
+Last updated: 2026-07-07
 
 本文是 Chatty 的 agent 架构设计主文档。目标不是把参考仓所有能力搬进来，而是把 18 个关键问题逐个定清楚：
 
@@ -14,11 +14,13 @@ Last updated: 2026-07-05
 
 ## 0. 总览
 
-Chatty 的下限是新版 `docs/jd.md`。上限是本地源码：
+Chatty 的下限是新版 `docs/jd.md`（私有输入：已在 .gitignore 排除、不随开源仓分发，外部 clone 拿不到原文；文档只引用它，不把实现决策反写回去）。上限是三份本地参考源码树：
 
-- `/Users/edward/Documents/oss/openclaw`
-- `/Users/edward/Documents/oss/codex`
-- `/Users/edward/Documents/oss/claude-code`
+- `openclaw`
+- `codex`
+- `claude-code`
+
+（具体路径因机器而异，本仓不硬编码个人绝对路径。）
 
 Chatty 的位置在中间：保留 agent harness 的骨架，拒绝通用 coding agent 的能力面。
 
