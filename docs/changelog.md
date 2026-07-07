@@ -50,7 +50,7 @@
 
 - 变更：把 web 层 direct Chat Completions helper 重命名为 low-level adapter utility，明确它只服务 JSON extraction、telemetry、eval 和 adapter tests，不是 live runtime lane。
 - 设计选择：有 DeepSeek key 的 playground 继续默认走 Agents SDK；旧 LLM/SDK env 开关不在当前代码和当前文档中保留。
-- 自动验证：`apps/web/lib/llm.test.ts` 继续锁住有 key 即 `agents-sdk`、`createPlaygroundToolLoopFn()` 不暴露 direct loop。
+- 自动验证：`apps/web/lib/llm.test.ts` 继续锁住有 key 即 `agents-sdk`、`createPlaygroundToolLoopFn()` 不暴露 direct loop。（后续更正：该 helper 已在同日“KV cache observability on the live Agents SDK lane”变更中随 3 个低层工厂一并删除；当前测试改经 `createPlaygroundLlmRuntime` 锁“有 key 即 `agents-sdk` mode、不暴露 direct loop”，不再引用 `createPlaygroundToolLoopFn`。）
 
 ### Reference-bound development method
 

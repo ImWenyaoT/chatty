@@ -24,9 +24,9 @@ Complexity rule: delete out-of-bounds work before optimizing it
 
 ## 1.0 Complexity Boundary And Deletion Rule
 
-Decision: Chatty must stay inside the interval defined by `docs/jd.md + PRD.pdf`
-as the lower bound and local OpenClaw / Codex / Claude Code source trees as
-the upper bound.
+Decision: Chatty must stay inside the interval defined by `docs/jd.md` as the
+lower bound and local OpenClaw / Codex / Claude Code source trees as the upper
+bound.
 
 This is a deletion rule, not an optimization rule:
 
@@ -290,26 +290,16 @@ Production requirements for promoted workflows:
 
 ## 9. Agent-First Mermaid Architecture
 
-For the complete diagram set, use
-[current-architecture.md](current-architecture.md). The high-level architecture
-is agent-first: the framework is an edge adapter, while the stable product
-surface is the harness contract.
+This decision registry does not re-draw the harness spine. The canonical spine
+diagram lives in [design.md](design.md) (§0 总览); the supplemental diagram set
+(one-turn sequence, component owners, tool/risk map) lives in
+[current-architecture.md](current-architecture.md). The one architectural claim
+that belongs here is the shape of the stable product surface — the framework is
+an edge adapter, while the harness contract is what stays constant:
 
-```mermaid
-flowchart LR
-  Event["ConversationEvent"] --> Harness["agent-core harness"]
-  Harness --> Task["task scheduling"]
-  Task --> Context["context assembly"]
-  Context --> Compose["compose<br/>LLM optional"]
-  Compose --> Parser["output parser"]
-  Parser --> Executor["policy-aware executor"]
-  Executor --> Registry["runtime tool registry"]
-  Context --> Memory["SQLite memory/session"]
-  Context --> Knowledge["agentic search<br/>search_knowledge"]
-  Knowledge --> FTS["SQLite FTS5 + LIKE"]
-  Compose --> LLM["Chat Completions adapter"]
-  Executor --> Trace["trace + memory patch"]
-  Trace --> Eval["tests / smoke / golden eval"]
+```text
+(event, memory, registry, optional model/tool loop) ->
+  { step, trace, memoryPatch, toolCalls }
 ```
 
 ## 10. Design Artifacts
@@ -335,7 +325,7 @@ inside a retrieval pipeline. Knowledge access is built from four parts:
    is assembled into context deliberately (`buildCustomerServiceContext`), not
    retrieved by similarity.
 2. **Deliberate chunking, indexing, and summarization.** Knowledge content is split
-   and indexed for exact/fuzzy lookup (SQLite FTS5 planned), with summaries written
+   and indexed for exact/fuzzy lookup (SQLite FTS5, trigram tokenizer with LIKE fallback), with summaries written
    at indexing time — instead of blind chunk-and-embed.
 3. **Search as an agent tool.** The model gets a `search_knowledge` tool and decides
    when and what to search across turns, replacing pipeline-fixed top-k retrieval.
