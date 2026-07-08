@@ -109,6 +109,16 @@ export default function OrdersPage() {
               <span>金额</span>
               <strong>{selected.amount}</strong>
             </div>
+            <div>
+              <span>AI 处理</span>
+              <strong>
+                {selected.automation.mode === 'ai_resolved' ? '自动推进' : '人工复核'}
+              </strong>
+            </div>
+            <div>
+              <span>节省</span>
+              <strong>{selected.automation.savedMinutes} min</strong>
+            </div>
           </div>
 
           <div className="order-sections">
@@ -126,6 +136,14 @@ export default function OrdersPage() {
                 <div>
                   <span>风险</span>
                   <strong>{selected.risk}</strong>
+                </div>
+                <div>
+                  <span>AI 证据</span>
+                  <strong>{selected.automation.evidence}</strong>
+                </div>
+                <div>
+                  <span>下一步</span>
+                  <strong>{selected.automation.nextStep}</strong>
                 </div>
               </div>
             </section>

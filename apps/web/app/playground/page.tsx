@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { SellerNavigation } from '../components/seller/SellerNavigation'
+import { SELLER_ORDERS, type SellerOrder } from '../components/seller/orderData'
 import type { HarnessTrace, PlaygroundResponse } from '../components/types'
 
 type ChatTurn = {
@@ -34,21 +35,6 @@ type KnowledgeHit = {
   content: string
 }
 
-type TraceReviewLabel = 'pass' | 'fail' | 'flagged'
-
-type TraceReviewState = {
-  label: TraceReviewLabel
-  note: string
-  tags: string
-}
-
-const PRESET_QUESTIONS = [
-  '这件西装多少钱一天？',
-  '黑色三件套西装 2026-05-10 到 2026-05-12 L 码有货吗？',
-  '我身高180体重70，这款能穿吗？',
-  '我要退款',
-]
-
 const DEFAULT_PROFILE: SessionProfile = {
   productText: '黑色三件套西装',
   bodyText: '180cm / 70kg',
@@ -63,19 +49,13 @@ const DEFAULT_PROFILE: SessionProfile = {
   goal: '先把客户需求补齐，再往下推进',
 }
 
-const DEFAULT_REVIEW: TraceReviewState = {
-  label: 'pass',
-  note: '',
-  tags: '',
+const PRODUCT_ID_BY_ORDER_ID: Record<string, string> = {
+  'ORDER-TEST-1001': 'SUIT-001',
+  'ORD-20260703-018': 'DRESS-001',
+  'ORD-20260703-006': 'SUIT-002',
 }
 
-const REVIEW_LABELS: Array<{ label: TraceReviewLabel; text: string }> = [
-  { label: 'pass', text: '通过' },
-  { label: 'flagged', text: '标记' },
-  { label: 'fail', text: '失败' },
-]
-
-/** Maps a harness task into the old console's stage language. */
+/** Maps a harness task into seller-facing workflow stage language. */
 function stageFromTrace(
   trace?: HarnessTrace,
 ): Pick<SessionProfile, 'stage' | 'nextAction' | 'goal'> {
@@ -83,57 +63,60 @@ function stageFromTrace(
   if (task === 'check_availability') {
     return {
       stage: 'availability_checking',
-      nextAction: 'check_availability',
+      nextAction: '检查档期和库存',
       goal: trace?.task?.goal ?? '检查档期和尺码库存',
     }
   }
   if (task === 'handoff') {
     return {
       stage: 'human_handoff',
-      nextAction: 'create_handoff',
+      nextAction: '转人工处理',
       goal: trace?.task?.goal ?? '转人工继续处理',
     }
   }
   if (task === 'follow_up') {
     return {
       stage: 'post_order_followup',
-      nextAction: 'schedule_followup',
+      nextAction: '安排后续跟进',
       goal: trace?.task?.goal ?? '安排后续跟进',
     }
   }
   if (task === 'collect_missing_info') {
     return {
       stage: 'slot_collecting',
-      nextAction: 'ask_missing_info',
+      nextAction: '补齐关键信息',
       goal: trace?.task?.goal ?? '补齐商品、档期、体型或数量',
     }
   }
   return {
     stage: 'intent_discovery',
-    nextAction: trace?.action?.action ?? 'answer_question',
+    nextAction: trace?.action?.action ?? '回答客户问题',
     goal: trace?.task?.goal ?? '识别客户意图并回复',
   }
 }
 
-/** Converts the latest trace and manual order number into the legacy session profile board. */
-function profileFromTrace(trace: HarnessTrace | undefined, orderNo: string): SessionProfile {
+/** Converts the latest trace and selected order into the customer context board. */
+function profileFromTrace(trace: HarnessTrace | undefined, order: SellerOrder): SessionProfile {
   const stage = stageFromTrace(trace)
   const task = trace?.task?.kind
   return {
     ...DEFAULT_PROFILE,
     ...stage,
-    orderNo: orderNo || DEFAULT_PROFILE.orderNo,
-    reviewText: orderNo ? '订单已接入，待发货复核' : DEFAULT_PROFILE.reviewText,
-    readyText: task === 'check_availability' ? '可继续复核' : orderNo ? '已下单待跟进' : '还差一步',
+    productText: order.product,
+    rentalText: order.period,
+    sizeText: order.size,
+    orderNo: order.id,
+    reviewText: order.risk === '无' ? '无需额外复核' : order.risk,
+    readyText: task === 'check_availability' ? '可继续复核' : order.status,
   }
 }
 
-/** Formats a compact status label for the old stage ribbon chips. */
+/** Formats a compact status label for the stage ribbon chips. */
 function chipTone(done: boolean): string {
   return done ? 'ok' : 'pending'
 }
 
-/** Builds seller-readable knowledge hits from the same fragments the old UI showed as references. */
+/** Builds seller-readable knowledge hits from the same fragments used by the harness. */
 function knowledgeHitsFromTrace(trace?: HarnessTrace): KnowledgeHit[] {
   return (trace?.context?.fragments ?? [])
     .map((fragment) => ({
@@ -144,7 +127,7 @@ function knowledgeHitsFromTrace(trace?: HarnessTrace): KnowledgeHit[] {
     .slice(0, 4)
 }
 
-/** Summarises visible conversation turns into the old memory panel's recent-message format. */
+/** Summarises visible conversation turns into recent customer context. */
 function recentSellerMessages(turns: ChatTurn[]): Array<{ role: string; content: string }> {
   return turns
     .filter((turn) => turn.role === 'user' || turn.role === 'assistant')
@@ -155,54 +138,47 @@ function recentSellerMessages(turns: ChatTurn[]): Array<{ role: string; content:
     }))
 }
 
-export default function LegacyConsolePage() {
-  const [customerId, setCustomerId] = useState('playground-customer')
-  const [productId, setProductId] = useState('SUIT-001')
-  const [conversationId, setConversationId] = useState('')
-  const [manualConversationId, setManualConversationId] = useState('')
-  const [manualOrderNo, setManualOrderNo] = useState('ORDER-TEST-1001')
-  const [boundOrderNo, setBoundOrderNo] = useState('')
+/** Renders the seller-facing customer service workspace. */
+export default function CustomerServicePage() {
+  const [selectedOrderId, setSelectedOrderId] = useState(SELLER_ORDERS[0].id)
   const [question, setQuestion] = useState('')
   const [imageUrl, setImageUrl] = useState('')
-  const [sessionContext, setSessionContext] = useState('{"channel":"playground","sellerMode":true}')
   const [turns, setTurns] = useState<ChatTurn[]>([])
-  const [status, setStatus] = useState('页面已加载，等待前端事件。')
-  const [debugLog, setDebugLog] = useState<string[]>(['页面已加载，等待前端事件。'])
+  const [status, setStatus] = useState('等待客户消息')
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const [sending, setSending] = useState(false)
-  const [orderSubmitting, setOrderSubmitting] = useState(false)
-  const [reviewSubmitting, setReviewSubmitting] = useState(false)
-  const [review, setReview] = useState<TraceReviewState>(DEFAULT_REVIEW)
   const nextId = useRef(1)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  const activeConversationId = conversationId.trim() || `${customerId}:${productId || 'general'}`
+  const selectedOrder =
+    SELLER_ORDERS.find((order) => order.id === selectedOrderId) ?? SELLER_ORDERS[0]
+  const productId = PRODUCT_ID_BY_ORDER_ID[selectedOrder.id] ?? 'SUIT-001'
+  const conversationId = `${selectedOrder.customer}:${productId}`
   const latestAgent = [...turns].reverse().find((turn) => turn.role === 'assistant')
   const profile = useMemo(
-    () => profileFromTrace(latestAgent?.trace, boundOrderNo),
-    [latestAgent?.trace, boundOrderNo],
+    () => profileFromTrace(latestAgent?.trace, selectedOrder),
+    [latestAgent?.trace, selectedOrder],
   )
-  const fragments = latestAgent?.trace?.context?.fragments ?? []
   const knowledgeHits = useMemo(
     () => knowledgeHitsFromTrace(latestAgent?.trace),
     [latestAgent?.trace],
   )
   const recentMessages = useMemo(() => recentSellerMessages(turns), [turns])
-  const toolCalls = latestAgent?.trace?.toolCalls ?? []
-  const toolResults = latestAgent?.trace?.toolResults ?? []
-  const llm = latestAgent?.trace?.llm
-  const latestTraceId = latestAgent?.traceId
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' })
   }, [turns, sending])
 
-  /** Appends a timestamped line to the legacy debug log. */
-  function log(message: string) {
-    const line = `${new Date().toLocaleTimeString()} ${message}`
-    setDebugLog((prev) => [line, ...prev].slice(0, 30))
+  /** Selects a customer queue item and clears the transient conversation view. */
+  function selectOrder(orderId: string) {
+    setSelectedOrderId(orderId)
+    setTurns([])
+    setQuestion('')
+    setImageUrl('')
+    setStatus('等待客户消息')
   }
 
-  /** Sends a customer message through the current harness endpoint and refreshes the old boards. */
+  /** Sends a customer message through the harness using product-safe defaults. */
   async function sendMessage(text: string) {
     const trimmed = text.trim()
     const attachedImageUrl = imageUrl.trim()
@@ -215,21 +191,22 @@ export default function LegacyConsolePage() {
     setQuestion('')
     setImageUrl('')
     setSending(true)
-    setStatus('Routing → /api/playground · awaiting response')
-    log(`发送消息: ${trimmed || '[图片]'}`)
+    setStatus('Chatty 正在处理客户消息')
 
     try {
-      const parsedContext = parseSessionContext(sessionContext)
       const response = await fetch('/api/playground', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          customerId,
+          customerId: selectedOrder.customer,
           productId,
-          conversationId: activeConversationId,
+          conversationId,
           question: trimmed,
           imageUrl: attachedImageUrl || undefined,
-          sessionContext: parsedContext,
+          sessionContext: {
+            channel: selectedOrder.channel,
+            sellerMode: true,
+          },
         }),
       })
       const data = await response.json()
@@ -249,93 +226,16 @@ export default function LegacyConsolePage() {
           status: reply.status,
         },
       ])
-      setStatus(`✓ 响应完成 · ${reply.terminality} · ${reply.status}`)
-      log(`响应完成: trace=${reply.traceId}`)
+      setStatus(reply.terminality === 'terminal' ? '本轮已完成' : '等待继续跟进')
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setTurns((prev) => [
         ...prev,
         { id: nextId.current++, role: 'system', content: `请求失败：${message}` },
       ])
-      setStatus(`✗ 请求失败: ${message}`)
-      log(`请求失败: ${message}`)
+      setStatus(`请求失败：${message}`)
     } finally {
       setSending(false)
-    }
-  }
-
-  /** Recreates the old manual order binding behavior through a Next route. */
-  async function submitManualOrder() {
-    const orderNo = manualOrderNo.trim()
-    if (!customerId.trim()) {
-      setStatus('请先填写 customerId。')
-      return
-    }
-    if (!orderNo) {
-      setStatus('请先填写订单号。')
-      return
-    }
-
-    setOrderSubmitting(true)
-    setStatus('正在提交订单号...')
-    log(`提交手动录单: ${orderNo}`)
-    try {
-      const response = await fetch('/api/orders/place', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          customerId,
-          productId,
-          conversationId: manualConversationId.trim() || activeConversationId,
-          orderNo,
-        }),
-      })
-      const data = await response.json()
-      if (!response.ok) throw new Error(data?.error ?? '录单失败')
-      setBoundOrderNo(orderNo)
-      setStatus(`✓ 订单号已记录：${orderNo}`)
-      log(`录单成功: ${orderNo}`)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      setStatus(`录单失败: ${message}`)
-      log(`录单失败: ${message}`)
-    } finally {
-      setOrderSubmitting(false)
-    }
-  }
-
-  /** Records a human trace review for the latest assistant turn. */
-  async function submitTraceReview() {
-    if (!latestTraceId || reviewSubmitting) return
-
-    setReviewSubmitting(true)
-    setStatus('正在记录本轮 trace 复核...')
-    log(`提交 trace review: ${latestTraceId} -> ${review.label}`)
-    try {
-      const response = await fetch('/api/trace-reviews', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          traceId: latestTraceId,
-          label: review.label,
-          reviewer: 'playground',
-          note: review.note,
-          tags: review.tags
-            .split(',')
-            .map((tag) => tag.trim())
-            .filter(Boolean),
-        }),
-      })
-      const data = await response.json()
-      if (!response.ok) throw new Error(data?.error ?? '复核失败')
-      setStatus(`✓ 复核已记录：${review.label}`)
-      log(`复核成功: total=${data?.summary?.total ?? '?'}`)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      setStatus(`复核失败: ${message}`)
-      log(`复核失败: ${message}`)
-    } finally {
-      setReviewSubmitting(false)
     }
   }
 
@@ -344,73 +244,35 @@ export default function LegacyConsolePage() {
       <SellerNavigation active="playground" />
       <header className="legacy-hero">
         <div>
-          <p>NEXUS · Rental Seller Console</p>
-          <h1>智能客服 · 卖家会话工作台</h1>
-          <span>客户资料 · 订单状态 · 手动录单 · 待办跟进</span>
+          <p>CUSTOMER SERVICE</p>
+          <h1>客服会话</h1>
+          <span>处理当前客户咨询、查看客户上下文、推进下一步动作。</span>
         </div>
         <div className="legacy-hud" aria-live="polite" role="status">
-          <span>Reqs {turns.filter((turn) => turn.role === 'assistant').length}</span>
+          <span>{selectedOrder.channel}</span>
           <span>{status}</span>
         </div>
       </header>
 
-      <div className="legacy-shell">
+      <div className={`legacy-shell support-inbox-shell ${detailsOpen ? 'details-open' : ''}`}>
         <aside className="legacy-sidebar">
           <section>
-            <h2>会话配置</h2>
-            <label>
-              customerId
-              <input value={customerId} onChange={(event) => setCustomerId(event.target.value)} />
-            </label>
-            <label>
-              productId
-              <input value={productId} onChange={(event) => setProductId(event.target.value)} />
-            </label>
-          </section>
-
-          <section>
-            <h2>手动录单</h2>
-            <label>
-              conversationId
-              <input
-                value={manualConversationId}
-                placeholder={activeConversationId}
-                onChange={(event) => setManualConversationId(event.target.value)}
-              />
-            </label>
-            <label>
-              订单号
-              <input
-                value={manualOrderNo}
-                onChange={(event) => setManualOrderNo(event.target.value)}
-              />
-            </label>
-            <button type="button" disabled={orderSubmitting} onClick={submitManualOrder}>
-              提交订单号，标记已下单
-            </button>
-          </section>
-
-          <section>
-            <h2>当前会话资料</h2>
-            <SessionProfileBoard profile={profile} />
-          </section>
-
-          <section>
-            <h2>快捷问题</h2>
-            <div className="legacy-quick-list">
-              {PRESET_QUESTIONS.map((preset) => (
-                <button key={preset} type="button" onClick={() => sendMessage(preset)}>
-                  {preset}
+            <h2>客户队列</h2>
+            <div className="legacy-conversation-list">
+              {SELLER_ORDERS.map((order) => (
+                <button
+                  aria-pressed={order.id === selectedOrder.id}
+                  data-active={order.id === selectedOrder.id}
+                  key={order.id}
+                  type="button"
+                  onClick={() => selectOrder(order.id)}
+                >
+                  <span>{order.channel}</span>
+                  <strong>{order.customer}</strong>
+                  <small>
+                    {order.product} · {order.status}
+                  </small>
                 </button>
-              ))}
-            </div>
-          </section>
-
-          <section>
-            <h2>前端调试</h2>
-            <div className="legacy-debug">
-              {debugLog.map((line) => (
-                <p key={line}>{line}</p>
               ))}
             </div>
           </section>
@@ -420,19 +282,23 @@ export default function LegacyConsolePage() {
           <div className="legacy-chat-topbar">
             <div>
               <h2>实时会话</h2>
-              <p>{activeConversationId}</p>
+              <p>
+                {selectedOrder.customer} · {selectedOrder.product}
+              </p>
             </div>
             <div>
               <button type="button" onClick={() => setTurns([])}>
-                清空显示
+                清空会话
               </button>
-              <button type="button" onClick={() => sendMessage('我身高180体重70，这款能穿吗？')}>
-                固定测试
+              <button
+                aria-expanded={detailsOpen}
+                type="button"
+                onClick={() => setDetailsOpen((open) => !open)}
+              >
+                客户详情
               </button>
             </div>
           </div>
-
-          <StageRibbon profile={profile} />
 
           <div
             aria-busy={sending}
@@ -443,7 +309,7 @@ export default function LegacyConsolePage() {
           >
             {turns.length === 0 ? (
               <div className="legacy-empty">
-                会话尚未开始 · 输入消息即可唤醒智能客服。对话历史、记忆画像与知识命中将实时显示。
+                当前客户尚未开始本轮会话。输入客户问题后，Chatty 会结合商品、档期和规则生成回复。
               </div>
             ) : (
               turns.map((turn) => <LegacyMessage key={turn.id} turn={turn} />)
@@ -454,31 +320,14 @@ export default function LegacyConsolePage() {
 
           <div className="legacy-composer">
             <div className="legacy-composer-meta">
-              <span>Enter 发送，Shift + Enter 换行</span>
-              <span>{question.length} chars</span>
+              <span>客户消息</span>
+              <span>{question.length} 字</span>
             </div>
-            <details>
-              <summary>高级设置</summary>
-              <label>
-                conversationId，可选
-                <input
-                  value={conversationId}
-                  onChange={(event) => setConversationId(event.target.value)}
-                />
-              </label>
-              <label>
-                sessionContext JSON，可选
-                <textarea
-                  value={sessionContext}
-                  onChange={(event) => setSessionContext(event.target.value)}
-                />
-              </label>
-            </details>
             <label className="legacy-image-url">
-              图片链接，可选
+              客户图片，可选
               <input
                 value={imageUrl}
-                placeholder="https://example.com/customer-fit.jpg"
+                placeholder="粘贴客户发来的图片链接"
                 onChange={(event) => setImageUrl(event.target.value)}
               />
             </label>
@@ -492,7 +341,7 @@ export default function LegacyConsolePage() {
               <textarea
                 aria-label="客户消息"
                 value={question}
-                placeholder='可直接输入；也可贴图/选图提问（如"这个穿多大？"+图片）'
+                placeholder="输入客户原话，例如：我身高180体重70，这款能穿吗？"
                 onChange={(event) => setQuestion(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && !event.shiftKey) {
@@ -508,193 +357,48 @@ export default function LegacyConsolePage() {
           </div>
         </main>
 
-        <aside className="legacy-inspector">
-          <section>
-            <h2>客户资料</h2>
-            <div className="legacy-memory-card">
-              <span>客户</span>
-              <strong>{customerId}</strong>
-              <span>会话</span>
-              <strong>{activeConversationId}</strong>
-              <span>商品</span>
-              <strong>{profile.productText}</strong>
-              <span>档期</span>
-              <strong>{profile.rentalText}</strong>
-            </div>
-          </section>
+        {detailsOpen ? (
+          <aside className="support-detail-panel" aria-label="客户详情">
+            <section>
+              <h2>客户上下文</h2>
+              <StageRibbon profile={profile} />
+              <SellerMemoryPanel
+                profile={profile}
+                recentMessages={recentMessages}
+                selectedOrder={selectedOrder}
+              />
+            </section>
 
-          <section>
-            <h2>记忆</h2>
-            <SellerMemoryPanel
-              profile={profile}
-              recentMessages={recentMessages}
-              customerId={customerId}
-            />
-          </section>
-
-          <section>
-            <h2>知识命中</h2>
-            <KnowledgeHitList hits={knowledgeHits} />
-          </section>
-
-          <section>
-            <h2>订单待办</h2>
-            <div className="legacy-task-list">
-              <div>
-                <strong>复核尺码</strong>
-                <span>{profile.sizeText}</span>
+            <section>
+              <h2>订单待办</h2>
+              <div className="legacy-task-list">
+                <div>
+                  <strong>当前状态</strong>
+                  <span>{selectedOrder.status}</span>
+                </div>
+                <div>
+                  <strong>风险点</strong>
+                  <span>{selectedOrder.risk}</span>
+                </div>
+                <div>
+                  <strong>下一步</strong>
+                  <span>{selectedOrder.automation.nextStep}</span>
+                </div>
               </div>
-              <div>
-                <strong>确认订单</strong>
-                <span>{profile.orderNo}</span>
-              </div>
-              <div>
-                <strong>下一步</strong>
-                <span>{profile.nextAction}</span>
-              </div>
-            </div>
-          </section>
+            </section>
 
-          <section>
-            <h2>本轮复核</h2>
-            <TraceReviewPanel
-              disabled={!latestTraceId || reviewSubmitting}
-              review={review}
-              traceId={latestTraceId}
-              onChange={setReview}
-              onSubmit={submitTraceReview}
-            />
-          </section>
-
-          <section>
-            <h2>最近处理</h2>
-            <div className="legacy-debug">
-              {debugLog.slice(0, 6).map((line) => (
-                <p key={line}>{line}</p>
-              ))}
-            </div>
-          </section>
-
-          <section>
-            <details className="legacy-devtools">
-              <summary>开发调试</summary>
-              <div className="legacy-memory-card">
-                <span>trace</span>
-                <strong>{latestAgent?.traceId ?? '等待首轮消息'}</strong>
-                <span>terminality</span>
-                <strong>{latestAgent?.terminality ?? 'idle'}</strong>
-                <span>model</span>
-                <strong>{llm?.model ?? 'not called'}</strong>
-                <span>LLM calls</span>
-                <strong>{llm ? `${llm.calls ?? 0}/${llm.callBudget ?? 0}` : '0/0'}</strong>
-                <span>tokens</span>
-                <strong>
-                  {llm ? `${llm.totalTokens ?? 0} · out ${llm.outputTokens ?? 0}` : '0 · out 0'}
-                </strong>
-                <span>cache hit</span>
-                <strong>
-                  {llm ? `${((llm.inputCacheHitRatio ?? 0) * 100).toFixed(1)}%` : '0.0%'}
-                </strong>
-                <span>est. cost</span>
-                <strong>{llm ? `¥${(llm.estimatedCostCny ?? 0).toFixed(6)}` : '¥0.000000'}</strong>
-              </div>
-              {llm?.operations?.length ? (
-                <p className="legacy-muted">LLM ops: {llm.operations.join(' → ')}</p>
-              ) : null}
-              {llm?.warnings?.length ? (
-                <p className="legacy-muted">LLM warnings: {llm.warnings.join(' · ')}</p>
-              ) : null}
-              {toolCalls.length > 0 ? (
-                toolCalls.map((call, index) => (
-                  <div className="legacy-tool" key={`${call.toolName}-${call.risk}-${index}`}>
-                    <strong>{call.toolName}</strong>
-                    <span>{call.risk}</span>
-                  </div>
-                ))
-              ) : (
-                <p className="legacy-muted">暂无工具调用</p>
-              )}
-              {toolResults.length > 0 ? (
-                <details className="legacy-fragment">
-                  <summary>工具结果</summary>
-                  <pre>{JSON.stringify(toolResults, null, 2)}</pre>
-                </details>
-              ) : null}
-              {fragments.map((fragment, index) => (
-                <details
-                  className="legacy-fragment"
-                  key={`${fragment.kind ?? 'fragment'}-${index}`}
-                >
-                  <summary>{fragment.label ?? fragment.kind ?? 'context'}</summary>
-                  <pre>{fragment.content ?? ''}</pre>
-                </details>
-              ))}
-            </details>
-          </section>
-        </aside>
+            <section>
+              <h2>知识命中</h2>
+              <KnowledgeHitList hits={knowledgeHits} />
+            </section>
+          </aside>
+        ) : null}
       </div>
     </div>
   )
 }
 
-/** Renders the minimal human feedback control for the latest agent trace. */
-function TraceReviewPanel({
-  disabled,
-  review,
-  traceId,
-  onChange,
-  onSubmit,
-}: {
-  disabled: boolean
-  review: TraceReviewState
-  traceId?: string
-  onChange: (review: TraceReviewState) => void
-  onSubmit: () => void
-}) {
-  return (
-    <div className="legacy-review-panel">
-      <p>{traceId ? `trace ${traceId}` : '发送一轮消息后可复核最新 trace。'}</p>
-      <fieldset className="legacy-review-options">
-        <legend>复核结果</legend>
-        {REVIEW_LABELS.map((option) => (
-          <button
-            aria-pressed={review.label === option.label}
-            data-active={review.label === option.label}
-            disabled={disabled}
-            key={option.label}
-            type="button"
-            onClick={() => onChange({ ...review, label: option.label })}
-          >
-            {option.text}
-          </button>
-        ))}
-      </fieldset>
-      <label>
-        note
-        <textarea
-          disabled={disabled}
-          placeholder="这轮哪里好或哪里需要进金标"
-          value={review.note}
-          onChange={(event) => onChange({ ...review, note: event.target.value })}
-        />
-      </label>
-      <label>
-        tags
-        <input
-          disabled={disabled}
-          placeholder="needs_golden, policy_gap"
-          value={review.tags}
-          onChange={(event) => onChange({ ...review, tags: event.target.value })}
-        />
-      </label>
-      <button disabled={disabled} type="button" onClick={onSubmit}>
-        记录复核
-      </button>
-    </div>
-  )
-}
-
-/** Renders the old session profile cards: product, body, period, price, size, order, review, readiness. */
+/** Renders the customer profile cards used by the service workspace. */
 function SessionProfileBoard({ profile }: { profile: SessionProfile }) {
   return (
     <div className="legacy-profile-board">
@@ -717,14 +421,14 @@ function SessionProfileBoard({ profile }: { profile: SessionProfile }) {
   )
 }
 
-/** Renders the old stage ribbon with completed and pending slots. */
+/** Renders the current workflow stage and missing order slots. */
 function StageRibbon({ profile }: { profile: SessionProfile }) {
   const steps = [
     ['商品', true],
-    ['档期', profile.stage === 'availability_checking' || Boolean(profile.orderNo !== '未录单')],
+    ['档期', profile.stage === 'availability_checking' || profile.orderNo !== '未录单'],
     ['体型', true],
-    ['尺码', profile.stage === 'availability_checking' || Boolean(profile.orderNo !== '未录单')],
-    ['复核', profile.orderNo !== '未录单'],
+    ['尺码', profile.stage === 'availability_checking' || profile.orderNo !== '未录单'],
+    ['复核', profile.reviewText !== '待复核'],
     ['下单', profile.orderNo !== '未录单'],
   ] as const
 
@@ -744,47 +448,43 @@ function StageRibbon({ profile }: { profile: SessionProfile }) {
       </div>
       <div className="legacy-flow-grid">
         <div>
-          <span>已完成</span>
-          <strong>商品 / 体型{profile.orderNo !== '未录单' ? ' / 下单' : ''}</strong>
+          <span>已掌握</span>
+          <strong>商品 / 档期 / 客户体型</strong>
         </div>
         <div>
-          <span>待补充</span>
-          <strong>{profile.orderNo === '未录单' ? '复核 / 下单' : '发货复核'}</strong>
+          <span>待推进</span>
+          <strong>{profile.reviewText === '无需额外复核' ? '发货跟进' : profile.reviewText}</strong>
         </div>
         <div>
-          <span>阻塞项</span>
-          <strong>{profile.reviewText === '待复核' ? '尺码与订单复核' : '暂无严重阻塞'}</strong>
+          <span>订单</span>
+          <strong>{profile.orderNo}</strong>
         </div>
       </div>
     </div>
   )
 }
 
-/** Renders seller-facing memory cards copied from the original console's business meaning. */
+/** Renders seller-facing memory cards from order context and recent turns. */
 function SellerMemoryPanel({
   profile,
   recentMessages,
-  customerId,
+  selectedOrder,
 }: {
   profile: SessionProfile
   recentMessages: Array<{ role: string; content: string }>
-  customerId: string
+  selectedOrder: SellerOrder
 }) {
   return (
     <div className="legacy-memory-sections">
       <div>
-        <span>客户全局摘要</span>
-        <p>{customerId} · 租赁西装客户，当前重点是尺码、档期和下单前复核。</p>
-      </div>
-      <div>
-        <span>体型档案</span>
-        <p>{profile.bodyText}</p>
-      </div>
-      <div>
-        <span>商品会话摘要</span>
+        <span>客户摘要</span>
         <p>
-          {profile.productText} · {profile.rentalText} · {profile.sizeText}
+          {selectedOrder.customer} · {selectedOrder.product} · {selectedOrder.period}
         </p>
+      </div>
+      <div>
+        <span>关键事实</span>
+        <SessionProfileBoard profile={profile} />
       </div>
       <div>
         <span>最近对话</span>
@@ -805,7 +505,7 @@ function SellerMemoryPanel({
 /** Shows knowledge/reference hits as business evidence instead of developer context. */
 function KnowledgeHitList({ hits }: { hits: KnowledgeHit[] }) {
   if (hits.length === 0) {
-    return <p className="legacy-muted">发送消息后显示本轮命中的商品、规则或历史知识。</p>
+    return <p className="legacy-muted">本轮回复引用的商品、规则或历史问答会显示在这里。</p>
   }
   return (
     <div className="legacy-knowledge-list">
@@ -819,7 +519,7 @@ function KnowledgeHitList({ hits }: { hits: KnowledgeHit[] }) {
   )
 }
 
-/** Renders one chat message in the legacy transcript style. */
+/** Renders one chat message in the seller transcript style. */
 function LegacyMessage({ turn }: { turn: ChatTurn }) {
   return (
     <article className={`legacy-message ${turn.role}`}>
@@ -834,15 +534,4 @@ function LegacyMessage({ turn }: { turn: ChatTurn }) {
       ) : null}
     </article>
   )
-}
-
-/** Parses optional sessionContext JSON using the old console's permissive behavior. */
-function parseSessionContext(raw: string): Record<string, string | number | boolean> | undefined {
-  const trimmed = raw.trim()
-  if (!trimmed) return undefined
-  const parsed = JSON.parse(trimmed) as unknown
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('sessionContext 必须是 JSON object')
-  }
-  return parsed as Record<string, string | number | boolean>
 }

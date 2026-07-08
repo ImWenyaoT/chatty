@@ -28,7 +28,7 @@ export const SELLER_WORKSPACE_ROUTES: readonly SellerWorkspaceRoute[] = [
     navLabel: '客服会话',
     homeEyebrow: '实时会话',
     homeTitle: '客服会话',
-    homeDescription: '客户信息、会话记录、订单状态和手动录单放在同一工作流里。',
+    homeDescription: '只处理当前客户消息、客户上下文、知识命中和下一步建议。',
   },
   {
     key: 'orders',
@@ -36,21 +36,22 @@ export const SELLER_WORKSPACE_ROUTES: readonly SellerWorkspaceRoute[] = [
     navLabel: '订单跟进',
     homeEyebrow: '订单跟进',
     homeTitle: '订单跟进',
-    homeDescription: '订单列表、履约进度和时间线，用来说明客服会话如何落到后续跟进。',
+    homeDescription: '承接录单、履约进度、风险点、AI 处理证据和订单时间线。',
   },
   {
     key: 'dashboard',
     href: '/dashboard',
     navLabel: '复盘视图',
     homeEyebrow: '复盘视图',
-    homeTitle: 'Trace Review',
-    homeDescription: '查看知识覆盖、样例会话和人工 trace review 汇总，用来复盘 agent 行为。',
+    homeTitle: '复盘视图',
+    homeDescription: '查看 AI 落地指标、知识覆盖和人工 trace review 汇总。',
   },
 ] as const
 
 export const sellerWorkspaceHomeRoutes: readonly SellerWorkspaceHomeRoute[] = [
   getSellerWorkspaceHomeRoute('playground'),
   getSellerWorkspaceHomeRoute('orders'),
+  getSellerWorkspaceHomeRoute('dashboard'),
 ]
 
 /** Finds one seller workspace route by its stable key. */

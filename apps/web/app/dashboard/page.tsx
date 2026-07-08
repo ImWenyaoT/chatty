@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { SellerNavigation } from '../components/seller/SellerNavigation'
 import { SELLER_ORDERS } from '../components/seller/orderData'
+import { summarizeAutomationImpact } from '../components/seller/productMetrics'
 import { getRepos } from '@/lib/db'
 
 // 复盘视图以演示会话/知识面板为主，但会读取 trace review 汇总，展示真实任务
@@ -17,6 +18,7 @@ const KNOWLEDGE_BUCKETS = [
 export default function DashboardPage() {
   const selected = SELLER_ORDERS[0]
   const reviewSummary = getRepos().reviews.summarize()
+  const automationSummary = summarizeAutomationImpact(SELLER_ORDERS)
   const topTags = Object.entries(reviewSummary.tags)
     .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
     .slice(0, 3)
@@ -86,15 +88,15 @@ export default function DashboardPage() {
       <section className="dashboard-two-col">
         <section className="dashboard-panel">
           <div className="dashboard-panel-head">
-            <h2>知识库概览</h2>
-            <span>DEMO 样例数据</span>
+            <h2>AI 落地指标</h2>
+            <span>BUSINESS IMPACT</span>
           </div>
           <div className="dashboard-knowledge">
-            {KNOWLEDGE_BUCKETS.map((bucket) => (
-              <article key={bucket.label}>
-                <strong>{bucket.value}</strong>
-                <span>{bucket.label}</span>
-                <p>{bucket.hint}</p>
+            {automationSummary.metrics.map((metric) => (
+              <article key={metric.label}>
+                <strong>{metric.value}</strong>
+                <span>{metric.label}</span>
+                <p>{metric.hint}</p>
               </article>
             ))}
           </div>
@@ -126,6 +128,24 @@ export default function DashboardPage() {
                   : '暂无'}
               </strong>
             </div>
+          </div>
+        </section>
+      </section>
+
+      <section className="dashboard-wide-panel">
+        <section className="dashboard-panel">
+          <div className="dashboard-panel-head">
+            <h2>知识库概览</h2>
+            <span>DEMO 样例数据</span>
+          </div>
+          <div className="dashboard-knowledge">
+            {KNOWLEDGE_BUCKETS.map((bucket) => (
+              <article key={bucket.label}>
+                <strong>{bucket.value}</strong>
+                <span>{bucket.label}</span>
+                <p>{bucket.hint}</p>
+              </article>
+            ))}
           </div>
         </section>
       </section>

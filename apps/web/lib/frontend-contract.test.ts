@@ -39,9 +39,12 @@ test('frontend shell exposes keyboard and screen-reader navigation affordances',
 test('playground controls expose state beyond color alone', () => {
   assert.match(playgroundSource, /aria-label="发送客户消息"/)
   assert.match(playgroundSource, /aria-label="客户消息"/)
-  assert.match(playgroundSource, /<fieldset className="legacy-review-options">/)
-  assert.match(playgroundSource, /<legend>复核结果<\/legend>/)
-  assert.match(playgroundSource, /aria-pressed=\{review\.label === option\.label\}/)
+  assert.match(playgroundSource, /<h2>客户队列<\/h2>/)
+  assert.match(playgroundSource, /<h2>客户上下文<\/h2>/)
+  assert.match(playgroundSource, /<h2>订单待办<\/h2>/)
+  assert.match(playgroundSource, /support-inbox-shell/)
+  assert.match(playgroundSource, /aria-expanded=\{detailsOpen\}/)
+  assert.match(playgroundSource, /客户详情/)
 })
 
 test('frontend CSS keeps focus visible and mobile touch targets large enough', () => {
@@ -49,6 +52,16 @@ test('frontend CSS keeps focus visible and mobile touch targets large enough', (
   assert.match(cssSource, /:focus-visible/)
   assert.match(cssSource, /box-shadow: var\(--focus-ring\)/)
   assert.match(cssSource, /min-height: 44px/)
+  assert.match(
+    cssSource,
+    /@media \(max-width: 1100px\)[\s\S]*\.support-detail-panel[\s\S]*position: fixed/,
+  )
+  assert.match(cssSource, /@media \(max-width: 760px\)[\s\S]*\.legacy-sidebar[\s\S]*order: 1/)
+  assert.match(cssSource, /@media \(max-width: 760px\)[\s\S]*\.legacy-main[\s\S]*order: 2/)
+  assert.match(
+    cssSource,
+    /@media \(max-width: 760px\)[\s\S]*\.legacy-composer form button[\s\S]*width: 100%/,
+  )
 })
 
 test('seller workspace cannot regress to a chat-only page', () => {
@@ -64,7 +77,7 @@ test('seller workspace cannot regress to a chat-only page', () => {
   )
   assert.deepEqual(
     sellerWorkspaceHomeRoutes.map((route) => route.key),
-    ['playground', 'orders'],
+    ['playground', 'orders', 'dashboard'],
   )
 })
 
@@ -74,11 +87,18 @@ test('customer service workspace keeps product language with technical observabi
     '客服会话',
   )
   assert.match(playgroundSource, /<h2>实时会话<\/h2>/)
-  assert.match(playgroundSource, /<h2>记忆<\/h2>/)
+  assert.match(playgroundSource, /<h2>客户队列<\/h2>/)
+  assert.match(playgroundSource, /<h2>客户上下文<\/h2>/)
   assert.match(playgroundSource, /<h2>知识命中<\/h2>/)
   assert.match(playgroundSource, /<h2>订单待办<\/h2>/)
-  assert.match(playgroundSource, /<h2>本轮复核<\/h2>/)
-  assert.match(playgroundSource, /<summary>开发调试<\/summary>/)
+  assert.doesNotMatch(playgroundSource, /className="legacy-inspector"/)
+  assert.doesNotMatch(playgroundSource, /className="service-context-panel"/)
+  assert.doesNotMatch(playgroundSource, /会话配置/)
+  assert.doesNotMatch(playgroundSource, /高级设置/)
+  assert.doesNotMatch(playgroundSource, /前端调试/)
+  assert.doesNotMatch(playgroundSource, /开发调试/)
+  assert.doesNotMatch(playgroundSource, /本轮复核/)
+  assert.doesNotMatch(playgroundSource, /固定测试/)
 })
 
 test('order operations stays as workflow evidence instead of an empty route', () => {
@@ -94,8 +114,11 @@ test('order operations stays as workflow evidence instead of an empty route', ()
   assert.match(orderDataSource, /status: '待复核'/)
   assert.match(orderDataSource, /status: '待发货'/)
   assert.match(orderDataSource, /status: '租赁中'/)
-  assert.match(playgroundSource, /fetch\('\/api\/orders\/place'/)
-  assert.match(playgroundSource, /提交订单号，标记已下单/)
+  assert.match(orderDataSource, /mode: 'ai_resolved'/)
+  assert.match(ordersSource, /AI 证据/)
+  assert.match(ordersSource, /节省/)
+  assert.doesNotMatch(playgroundSource, /fetch\('\/api\/orders\/place'/)
+  assert.doesNotMatch(playgroundSource, /提交订单号，标记已下单/)
 })
 
 test('review dashboard copy avoids generic backend-dashboard language', () => {
@@ -107,5 +130,8 @@ test('review dashboard copy avoids generic backend-dashboard language', () => {
   assert.doesNotMatch(visibleShellCopy, /后台视图/)
   assert.doesNotMatch(visibleShellCopy, /后台观察/)
   assert.doesNotMatch(visibleShellCopy, /智能客服后台/)
+  assert.match(visibleShellCopy, /AI 落地指标/)
+  assert.match(visibleShellCopy, /可复盘的数字员工/)
+  assert.match(dashboardSource, /BUSINESS IMPACT/)
   assert.match(visibleShellCopy, /复盘视图/)
 })
