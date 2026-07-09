@@ -162,6 +162,29 @@ test('deepseek-first harness compatibility does not assume OpenAI-only model sur
   assert.equal(compatibility.openai_conversations_api, 'not_assumed')
 })
 
+test('sdk usage audit stays aligned with DeepSeek compatibility statuses', () => {
+  const audit = readFileSync(resolve(repoRoot, 'docs/chatty-sdk-usage-audit.md'), 'utf8')
+  const compatibility = getDeepSeekHarnessCompatibility()
+
+  assert.equal(compatibility.agents_sdk_custom_model, 'supported')
+  assert.match(audit, /Agents SDK custom model via `OpenAIChatCompletionsModel`/)
+  assert.equal(compatibility.agents_sdk_function_tools, 'supported')
+  assert.match(audit, /Agents SDK function tools/)
+
+  assert.equal(compatibility.agents_sdk_sessions, 'adoptable_via_probe')
+  assert.match(audit, /\| SDK sessions \| Not claimed as implemented \|/)
+  assert.equal(compatibility.agents_sdk_human_in_the_loop, 'adoptable_via_probe')
+  assert.match(audit, /\| Human-in-the-loop via SDK \| Not claimed as implemented \|/)
+
+  assert.equal(compatibility.openai_responses_api, 'not_assumed')
+  assert.equal(compatibility.openai_hosted_tools, 'not_assumed')
+  assert.equal(compatibility.openai_conversations_api, 'not_assumed')
+  assert.match(
+    audit,
+    /\| OpenAI Responses API \/ hosted tools \/ Conversations API \| Not used and not assumed \|/,
+  )
+})
+
 test('retrieval strategy uses model inference through memory and agent search instead of RAG', () => {
   assert.deepEqual(RETRIEVAL_HARNESS_STRATEGY.disallowedRuntimeLanes, [
     'vector_database',
