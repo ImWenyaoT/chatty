@@ -27,10 +27,38 @@ test('toAgentsSdkFunctionTool converts a Chatty tool into an SDK function tool',
   assert.equal(sdkTool.type, 'function')
   assert.equal(sdkTool.name, 'search_knowledge')
   assert.equal(sdkTool.description, 'Search seller knowledge')
+  assert.deepEqual(sdkTool.parameters, {
+    type: 'object',
+    properties: { query: { type: 'string' } },
+    required: ['query'],
+    additionalProperties: false,
+  })
   assert.equal(sdkTool.strict, false)
+  assert.equal(await sdkTool.needsApproval({} as never, '{"query":"押金"}', undefined), false)
   assert.equal(
     await sdkTool.invoke({} as never, '{"query":"押金"}'),
     '{"ok":true,"input":{"query":"押金"}}',
+  )
+})
+
+test('toAgentsSdkFunctionTool preserves approval metadata for sensitive tools', async () => {
+  const sdkTool = toAgentsSdkFunctionTool({
+    name: 'transfer_to_human',
+    description: 'Transfer a risky customer-service turn to a human',
+    parameters: {
+      type: 'object',
+      properties: { reason: { type: 'string' } },
+      required: ['reason'],
+      additionalProperties: false,
+    },
+    needsApproval: true,
+    execute: async (input) => ({ queued: true, input }),
+  })
+
+  assert.equal(await sdkTool.needsApproval({} as never, '{"reason":"退款争议"}', undefined), true)
+  assert.equal(
+    await sdkTool.invoke({} as never, '{"reason":"退款争议"}'),
+    '{"queued":true,"input":{"reason":"退款争议"}}',
   )
 })
 

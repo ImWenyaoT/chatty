@@ -8,6 +8,7 @@ import {
   AGENT_COMPLEXITY_BOUNDS,
   ARCHITECTURE_COMPLEXITY_POLICY,
   DEEPSEEK_HARNESS_COMPATIBILITY,
+  DIRECT_CHAT_COMPLETIONS_EXCEPTION_POLICY,
   JD_CAPABILITY_REFERENCE_CHOICES,
   RETRIEVAL_HARNESS_STRATEGY,
   getDeepSeekHarnessCompatibility,
@@ -19,6 +20,9 @@ import {
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
 const currentDocRoot = resolve(repoRoot, 'docs')
 const disallowedCurrentReferencePattern = /\b(Hermes|Pi Agent|pi agent|opencode|OpenCode)\b/
+const directChatCompletionsCreatePattern = /\bchat\.completions\.create\b/
+const directChatCompletionsRuntimePattern =
+  /\b(?:chat\.completions\.create|createChatCompletionsAdapterFromEnv\(|createChatCompletionsAdapter\()\b/
 
 /** 递归列出当前文档区 Markdown 文件，archive 下的历史记录不参与当前架构约束。 */
 function listCurrentMarkdownDocs(dir: string): string[] {
@@ -29,6 +33,17 @@ function listCurrentMarkdownDocs(dir: string): string[] {
     if (rel === 'jd.md') return []
     if (statSync(absolute).isDirectory()) return listCurrentMarkdownDocs(absolute)
     return absolute.endsWith('.md') ? [absolute] : []
+  })
+  return entries.sort()
+}
+
+/** 递归列出当前源码文件，用于静态质量门禁，不进入构建产物或依赖目录。 */
+function listSourceFiles(dir: string): string[] {
+  const entries = readdirSync(dir).flatMap((entry) => {
+    const absolute = join(dir, entry)
+    if (['.next', 'dist', 'node_modules'].includes(entry)) return []
+    if (statSync(absolute).isDirectory()) return listSourceFiles(absolute)
+    return /\.(ts|tsx|mts)$/.test(absolute) ? [absolute] : []
   })
   return entries.sort()
 }
@@ -160,6 +175,62 @@ test('deepseek-first harness compatibility does not assume OpenAI-only model sur
   assert.equal(compatibility.openai_responses_api, 'not_assumed')
   assert.equal(compatibility.openai_hosted_tools, 'not_assumed')
   assert.equal(compatibility.openai_conversations_api, 'not_assumed')
+})
+
+test('sdk usage audit stays aligned with DeepSeek compatibility statuses', () => {
+  const audit = readFileSync(resolve(repoRoot, 'docs/chatty-sdk-usage-audit.md'), 'utf8')
+  const compatibility = getDeepSeekHarnessCompatibility()
+
+  assert.equal(compatibility.agents_sdk_custom_model, 'supported')
+  assert.match(audit, /Agents SDK custom model via `OpenAIChatCompletionsModel`/)
+  assert.equal(compatibility.agents_sdk_function_tools, 'supported')
+  assert.match(audit, /Agents SDK function tools/)
+
+  assert.equal(compatibility.agents_sdk_sessions, 'adoptable_via_probe')
+  assert.match(audit, /\| SDK sessions \| Not claimed as implemented \|/)
+  assert.equal(compatibility.agents_sdk_human_in_the_loop, 'adoptable_via_probe')
+  assert.match(audit, /\| Human-in-the-loop via SDK \| Not claimed as implemented \|/)
+
+  assert.equal(compatibility.openai_responses_api, 'not_assumed')
+  assert.equal(compatibility.openai_hosted_tools, 'not_assumed')
+  assert.equal(compatibility.openai_conversations_api, 'not_assumed')
+  assert.match(
+    audit,
+    /\| OpenAI Responses API \/ hosted tools \/ Conversations API \| Not used and not assumed \|/,
+  )
+})
+
+test('direct Chat Completions exceptions stay out of live runtime orchestration', () => {
+  assert.deepEqual(DIRECT_CHAT_COMPLETIONS_EXCEPTION_POLICY.allowedUses, [
+    'eval_judge',
+    'eval_harness_replay',
+    'json_extraction',
+    'compatibility_probe',
+    'telemetry_normalization',
+    'fallback',
+  ])
+  assert.match(DIRECT_CHAT_COMPLETIONS_EXCEPTION_POLICY.rule, /Live Chatty Agent runtime/)
+
+  const sourceRoots = ['apps', 'packages', 'eval']
+  const directCallFiles = sourceRoots
+    .flatMap((root) => listSourceFiles(resolve(repoRoot, root)))
+    .filter((file) => directChatCompletionsCreatePattern.test(readFileSync(file, 'utf8')))
+    .map((file) => relative(repoRoot, file))
+    .filter(
+      (file) =>
+        !DIRECT_CHAT_COMPLETIONS_EXCEPTION_POLICY.allowedSourceRoots.some((root) =>
+          file.startsWith(root),
+        ),
+    )
+
+  assert.deepEqual(directCallFiles, [])
+
+  const liveRuntimeOffenders = DIRECT_CHAT_COMPLETIONS_EXCEPTION_POLICY.disallowedLiveRuntimeRoots
+    .flatMap((root) => listSourceFiles(resolve(repoRoot, root)))
+    .filter((file) => directChatCompletionsRuntimePattern.test(readFileSync(file, 'utf8')))
+    .map((file) => relative(repoRoot, file))
+
+  assert.deepEqual(liveRuntimeOffenders, [])
 })
 
 test('retrieval strategy uses model inference through memory and agent search instead of RAG', () => {

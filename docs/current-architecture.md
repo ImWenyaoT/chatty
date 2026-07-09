@@ -68,11 +68,12 @@ The important boundary is not "web vs backend"; it is the harness contract:
 
 ```text
 (event, memory, registry, optional model/tool loop) ->
-  { step, trace, memoryPatch, toolCalls }
+  { step, trace }
 ```
 
-The same shape is used by the playground route, tests, smoke path, and golden
-eval runner.
+`step` carries the customer-facing reply, terminality, tool calls, next status,
+and memory patch. `trace` carries the inspectable harness path: task, context,
+parsed action, tool calls, and tool results.
 
 ## 3. One Turn Sequence
 
@@ -99,8 +100,8 @@ sequenceDiagram
   Harness->>Harness: parse action JSON
   Harness->>Tools: invokeWithPolicy(action)
   Tools-->>Harness: tool result / approval / deny
-  Harness-->>Adapter: reply, terminality, trace, memoryPatch
-  Adapter->>Memory: persist trace and memory patch
+  Harness-->>Adapter: step + trace
+  Adapter->>Memory: persist trace output and continuity memory
   Eval->>Harness: same contract under automated checks
 ```
 

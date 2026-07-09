@@ -213,7 +213,7 @@ The first live path is the customer-service Harness Core:
 - `buildCustomerServiceContext`: assembles customer, product, memory, policy, and retrieved context fragments.
 - `parseCustomerServiceOutput`: parses strict JSON action output with a deterministic fallback.
 - `executeCustomerServiceAction`: runs low-risk tools through policy-aware executors and escalates sensitive actions.
-- `runCustomerServiceHarnessStep`: returns reply, terminality, tool calls, memory patch, and trace.
+- `runCustomerServiceHarnessStep`: returns a step result plus a harness trace. The step carries reply, terminality, tool calls, next status, and memory patch; the trace carries task, context, parsed action, tool calls, and tool results.
 
 This keeps Chatty scoped to a rental customer-service project instead of a
 general-purpose agent runtime. SDK usage replaces model/tool orchestration where
@@ -299,7 +299,7 @@ an edge adapter, while the harness contract is what stays constant:
 
 ```text
 (event, memory, registry, optional model/tool loop) ->
-  { step, trace, memoryPatch, toolCalls }
+  { step, trace }
 ```
 
 ## 10. Design Artifacts

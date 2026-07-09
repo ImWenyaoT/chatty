@@ -253,7 +253,7 @@ test('unparseable modelFn output falls back to the safe answer action via the pa
   assert.equal(result.step.reply, '我先帮您确认一下，再继续处理。')
 })
 
-test('harness step returns a bounded trace with task, context, action and memory patch', async () => {
+test('harness step returns trace fields and a separate memory patch', async () => {
   const result = await runCustomerServiceHarnessStep({
     event: userEvent('这款有 L 吗，5月10到12号穿'),
     memory: memory(),

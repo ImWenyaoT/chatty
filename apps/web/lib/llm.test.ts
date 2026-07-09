@@ -134,6 +134,23 @@ test('createPlaygroundLlmRuntime uses Agents SDK whenever a DeepSeek key is pres
   }
 })
 
+test('createPlaygroundLlmRuntime does not expose a direct Chat Completions tool loop', () => {
+  const savedKey = process.env.OPENAI_API_KEY
+  const savedModel = process.env.CHAT_MODEL
+  try {
+    process.env.OPENAI_API_KEY = 'sk-test'
+    process.env.CHAT_MODEL = 'deepseek-v4-pro'
+
+    const runtime = createPlaygroundLlmRuntime()
+
+    assert.equal(runtime.mode, 'agents-sdk')
+    assert.equal(runtime.toolLoopFn, undefined)
+  } finally {
+    process.env.OPENAI_API_KEY = savedKey
+    process.env.CHAT_MODEL = savedModel
+  }
+})
+
 test('createPlaygroundModelFn 只由 DeepSeek key 决定是否启用', () => {
   const savedKey = process.env.OPENAI_API_KEY
   try {
