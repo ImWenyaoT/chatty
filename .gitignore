@@ -18,6 +18,18 @@ dist/
 docs/jd.md
 docs/*实习.pdf
 
+# 本地面试学习材料与私有整理记录，不入公开仓库
+MISSION.md
+NOTES.md
+RESOURCES.md
+assets/
+docs/chatty-agent-core-interview-guide.md
+docs/chatty-interview-qa.md
+docs/chatty-sdk-boundary-spec.md
+learning-records/
+lessons/
+reference/
+
 # 真实客户数据与运行时状态，任何情况下不入库（公开仓库红线）
 # rag-service 已于 R5 删除；本地残留目录整体忽略，尤其 data/（真实客户记忆快照）
 # 必须保持忽略；
