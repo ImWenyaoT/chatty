@@ -66,6 +66,21 @@ export type DeepSeekHarnessCompatibility = {
   readonly decision: string
 }
 
+export type DirectChatCompletionsAllowedUse =
+  | 'eval_judge'
+  | 'eval_harness_replay'
+  | 'json_extraction'
+  | 'compatibility_probe'
+  | 'telemetry_normalization'
+  | 'fallback'
+
+export type DirectChatCompletionsExceptionPolicy = {
+  readonly rule: string
+  readonly allowedUses: readonly DirectChatCompletionsAllowedUse[]
+  readonly allowedSourceRoots: readonly string[]
+  readonly disallowedLiveRuntimeRoots: readonly string[]
+}
+
 export type RetrievalHarnessCapability = 'memory' | 'chunk_index_summary' | 'agent_search_tool'
 
 export type DisallowedRetrievalRuntimeLane =
@@ -98,6 +113,20 @@ export const RETRIEVAL_HARNESS_STRATEGY: RetrievalHarnessStrategy = {
     'DeepSeek pro model inference is strong enough that Chatty should expose deliberate memory, indexed summaries, and a search tool instead of hiding retrieval inside a vector/RAG lane.',
   requiredCapabilities: ['memory', 'chunk_index_summary', 'agent_search_tool'],
   disallowedRuntimeLanes: ['vector_database', 'embedding_rag_pipeline', 'provider_side_retrieval'],
+}
+
+export const DIRECT_CHAT_COMPLETIONS_EXCEPTION_POLICY: DirectChatCompletionsExceptionPolicy = {
+  rule: 'Direct official OpenAI SDK Chat Completions is allowed only for eval, JSON extraction, compatibility probes, telemetry normalization, and fallback boundaries. Live Chatty Agent runtime model/tool orchestration must stay on the Agents SDK unless a DeepSeek or SDK compatibility blocker is documented.',
+  allowedUses: [
+    'eval_judge',
+    'eval_harness_replay',
+    'json_extraction',
+    'compatibility_probe',
+    'telemetry_normalization',
+    'fallback',
+  ],
+  allowedSourceRoots: ['eval/', 'packages/llm/src/chat-completions-adapter.ts'],
+  disallowedLiveRuntimeRoots: ['apps/', 'packages/agent-core/src/'],
 }
 
 export const AGENT_ARCHITECTURE_REFERENCE_CHOICES: readonly AgentArchitectureReferenceChoice[] = [

@@ -77,6 +77,8 @@ This means the SDK owns model-side tool invocation, while Chatty Harness still o
 
 Direct `chat.completions.create` calls still exist, but they are concentrated in non-primary or compatibility paths.
 
+The canonical code policy for these exceptions is `DIRECT_CHAT_COMPLETIONS_EXCEPTION_POLICY` in the shared architecture bounds. That policy is the source of truth for which direct Chat Completions uses are allowed and which live runtime roots must stay on Agents SDK orchestration.
+
 ### `packages/llm/src/chat-completions-adapter.ts`
 
 This adapter exposes:
