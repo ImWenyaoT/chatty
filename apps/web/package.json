@@ -16,10 +16,16 @@
     "@rental/db": "workspace:*",
     "@rental/llm": "workspace:*",
     "@rental/shared": "workspace:*",
+    "@tailwindcss/postcss": "^4.3.2",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "geist": "^1.7.2",
+    "lucide-react": "^1.23.0",
     "next": "^16.2.10",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss": "^4.3.2",
     "zod": "^4.0.0"
   },
   "devDependencies": {

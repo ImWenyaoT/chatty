@@ -40,11 +40,12 @@ test('playground controls expose state beyond color alone', () => {
   assert.match(playgroundSource, /aria-label="发送客户消息"/)
   assert.match(playgroundSource, /aria-label="客户消息"/)
   assert.match(playgroundSource, /<h2>客户队列<\/h2>/)
-  assert.match(playgroundSource, /<h2>客户上下文<\/h2>/)
-  assert.match(playgroundSource, /<h2>订单待办<\/h2>/)
   assert.match(playgroundSource, /support-inbox-shell/)
-  assert.match(playgroundSource, /aria-expanded=\{detailsOpen\}/)
-  assert.match(playgroundSource, /客户详情/)
+  assert.match(playgroundSource, /className="legacy-composer-box"/)
+  assert.match(playgroundSource, /aria-label="添加客户图片"/)
+  assert.match(playgroundSource, /aria-label="发送"/)
+  assert.doesNotMatch(playgroundSource, /客户详情/)
+  assert.doesNotMatch(playgroundSource, /清空/)
 })
 
 test('frontend CSS keeps focus visible and mobile touch targets large enough', () => {
@@ -52,16 +53,10 @@ test('frontend CSS keeps focus visible and mobile touch targets large enough', (
   assert.match(cssSource, /:focus-visible/)
   assert.match(cssSource, /box-shadow: var\(--focus-ring\)/)
   assert.match(cssSource, /min-height: 44px/)
-  assert.match(
-    cssSource,
-    /@media \(max-width: 1100px\)[\s\S]*\.support-detail-panel[\s\S]*position: fixed/,
-  )
-  assert.match(cssSource, /@media \(max-width: 760px\)[\s\S]*\.legacy-sidebar[\s\S]*order: 1/)
-  assert.match(cssSource, /@media \(max-width: 760px\)[\s\S]*\.legacy-main[\s\S]*order: 2/)
-  assert.match(
-    cssSource,
-    /@media \(max-width: 760px\)[\s\S]*\.legacy-composer form button[\s\S]*width: 100%/,
-  )
+  assert.match(cssSource, /scroll-snap-type: x mandatory/)
+  assert.match(cssSource, /\.legacy-composer-box:focus-within/)
+  assert.match(cssSource, /@media \(max-width: 760px\)[\s\S]*\.legacy-composer-box button/)
+  assert.doesNotMatch(cssSource, /support-detail-panel/)
 })
 
 test('seller workspace cannot regress to a chat-only page', () => {
@@ -88,11 +83,14 @@ test('customer service workspace keeps product language with technical observabi
   )
   assert.match(playgroundSource, /<h2>实时会话<\/h2>/)
   assert.match(playgroundSource, /<h2>客户队列<\/h2>/)
-  assert.match(playgroundSource, /<h2>客户上下文<\/h2>/)
-  assert.match(playgroundSource, /<h2>知识命中<\/h2>/)
-  assert.match(playgroundSource, /<h2>订单待办<\/h2>/)
+  assert.match(playgroundSource, /className="legacy-composer-box"/)
+  assert.match(playgroundSource, /className="legacy-attachment-details"/)
+  assert.match(playgroundSource, /className="legacy-send-button"/)
   assert.doesNotMatch(playgroundSource, /className="legacy-inspector"/)
   assert.doesNotMatch(playgroundSource, /className="service-context-panel"/)
+  assert.doesNotMatch(playgroundSource, /<h2>客户上下文<\/h2>/)
+  assert.doesNotMatch(playgroundSource, /<h2>知识命中<\/h2>/)
+  assert.doesNotMatch(playgroundSource, /<h2>订单待办<\/h2>/)
   assert.doesNotMatch(playgroundSource, /会话配置/)
   assert.doesNotMatch(playgroundSource, /高级设置/)
   assert.doesNotMatch(playgroundSource, /前端调试/)
