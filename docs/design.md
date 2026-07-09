@@ -53,7 +53,7 @@ flowchart LR
   Loop --> Parser["Q10 output parser"]
   Parser --> Executor["Q11 executor"]
   Executor --> Policy["policy gate<br/>low / medium / high"]
-  Policy --> Trace["trace + memory patch"]
+  Policy --> Trace["trace<br/>task / context / action / tools"]
   Trace --> Eval["Q13 tests / smoke / eval"]
 ```
 
@@ -200,16 +200,16 @@ flowchart TD
 
 参考实现：Codex。
 
-Chatty 不做 terminal UI。可视化对象是客服 turn：task、context、toolCalls、action、policy result、memoryPatch。
+Chatty 不做 terminal UI。可视化对象是客服 turn：task、context、toolCalls、toolResults、action；memoryPatch 属于 step 结果，不属于 harness trace schema。
 
 ```mermaid
 flowchart LR
   Trace["harnessTrace"] --> Task["task"]
   Trace --> Context["context fragments"]
   Trace --> Tools["tool calls"]
+  Trace --> Results["tool results"]
   Trace --> Action["parsed action"]
-  Trace --> Policy["policy result"]
-  Trace --> Memory["memory patch"]
+  Step["step"] --> Memory["memory patch"]
 ```
 
 ### Q06. input 拼接 prompt
