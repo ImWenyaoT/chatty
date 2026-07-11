@@ -1,10 +1,23 @@
-import type { BackgroundJob, ControlPlaneRepository } from '@rental/db'
+import type { BackgroundJob, ControlPlaneRepository, ExtractedMemoryCandidate } from '@rental/db'
 import type { JsonValue } from '@rental/shared'
 
 export interface JobExecutionResult {
   status?: 'succeeded' | 'succeeded_no_output'
   event?: JsonValue
   followup?: { runId: string; payload: JsonValue }
+  extraction?: {
+    customerId: string
+    conversationId: string
+    productId: string
+    conversationSummary: string
+    candidates: ExtractedMemoryCandidate[]
+  }
+  consolidation?: {
+    customerId: string
+    globalSummary: string
+    promotedIds: string[]
+    prunedIds: string[]
+  }
 }
 
 export interface BackgroundJobExecutors {
@@ -74,6 +87,24 @@ export async function dispatchBackgroundJob(
           idempotencyKey: `outbox:${job.id}`,
         },
         result.event,
+      )
+    } else if (job.type === 'memory_extract') {
+      if (!result.extraction) throw new Error('memory extraction produced no commit result')
+      options.control.completeMemoryExtraction(
+        job.id,
+        options.workerId,
+        job.claimFence,
+        result.extraction,
+        now().toISOString(),
+      )
+    } else if (job.type === 'memory_consolidate') {
+      if (!result.consolidation) throw new Error('memory consolidation produced no commit result')
+      options.control.completeMemoryConsolidation(
+        job.id,
+        options.workerId,
+        job.claimFence,
+        result.consolidation,
+        now().toISOString(),
       )
     } else {
       options.control.finishJob(

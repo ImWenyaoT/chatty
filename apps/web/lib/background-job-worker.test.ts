@@ -91,7 +91,9 @@ test('running cancellation aborts the shared executor signal without retry or de
   assert.equal(observedAbort, true)
   assert.equal(control.getJob('cancel-followup')?.status, 'cancelled')
   assert.equal(control.listOutbox().length, 0)
-  assert.ok(control.listJobEvents('cancel-followup').some((event) => event.type === 'heartbeat_lost'))
+  assert.ok(
+    control.listJobEvents('cancel-followup').some((event) => event.type === 'heartbeat_lost'),
+  )
 })
 
 test('follow-up executor result, outbox, and completion share a stable idempotency key', async () => {
@@ -116,9 +118,10 @@ test('follow-up executor result, outbox, and completion share a stable idempoten
 
   assert.equal(processed, true)
   assert.equal(control.getJob('deliver-once')?.runId, 'run-1')
-  assert.deepEqual(control.listOutbox().map((message) => message.idempotencyKey), [
-    'outbox:deliver-once',
-  ])
+  assert.deepEqual(
+    control.listOutbox().map((message) => message.idempotencyKey),
+    ['outbox:deliver-once'],
+  )
   assert.deepEqual(
     control.listJobEvents('deliver-once').map((event) => event.type),
     ['scheduled', 'claimed', 'succeeded'],

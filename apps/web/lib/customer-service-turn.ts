@@ -267,15 +267,13 @@ export async function runCustomerServiceTurn(
       question: input.question,
       reply: result.reply,
     })
-    const memoryDueAt = new Date(new Date(now()).getTime() + 24 * 60 * 60 * 1000).toISOString()
-    repos.control.enqueueJob({
+    repos.control.scheduleMemoryExtraction({
       id: id('job'),
-      type: 'memory_extract',
       conversationId,
       customerId: input.customerId,
       payload: { sessionId: session.id, productId: input.productId ?? 'general' },
-      dueAt: memoryDueAt,
-      idempotencyKey: `memory-extract:${conversationId}:${traceId}`,
+      now: now(),
+      coolingMs: 24 * 60 * 60 * 1000,
     })
 
     const response: CustomerServiceTurnResponse = {

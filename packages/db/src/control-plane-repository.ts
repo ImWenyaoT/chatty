@@ -105,6 +105,16 @@ export interface OutboxMessage {
   createdAt: string
 }
 
+export interface ExtractedMemoryCandidate {
+  id: string
+  sourceTraceId: string
+  category: 'preference' | 'measurement' | 'delivery' | 'service_history'
+  key: string
+  value: JsonValue
+  confidence: number
+  sensitivity: 'normal' | 'sensitive'
+}
+
 export class ConversationBusyError extends Error {
   constructor(conversationId: string) {
     super(`conversation already has an active run: ${conversationId}`)
@@ -529,6 +539,133 @@ export function createControlPlaneRepository(db: Db) {
       )
     },
 
+    /** Atomically stores extraction output and completes its exact fenced job claim. */
+    completeMemoryExtraction(
+      id: string,
+      workerId: string,
+      claimFence: number,
+      input: {
+        customerId: string
+        conversationId: string
+        productId: string
+        conversationSummary: string
+        candidates: ExtractedMemoryCandidate[]
+      },
+      observedAt = nowIso(),
+    ): boolean {
+      return db.transaction(() => {
+        if (!this.ownsJobClaim(id, workerId, claimFence, observedAt)) return false
+        const ts = nowIso()
+        const insert = db.prepare(
+          `INSERT INTO memory_candidates
+           (id, customer_id, conversation_id, source_trace_id, category, memory_key, value_json,
+            confidence, sensitivity, status, created_at, updated_at)
+           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, 'candidate', ?, ?
+           WHERE NOT EXISTS (
+             SELECT 1 FROM memory_candidates WHERE customer_id = ? AND conversation_id = ?
+             AND source_trace_id = ? AND category = ? AND memory_key = ? AND value_json = ?
+           )`,
+        )
+        let produced = 0
+        for (const candidate of input.candidates) {
+          produced += insert.run(
+            candidate.id,
+            input.customerId,
+            input.conversationId,
+            candidate.sourceTraceId,
+            candidate.category,
+            candidate.key,
+            JSON.stringify(candidate.value),
+            candidate.confidence,
+            candidate.sensitivity,
+            ts,
+            ts,
+            input.customerId,
+            input.conversationId,
+            candidate.sourceTraceId,
+            candidate.category,
+            candidate.key,
+            JSON.stringify(candidate.value),
+          ).changes
+        }
+        db.prepare(
+          `INSERT INTO product_memories
+           (conversation_id, customer_id, product_id, summary, recent_messages_json,
+            conversation_profile_json, reviews_json, updated_at)
+           VALUES (?, ?, ?, ?, '[]', '{}', '[]', ?)
+           ON CONFLICT(conversation_id) DO UPDATE SET summary = excluded.summary, updated_at = excluded.updated_at`,
+        ).run(
+          input.conversationId,
+          input.customerId,
+          input.productId,
+          input.conversationSummary,
+          ts,
+        )
+        return this.finishJob(
+          id,
+          produced === 0 ? 'succeeded_no_output' : 'succeeded',
+          { produced },
+          workerId,
+          claimFence,
+        )
+      })()
+    },
+
+    /** Atomically promotes, prunes, and replaces a summary under one fenced global lease. */
+    completeMemoryConsolidation(
+      id: string,
+      workerId: string,
+      claimFence: number,
+      input: {
+        customerId: string
+        globalSummary: string
+        promotedIds: string[]
+        prunedIds: string[]
+      },
+      observedAt = nowIso(),
+    ): boolean {
+      return db.transaction(() => {
+        if (!this.ownsJobClaim(id, workerId, claimFence, observedAt)) return false
+        const overlap = input.promotedIds.find((candidateId) =>
+          input.prunedIds.includes(candidateId),
+        )
+        if (overlap) throw new Error(`candidate cannot be promoted and pruned: ${overlap}`)
+        const ts = nowIso()
+        const update = db.prepare(
+          `UPDATE memory_candidates SET status = ?, updated_at = ?
+           WHERE id = ? AND customer_id = ? AND status = 'candidate'`,
+        )
+        for (const candidateId of input.promotedIds) {
+          if (update.run('promoted', ts, candidateId, input.customerId).changes !== 1) {
+            throw new Error(`candidate is not promotable: ${candidateId}`)
+          }
+        }
+        for (const candidateId of input.prunedIds) {
+          if (update.run('pruned', ts, candidateId, input.customerId).changes !== 1) {
+            throw new Error(`candidate is not prunable: ${candidateId}`)
+          }
+        }
+        if (input.promotedIds.length + input.prunedIds.length > 0) {
+          db.prepare(
+            `INSERT INTO customer_memories
+           (customer_id, global_summary, session_context_json, body_profiles_json, updated_at)
+           VALUES (?, ?, '{}', '[]', ?)
+           ON CONFLICT(customer_id) DO UPDATE SET global_summary = excluded.global_summary,
+             updated_at = excluded.updated_at`,
+          ).run(input.customerId, input.globalSummary, ts)
+        }
+        return this.finishJob(
+          id,
+          input.promotedIds.length + input.prunedIds.length === 0
+            ? 'succeeded_no_output'
+            : 'succeeded',
+          { promoted: input.promotedIds.length, pruned: input.prunedIds.length },
+          workerId,
+          claimFence,
+        )
+      })()
+    },
+
     enqueueJob(input: {
       id: string
       type: BackgroundJobType
@@ -564,6 +701,73 @@ export function createControlPlaneRepository(db: Db) {
       return this.getJob(input.id)!
     },
 
+    /** Coalesces one conversation's extraction work and moves its cooling deadline forward. */
+    scheduleMemoryExtraction(input: {
+      id: string
+      conversationId: string
+      customerId: string
+      payload: JsonValue
+      now: string
+      coolingMs?: number
+    }): BackgroundJob {
+      return db.transaction(() => {
+        const pending = db
+          .prepare(
+            `SELECT * FROM background_jobs WHERE type = 'memory_extract' AND conversation_id = ?
+             AND status = 'pending' ORDER BY created_at DESC LIMIT 1`,
+          )
+          .get(input.conversationId) as BackgroundJobRow | undefined
+        const dueAt = new Date(
+          new Date(input.now).getTime() + (input.coolingMs ?? 86_400_000),
+        ).toISOString()
+        if (!pending) {
+          return this.enqueueJob({
+            id: input.id,
+            type: 'memory_extract',
+            conversationId: input.conversationId,
+            customerId: input.customerId,
+            payload: input.payload,
+            dueAt,
+            idempotencyKey: `memory-extract:${input.conversationId}:${input.id}`,
+          })
+        }
+        db.prepare(
+          `UPDATE background_jobs SET payload_json = ?, due_at = CASE WHEN status = 'pending' THEN ? ELSE due_at END,
+           updated_at = ? WHERE id = ?`,
+        ).run(JSON.stringify(input.payload), dueAt, input.now, pending.id)
+        this.appendJobEvent(pending.id, 'coalesced', { dueAt })
+        return this.getJob(pending.id)!
+      })()
+    },
+
+    /** Coalesces global consolidation demand behind one pending or leased job. */
+    scheduleMemoryConsolidation(input: {
+      id: string
+      customerId: string
+      now: string
+    }): BackgroundJob {
+      return db.transaction(() => {
+        const active = db
+          .prepare(
+            `SELECT * FROM background_jobs WHERE type = 'memory_consolidate'
+           AND customer_id = ? AND status IN ('pending','running') ORDER BY created_at LIMIT 1`,
+          )
+          .get(input.customerId) as BackgroundJobRow | undefined
+        if (active) {
+          this.appendJobEvent(active.id, 'coalesced', { customerId: input.customerId })
+          return mapJob(active)
+        }
+        return this.enqueueJob({
+          id: input.id,
+          type: 'memory_consolidate',
+          customerId: input.customerId,
+          payload: {},
+          dueAt: input.now,
+          idempotencyKey: `memory-consolidate:${input.id}`,
+        })
+      })()
+    },
+
     getJob(id: string): BackgroundJob | undefined {
       const row = db.prepare('SELECT * FROM background_jobs WHERE id = ?').get(id) as
         BackgroundJobRow | undefined
@@ -593,17 +797,23 @@ export function createControlPlaneRepository(db: Db) {
             `SELECT * FROM background_jobs
            WHERE attempts < max_attempts AND due_at <= ? AND
              (status = 'pending' OR (status = 'running' AND lease_expires_at < ?))
+             AND (type != 'memory_consolidate' OR status = 'running' OR NOT EXISTS (
+               SELECT 1 FROM background_jobs leased WHERE leased.type = 'memory_consolidate'
+               AND leased.status = 'running' AND leased.lease_expires_at >= ?
+             ))
            ORDER BY due_at, created_at LIMIT 1`,
           )
-          .get(now, now) as BackgroundJobRow | undefined
+          .get(now, now, now) as BackgroundJobRow | undefined
         if (!row) return undefined
         const leaseExpiresAt = new Date(new Date(now).getTime() + leaseMs).toISOString()
-        const claimedResult = db.prepare(
-          `UPDATE background_jobs SET status = 'running', attempts = attempts + 1,
+        const claimedResult = db
+          .prepare(
+            `UPDATE background_jobs SET status = 'running', attempts = attempts + 1,
            lease_owner = ?, claim_fence = claim_fence + 1, lease_expires_at = ?, heartbeat_at = ?, updated_at = ?
            WHERE id = ? AND claim_fence = ? AND
            (status = 'pending' OR (status = 'running' AND lease_expires_at < ?))`,
-        ).run(workerId, leaseExpiresAt, now, now, row.id, row.claim_fence, now)
+          )
+          .run(workerId, leaseExpiresAt, now, now, row.id, row.claim_fence, now)
         if (claimedResult.changes !== 1) return undefined
         const claimed = this.getJob(row.id)!
         this.appendJobEvent(row.id, 'claimed', {
@@ -633,13 +843,20 @@ export function createControlPlaneRepository(db: Db) {
     },
 
     /** Checks whether one exact leased claim is still the only valid writer. */
-    ownsJobClaim(id: string, workerId: string, claimFence: number, now: string): boolean {
-      const row = db
-        .prepare(
-          `SELECT 1 FROM background_jobs WHERE id = ? AND status = 'running'
-           AND lease_owner = ? AND claim_fence = ? AND lease_expires_at >= ?`,
-        )
-        .get(id, workerId, claimFence, now)
+    ownsJobClaim(id: string, workerId: string, claimFence: number, now?: string): boolean {
+      const row = now
+        ? db
+            .prepare(
+              `SELECT 1 FROM background_jobs WHERE id = ? AND status = 'running'
+             AND lease_owner = ? AND claim_fence = ? AND lease_expires_at >= ?`,
+            )
+            .get(id, workerId, claimFence, now)
+        : db
+            .prepare(
+              `SELECT 1 FROM background_jobs WHERE id = ? AND status = 'running'
+             AND lease_owner = ? AND claim_fence = ?`,
+            )
+            .get(id, workerId, claimFence)
       return row !== undefined
     },
 
@@ -656,7 +873,7 @@ export function createControlPlaneRepository(db: Db) {
           `UPDATE background_jobs SET status = ?, lease_owner = NULL, lease_expires_at = NULL,
          last_error = NULL, updated_at = ? WHERE id = ? AND status = 'running'
          AND (? IS NULL OR lease_owner = ?) AND (? IS NULL OR claim_fence = ?)
-         AND (? IS NULL OR lease_expires_at >= ?)`,
+         `,
         )
         .run(
           status,
@@ -666,8 +883,6 @@ export function createControlPlaneRepository(db: Db) {
           workerId ?? null,
           claimFence ?? null,
           claimFence ?? null,
-          workerId ?? null,
-          now,
         )
       if (result.changes) this.appendJobEvent(id, status, payload)
       return result.changes === 1
@@ -690,7 +905,7 @@ export function createControlPlaneRepository(db: Db) {
          lease_expires_at = NULL, last_error = ?, updated_at = ? WHERE id = ?
          AND status = 'running' AND (? IS NULL OR lease_owner = ?)
          AND (? IS NULL OR claim_fence = ?)
-         AND (? IS NULL OR lease_expires_at >= ?)`,
+         `,
         )
         .run(
           terminal ? 'failed' : 'pending',
@@ -702,8 +917,6 @@ export function createControlPlaneRepository(db: Db) {
           workerId ?? null,
           claimFence ?? null,
           claimFence ?? null,
-          workerId ?? null,
-          now,
         )
       if (result.changes) {
         this.appendJobEvent(id, terminal ? 'failed' : 'retry_scheduled', {
@@ -783,7 +996,7 @@ export function createControlPlaneRepository(db: Db) {
       event: JsonValue = {},
     ): boolean {
       return db.transaction(() => {
-        const owned = this.ownsJobClaim(id, workerId, claimFence, nowIso())
+        const owned = this.ownsJobClaim(id, workerId, claimFence)
         if (!owned) {
           this.appendJobEvent(id, 'completion_rejected', { workerId, claimFence })
           return false

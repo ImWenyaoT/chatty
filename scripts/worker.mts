@@ -26,9 +26,7 @@ async function processOne(): Promise<boolean> {
       async memoryExtract(job, signal) {
         const payload = asObject(job.payload)
         const result = await runMemoryExtraction({
-          control: repos.control,
           traces: repos.traces,
-          memory: repos.memory,
           sessionId: String(payload.sessionId ?? ''),
           customerId: job.customerId ?? '',
           conversationId: job.conversationId ?? '',
@@ -36,32 +34,33 @@ async function processOne(): Promise<boolean> {
           id: (prefix) => `${prefix}_${randomUUID()}`,
           signal,
         })
-        if (result.produced && job.customerId) {
-          repos.control.enqueueJob({
+        if (result.candidates.length && job.customerId) {
+          repos.control.scheduleMemoryConsolidation({
             id: `job_${randomUUID()}`,
-            type: 'memory_consolidate',
             customerId: job.customerId,
-            payload: {},
-            dueAt: new Date().toISOString(),
-            idempotencyKey: `memory-consolidate:${job.customerId}:${new Date().toISOString().slice(0, 10)}`,
+            now: new Date().toISOString(),
           })
         }
         return {
-          status: result.produced ? ('succeeded' as const) : ('succeeded_no_output' as const),
-          event: result,
+          event: { produced: result.candidates.length },
+          extraction: {
+            customerId: job.customerId ?? '',
+            conversationId: job.conversationId ?? '',
+            productId: String(payload.productId ?? 'general'),
+            ...result,
+          },
         }
       },
       /** Executes one consolidation claim with the dispatcher's shared cancellation signal. */
       async memoryConsolidate(job, signal) {
         const result = await runMemoryConsolidation({
           control: repos.control,
-          memory: repos.memory,
           customerId: job.customerId ?? '',
           signal,
         })
         return {
-          status: result.promoted ? ('succeeded' as const) : ('succeeded_no_output' as const),
-          event: result,
+          event: { promoted: result.promotedIds.length, pruned: result.prunedIds.length },
+          consolidation: { customerId: job.customerId ?? '', ...result },
         }
       },
       /** Executes one scheduled turn and returns its delivery for atomic publication. */

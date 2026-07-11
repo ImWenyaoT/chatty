@@ -1,4 +1,4 @@
-import type { ControlPlaneRepository, MemoryRepository, TraceRepository } from '@rental/db'
+import type { ControlPlaneRepository, ExtractedMemoryCandidate, TraceRepository } from '@rental/db'
 import {
   createAgentsSdkStructuredRunner,
   createDeepSeekAgentsModelFromEnv,
@@ -35,18 +35,16 @@ const consolidationSchema = z
 
 /** Extracts source-backed memory candidates from one cooled conversation rollout. */
 export async function runMemoryExtraction(input: {
-  control: ControlPlaneRepository
   traces: TraceRepository
-  memory: MemoryRepository
   sessionId: string
   customerId: string
   conversationId: string
   productId: string
   id: (prefix: string) => string
   signal?: AbortSignal
-}): Promise<{ produced: number }> {
+}): Promise<{ conversationSummary: string; candidates: ExtractedMemoryCandidate[] }> {
   const traces = input.traces.queryBySession(input.sessionId)
-  if (traces.length === 0) return { produced: 0 }
+  if (traces.length === 0) return { conversationSummary: '', candidates: [] }
   const env = readLlmEnv()
   const runExtraction = createAgentsSdkStructuredRunner({
     instructions:
@@ -62,43 +60,31 @@ export async function runMemoryExtraction(input: {
   })
   const extracted = await runExtraction()
   const validTraceIds = new Set(traces.map((trace) => trace.id))
-  let produced = 0
-  for (const memory of extracted.memories) {
-    if (!validTraceIds.has(memory.sourceTraceId) || memory.sensitivity === 'sensitive') continue
-    input.control.insertMemoryCandidate({
-      id: input.id('mem'),
-      customerId: input.customerId,
-      conversationId: input.conversationId,
-      sourceTraceId: memory.sourceTraceId,
-      category: memory.category,
-      key: memory.key,
-      value: memory.value as JsonValue,
-      confidence: memory.confidence,
-      sensitivity: memory.sensitivity,
-      status: 'candidate',
-    })
-    produced += 1
-  }
-  input.memory.commitTurn(
-    {
-      customerId: input.customerId,
-      conversationId: input.conversationId,
-      productId: input.productId,
-    },
-    { summary: extracted.conversationSummary },
-  )
-  return { produced }
+  const candidates = extracted.memories.flatMap((memory) => {
+    if (!validTraceIds.has(memory.sourceTraceId) || memory.sensitivity === 'sensitive') return []
+    return [
+      {
+        id: input.id('mem'),
+        sourceTraceId: memory.sourceTraceId,
+        category: memory.category,
+        key: memory.key,
+        value: memory.value as JsonValue,
+        confidence: memory.confidence,
+        sensitivity: memory.sensitivity,
+      },
+    ]
+  })
+  return { conversationSummary: extracted.conversationSummary, candidates }
 }
 
 /** Consolidates ranked cross-conversation candidates into the customer memory summary. */
 export async function runMemoryConsolidation(input: {
   control: ControlPlaneRepository
-  memory: MemoryRepository
   customerId: string
   signal?: AbortSignal
-}): Promise<{ promoted: number; pruned: number }> {
+}): Promise<{ globalSummary: string; promotedIds: string[]; prunedIds: string[] }> {
   const candidates = input.control.listMemoryCandidates(input.customerId).slice(0, 50)
-  if (candidates.length === 0) return { promoted: 0, pruned: 0 }
+  if (candidates.length === 0) return { globalSummary: '', promotedIds: [], prunedIds: [] }
   const env = readLlmEnv()
   const runConsolidation = createAgentsSdkStructuredRunner({
     instructions:
@@ -116,8 +102,5 @@ export async function runMemoryConsolidation(input: {
   const allowed = new Set(candidates.map((candidate) => candidate.id))
   const promotedIds = consolidated.promotedIds.filter((id) => allowed.has(id))
   const prunedIds = consolidated.prunedIds.filter((id) => allowed.has(id))
-  promotedIds.forEach((id) => input.control.setMemoryStatus(id, 'promoted'))
-  prunedIds.forEach((id) => input.control.setMemoryStatus(id, 'pruned'))
-  input.memory.upsertCustomer(input.customerId, { globalSummary: consolidated.globalSummary })
-  return { promoted: promotedIds.length, pruned: prunedIds.length }
+  return { globalSummary: consolidated.globalSummary, promotedIds, prunedIds }
 }
