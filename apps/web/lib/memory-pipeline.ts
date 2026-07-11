@@ -43,6 +43,7 @@ export async function runMemoryExtraction(input: {
   conversationId: string
   productId: string
   id: (prefix: string) => string
+  signal?: AbortSignal
 }): Promise<{ produced: number }> {
   const traces = input.traces.queryBySession(input.sessionId)
   if (traces.length === 0) return { produced: 0 }
@@ -57,6 +58,7 @@ export async function runMemoryExtraction(input: {
     outputExample: '{"conversationSummary":"...","memories":[]}',
     toolChoice: 'none',
     maxTurns: 1,
+    signal: input.signal,
   })
   const extracted = await runExtraction()
   const validTraceIds = new Set(traces.map((trace) => trace.id))
@@ -93,6 +95,7 @@ export async function runMemoryConsolidation(input: {
   control: ControlPlaneRepository
   memory: MemoryRepository
   customerId: string
+  signal?: AbortSignal
 }): Promise<{ promoted: number; pruned: number }> {
   const candidates = input.control.listMemoryCandidates(input.customerId).slice(0, 50)
   if (candidates.length === 0) return { promoted: 0, pruned: 0 }
@@ -107,6 +110,7 @@ export async function runMemoryConsolidation(input: {
     outputExample: '{"globalSummary":"...","promotedIds":[],"prunedIds":[]}',
     toolChoice: 'none',
     maxTurns: 1,
+    signal: input.signal,
   })
   const consolidated = await runConsolidation()
   const allowed = new Set(candidates.map((candidate) => candidate.id))

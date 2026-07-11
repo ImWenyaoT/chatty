@@ -152,6 +152,7 @@ CREATE TABLE IF NOT EXISTS background_jobs (
   attempts INTEGER NOT NULL DEFAULT 0,
   max_attempts INTEGER NOT NULL DEFAULT 3,
   lease_owner TEXT,
+  claim_fence INTEGER NOT NULL DEFAULT 0,
   lease_expires_at TEXT,
   heartbeat_at TEXT,
   idempotency_key TEXT NOT NULL UNIQUE,

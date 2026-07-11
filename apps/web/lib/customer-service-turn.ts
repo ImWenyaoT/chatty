@@ -42,6 +42,7 @@ type CustomerServiceTurnOptions = {
   queuedTurnDispatcher?: (input: LegacyChatInput) => Promise<void>
   recoverRunId?: string
   cancellationPollMs?: number
+  signal?: AbortSignal
 }
 
 export class CustomerServiceProviderError extends Error {
@@ -113,6 +114,10 @@ export async function runCustomerServiceTurn(
     }
     throw new Error(`workflow run already in progress: ${started.run.id}`)
   }
+  /** Bridges an owning background-job cancellation into the durable workflow state. */
+  const externalCancellation = () =>
+    repos.control.requestRunCancellation(runId, 'background_job_cancelled')
+  options.signal?.addEventListener('abort', externalCancellation, { once: true })
   const heartbeat = setInterval(() => runController.heartbeat(runId), 20_000)
   heartbeat.unref()
   const cancellationPoll = setInterval(
@@ -294,10 +299,12 @@ export async function runCustomerServiceTurn(
 
     clearInterval(heartbeat)
     clearInterval(cancellationPoll)
+    options.signal?.removeEventListener('abort', externalCancellation)
     return response
   } catch (error) {
     clearInterval(heartbeat)
     clearInterval(cancellationPoll)
+    options.signal?.removeEventListener('abort', externalCancellation)
     const current = repos.control.getRun(runId)
     if (current && ['queued', 'running', 'paused'].includes(current.status)) {
       repos.sessions.update(session.id, { status: 'failed', currentStep: 'control_plane_error' })

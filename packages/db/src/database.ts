@@ -57,6 +57,14 @@ function ensureControlPlaneColumns(db: Db): void {
   db.exec(
     'CREATE UNIQUE INDEX IF NOT EXISTS idx_conversation_event_queue_idempotency ON conversation_event_queue (idempotency_key)',
   )
+  const jobColumns = new Set(
+    (db.prepare('PRAGMA table_info(background_jobs)').all() as { name: string }[]).map(
+      (column) => column.name,
+    ),
+  )
+  if (!jobColumns.has('claim_fence')) {
+    db.exec('ALTER TABLE background_jobs ADD COLUMN claim_fence INTEGER NOT NULL DEFAULT 0')
+  }
 }
 
 /**

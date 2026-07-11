@@ -1,103 +1,87 @@
 import { randomUUID } from 'node:crypto'
-import { getRepos } from '../apps/web/lib/db.ts'
+import { dispatchBackgroundJob } from '../apps/web/lib/background-job-worker.ts'
 import {
   recoverCustomerServiceTurns,
   runCustomerServiceTurn,
 } from '../apps/web/lib/customer-service-turn.ts'
+import { getRepos } from '../apps/web/lib/db.ts'
 import { runMemoryConsolidation, runMemoryExtraction } from '../apps/web/lib/memory-pipeline.ts'
 
 const workerId = process.env.CHATTY_WORKER_ID ?? `worker-${randomUUID()}`
 const pollMs = Number(process.env.CHATTY_JOB_POLL_MS || 1_000)
 const leaseMs = Number(process.env.CHATTY_JOB_LEASE_MS || 60_000)
 const heartbeatMs = Number(process.env.CHATTY_JOB_HEARTBEAT_MS || 20_000)
-const retryDelays = [60_000, 5 * 60_000, 30 * 60_000]
 const once = process.argv.includes('--once')
 
-/** Processes one leased background job and persists its terminal or retry state. */
+/** Processes one leased background job through the fenced dispatch seam. */
 async function processOne(): Promise<boolean> {
   const repos = getRepos()
-  const now = new Date().toISOString()
-  const job = repos.control.claimDueJob(workerId, now, leaseMs)
-  if (!job) return false
-  const jobAbort = new AbortController()
-  const heartbeat = setInterval(() => {
-    const leaseExpiresAt = new Date(Date.now() + leaseMs).toISOString()
-    if (!repos.control.heartbeatJob(job.id, workerId, leaseExpiresAt)) jobAbort.abort('lease_lost')
-  }, heartbeatMs)
-  try {
-    if (job.type === 'memory_extract') {
-      const payload = asObject(job.payload)
-      const result = await runMemoryExtraction({
-        control: repos.control,
-        traces: repos.traces,
-        memory: repos.memory,
-        sessionId: String(payload.sessionId ?? ''),
-        customerId: job.customerId ?? '',
-        conversationId: job.conversationId ?? '',
-        productId: String(payload.productId ?? 'general'),
-        id: (prefix) => `${prefix}_${randomUUID()}`,
-      })
-      if (jobAbort.signal.aborted) throw new Error('job lease lost')
-      repos.control.finishJob(
-        job.id,
-        result.produced ? 'succeeded' : 'succeeded_no_output',
-        result,
-        workerId,
-      )
-      if (result.produced && job.customerId) {
-        repos.control.enqueueJob({
-          id: `job_${randomUUID()}`,
-          type: 'memory_consolidate',
-          customerId: job.customerId,
-          payload: {},
-          dueAt: new Date().toISOString(),
-          idempotencyKey: `memory-consolidate:${job.customerId}:${new Date().toISOString().slice(0, 10)}`,
+  return dispatchBackgroundJob({
+    control: repos.control,
+    workerId,
+    leaseMs,
+    heartbeatMs,
+    executors: {
+      /** Executes one extraction claim with the dispatcher's shared cancellation signal. */
+      async memoryExtract(job, signal) {
+        const payload = asObject(job.payload)
+        const result = await runMemoryExtraction({
+          control: repos.control,
+          traces: repos.traces,
+          memory: repos.memory,
+          sessionId: String(payload.sessionId ?? ''),
+          customerId: job.customerId ?? '',
+          conversationId: job.conversationId ?? '',
+          productId: String(payload.productId ?? 'general'),
+          id: (prefix) => `${prefix}_${randomUUID()}`,
+          signal,
         })
-      }
-    } else if (job.type === 'memory_consolidate') {
-      const result = await runMemoryConsolidation({
-        control: repos.control,
-        memory: repos.memory,
-        customerId: job.customerId ?? '',
-      })
-      if (jobAbort.signal.aborted) throw new Error('job lease lost')
-      repos.control.finishJob(
-        job.id,
-        result.promoted ? 'succeeded' : 'succeeded_no_output',
-        result,
-        workerId,
-      )
-    } else {
-      const payload = asObject(job.payload)
-      const response = await runCustomerServiceTurn({
-        customerId: job.customerId ?? 'system',
-        conversationId: job.conversationId,
-        question: `系统到期跟进：${String(payload.reason ?? '请继续跟进当前租赁事项')}`,
-      })
-      repos.control.linkJobRun(job.id, response.runId)
-      if (jobAbort.signal.aborted) throw new Error('job lease lost')
-      repos.control.appendOutbox({
-        id: `out_${randomUUID()}`,
-        conversationId: job.conversationId ?? '',
-        runId: response.runId,
-        payload: { reply: response.reply, sourceJobId: job.id },
-        idempotencyKey: `outbox:${job.id}`,
-      })
-      repos.control.finishJob(job.id, 'succeeded', { traceId: response.traceId }, workerId)
-    }
-    return true
-  } catch (error) {
-    const delay = retryDelays[Math.min(job.attempts - 1, retryDelays.length - 1)]
-    repos.control.failJob(
-      job.id,
-      String(error),
-      new Date(Date.now() + delay).toISOString(),
-      workerId,
-    )
-    return true
-  } finally {
-    clearInterval(heartbeat)
-  }
+        if (result.produced && job.customerId) {
+          repos.control.enqueueJob({
+            id: `job_${randomUUID()}`,
+            type: 'memory_consolidate',
+            customerId: job.customerId,
+            payload: {},
+            dueAt: new Date().toISOString(),
+            idempotencyKey: `memory-consolidate:${job.customerId}:${new Date().toISOString().slice(0, 10)}`,
+          })
+        }
+        return {
+          status: result.produced ? ('succeeded' as const) : ('succeeded_no_output' as const),
+          event: result,
+        }
+      },
+      /** Executes one consolidation claim with the dispatcher's shared cancellation signal. */
+      async memoryConsolidate(job, signal) {
+        const result = await runMemoryConsolidation({
+          control: repos.control,
+          memory: repos.memory,
+          customerId: job.customerId ?? '',
+          signal,
+        })
+        return {
+          status: result.promoted ? ('succeeded' as const) : ('succeeded_no_output' as const),
+          event: result,
+        }
+      },
+      /** Executes one scheduled turn and returns its delivery for atomic publication. */
+      async scheduledFollowup(job, signal) {
+        const payload = asObject(job.payload)
+        const response = await runCustomerServiceTurn(
+          {
+            customerId: job.customerId ?? 'system',
+            conversationId: job.conversationId,
+            question: `系统到期跟进：${String(payload.reason ?? '请继续跟进当前租赁事项')}`,
+          },
+          { signal },
+        )
+        return {
+          event: { traceId: response.traceId },
+          followup: { runId: response.runId, payload: { reply: response.reply } },
+        }
+      },
+    },
+  })
 }
 
 /** Narrows a persisted JSON payload to an object for job dispatch. */

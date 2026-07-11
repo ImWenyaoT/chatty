@@ -87,6 +87,7 @@ export interface BackgroundJob {
   attempts: number
   maxAttempts: number
   leaseOwner?: string
+  claimFence: number
   leaseExpiresAt?: string
   lastError?: string
   runId?: string
@@ -597,23 +598,49 @@ export function createControlPlaneRepository(db: Db) {
           .get(now, now) as BackgroundJobRow | undefined
         if (!row) return undefined
         const leaseExpiresAt = new Date(new Date(now).getTime() + leaseMs).toISOString()
-        db.prepare(
+        const claimedResult = db.prepare(
           `UPDATE background_jobs SET status = 'running', attempts = attempts + 1,
-           lease_owner = ?, lease_expires_at = ?, heartbeat_at = ?, updated_at = ? WHERE id = ?`,
-        ).run(workerId, leaseExpiresAt, now, now, row.id)
-        this.appendJobEvent(row.id, 'claimed', { workerId, leaseExpiresAt })
-        return this.getJob(row.id)
+           lease_owner = ?, claim_fence = claim_fence + 1, lease_expires_at = ?, heartbeat_at = ?, updated_at = ?
+           WHERE id = ? AND claim_fence = ? AND
+           (status = 'pending' OR (status = 'running' AND lease_expires_at < ?))`,
+        ).run(workerId, leaseExpiresAt, now, now, row.id, row.claim_fence, now)
+        if (claimedResult.changes !== 1) return undefined
+        const claimed = this.getJob(row.id)!
+        this.appendJobEvent(row.id, 'claimed', {
+          workerId,
+          claimFence: claimed.claimFence,
+          leaseExpiresAt,
+        })
+        return claimed
       })()
     },
 
-    heartbeatJob(id: string, workerId: string, leaseExpiresAt: string): boolean {
+    heartbeatJob(
+      id: string,
+      workerId: string,
+      claimFence: number,
+      leaseExpiresAt: string,
+      observedAt = nowIso(),
+    ): boolean {
       const result = db
         .prepare(
           `UPDATE background_jobs SET heartbeat_at = ?, lease_expires_at = ?, updated_at = ?
-         WHERE id = ? AND status = 'running' AND lease_owner = ?`,
+         WHERE id = ? AND status = 'running' AND lease_owner = ? AND claim_fence = ?
+         AND lease_expires_at >= ?`,
         )
-        .run(nowIso(), leaseExpiresAt, nowIso(), id, workerId)
+        .run(observedAt, leaseExpiresAt, observedAt, id, workerId, claimFence, observedAt)
       return result.changes === 1
+    },
+
+    /** Checks whether one exact leased claim is still the only valid writer. */
+    ownsJobClaim(id: string, workerId: string, claimFence: number, now: string): boolean {
+      const row = db
+        .prepare(
+          `SELECT 1 FROM background_jobs WHERE id = ? AND status = 'running'
+           AND lease_owner = ? AND claim_fence = ? AND lease_expires_at >= ?`,
+        )
+        .get(id, workerId, claimFence, now)
+      return row !== undefined
     },
 
     finishJob(
@@ -621,36 +648,62 @@ export function createControlPlaneRepository(db: Db) {
       status: 'succeeded' | 'succeeded_no_output',
       payload: JsonValue = {},
       workerId?: string,
+      claimFence?: number,
     ): boolean {
+      const now = nowIso()
       const result = db
         .prepare(
           `UPDATE background_jobs SET status = ?, lease_owner = NULL, lease_expires_at = NULL,
          last_error = NULL, updated_at = ? WHERE id = ? AND status = 'running'
-         AND (? IS NULL OR lease_owner = ?)`,
+         AND (? IS NULL OR lease_owner = ?) AND (? IS NULL OR claim_fence = ?)
+         AND (? IS NULL OR lease_expires_at >= ?)`,
         )
-        .run(status, nowIso(), id, workerId ?? null, workerId ?? null)
+        .run(
+          status,
+          now,
+          id,
+          workerId ?? null,
+          workerId ?? null,
+          claimFence ?? null,
+          claimFence ?? null,
+          workerId ?? null,
+          now,
+        )
       if (result.changes) this.appendJobEvent(id, status, payload)
       return result.changes === 1
     },
 
-    failJob(id: string, error: string, retryAt?: string, workerId?: string): boolean {
+    failJob(
+      id: string,
+      error: string,
+      retryAt?: string,
+      workerId?: string,
+      claimFence?: number,
+    ): boolean {
       const job = this.getJob(id)
       if (!job) throw new Error(`background job not found: ${id}`)
       const terminal = job.attempts >= job.maxAttempts
+      const now = nowIso()
       const result = db
         .prepare(
           `UPDATE background_jobs SET status = ?, due_at = ?, lease_owner = NULL,
          lease_expires_at = NULL, last_error = ?, updated_at = ? WHERE id = ?
-         AND status = 'running' AND (? IS NULL OR lease_owner = ?)`,
+         AND status = 'running' AND (? IS NULL OR lease_owner = ?)
+         AND (? IS NULL OR claim_fence = ?)
+         AND (? IS NULL OR lease_expires_at >= ?)`,
         )
         .run(
           terminal ? 'failed' : 'pending',
           retryAt ?? job.dueAt,
           error,
-          nowIso(),
+          now,
           id,
           workerId ?? null,
           workerId ?? null,
+          claimFence ?? null,
+          claimFence ?? null,
+          workerId ?? null,
+          now,
         )
       if (result.changes) {
         this.appendJobEvent(id, terminal ? 'failed' : 'retry_scheduled', {
@@ -689,6 +742,21 @@ export function createControlPlaneRepository(db: Db) {
       ).run(jobId, type, JSON.stringify(payload), nowIso())
     },
 
+    /** Lists one job's durable audit events in insertion order. */
+    listJobEvents(jobId: string): { type: string; payload: JsonValue; createdAt: string }[] {
+      return (
+        db
+          .prepare(
+            'SELECT type, payload_json, created_at FROM background_job_events WHERE job_id = ? ORDER BY id',
+          )
+          .all(jobId) as { type: string; payload_json: string; created_at: string }[]
+      ).map((row) => ({
+        type: row.type,
+        payload: JSON.parse(row.payload_json) as JsonValue,
+        createdAt: row.created_at,
+      }))
+    },
+
     appendOutbox(input: Omit<OutboxMessage, 'status' | 'createdAt'>): OutboxMessage {
       const ts = nowIso()
       db.prepare(
@@ -704,6 +772,59 @@ export function createControlPlaneRepository(db: Db) {
         ts,
       )
       return { ...input, status: 'pending', createdAt: ts }
+    },
+
+    /** Atomically publishes one follow-up result and completes its exact fenced claim. */
+    completeFollowup(
+      id: string,
+      workerId: string,
+      claimFence: number,
+      input: Omit<OutboxMessage, 'status' | 'createdAt'>,
+      event: JsonValue = {},
+    ): boolean {
+      return db.transaction(() => {
+        const owned = this.ownsJobClaim(id, workerId, claimFence, nowIso())
+        if (!owned) {
+          this.appendJobEvent(id, 'completion_rejected', { workerId, claimFence })
+          return false
+        }
+        const ts = nowIso()
+        const outboxResult = db
+          .prepare(
+            `INSERT OR IGNORE INTO outbox_messages
+             (id, conversation_id, run_id, payload_json, status, idempotency_key, created_at)
+             VALUES (?, ?, ?, ?, 'pending', ?, ?)`,
+          )
+          .run(
+            input.id,
+            input.conversationId,
+            input.runId,
+            JSON.stringify(input.payload),
+            input.idempotencyKey,
+            ts,
+          )
+        if (outboxResult.changes !== 1) {
+          const existing = db
+            .prepare('SELECT id, run_id FROM outbox_messages WHERE idempotency_key = ?')
+            .get(input.idempotencyKey) as { id: string; run_id: string } | undefined
+          if (!existing || existing.id !== input.id || existing.run_id !== input.runId) {
+            throw new Error(`outbox idempotency conflict: ${input.idempotencyKey}`)
+          }
+          this.appendJobEvent(id, 'outbox_deduplicated', {
+            idempotencyKey: input.idempotencyKey,
+          })
+        }
+        const result = db
+          .prepare(
+            `UPDATE background_jobs SET status = 'succeeded', run_id = ?, lease_owner = NULL,
+             lease_expires_at = NULL, last_error = NULL, updated_at = ? WHERE id = ?
+             AND status = 'running' AND lease_owner = ? AND claim_fence = ?`,
+          )
+          .run(input.runId, nowIso(), id, workerId, claimFence)
+        if (result.changes !== 1) throw new Error(`background job lease lost: ${id}`)
+        this.appendJobEvent(id, 'succeeded', event)
+        return true
+      })()
     },
 
     listOutbox(limit = 100): OutboxMessage[] {
@@ -779,6 +900,7 @@ interface BackgroundJobRow {
   attempts: number
   max_attempts: number
   lease_owner: string | null
+  claim_fence: number
   lease_expires_at: string | null
   last_error: string | null
   run_id: string | null
@@ -870,6 +992,7 @@ function mapJob(row: BackgroundJobRow): BackgroundJob {
     attempts: row.attempts,
     maxAttempts: row.max_attempts,
     leaseOwner: row.lease_owner ?? undefined,
+    claimFence: row.claim_fence,
     leaseExpiresAt: row.lease_expires_at ?? undefined,
     lastError: row.last_error ?? undefined,
     runId: row.run_id ?? undefined,
