@@ -20,6 +20,7 @@ const checkpointSchema = z
   .strict()
 
 export type CheckpointSummary = z.infer<typeof checkpointSchema>
+export type CheckpointGenerator = (snapshot: MemorySnapshot) => Promise<CheckpointSummary>
 
 /** Estimates prompt tokens conservatively without provider-specific tokenization. */
 export function estimateContextTokens(value: unknown): number {
@@ -53,32 +54,51 @@ export function projectContext(input: {
 export async function compactContextIfNeeded(input: {
   control: ControlPlaneRepository
   snapshot: MemorySnapshot
+  projectionBaseSnapshot?: MemorySnapshot
+  compactableSnapshot?: MemorySnapshot
   conversationId: string
-  throughTraceId: string
+  throughTraceId?: string
   checkpointId: string
   workflowState: string
+  memories?: MemoryCandidate[]
   tokenLimit?: number
-}): Promise<{ checkpoint?: ConversationCheckpoint; tokenBefore: number; triggered: boolean }> {
+  generateCheckpoint?: CheckpointGenerator
+  checkpointModel?: string
+}): Promise<{
+  checkpoint?: ConversationCheckpoint
+  tokenBefore: number
+  triggered: boolean
+  failureKind?: 'boundary_unavailable' | 'generation_or_save_failed'
+}> {
   const tokenBefore = estimateContextTokens(input.snapshot)
   const tokenLimit = input.tokenLimit ?? Number(process.env.CHATTY_COMPACT_TOKEN_LIMIT || 24_000)
   if (tokenBefore < tokenLimit) return { tokenBefore, triggered: false }
+  if (!input.throughTraceId) {
+    return { tokenBefore, triggered: true, failureKind: 'boundary_unavailable' }
+  }
 
   try {
-    const env = readLlmEnv()
-    const runCompact = createAgentsSdkStructuredRunner({
-      instructions:
-        'You compact one Chatty conversation into a handoff checkpoint. Preserve goals, confirmed facts, decisions, preferences, workflow state, unresolved work, and references. Drop retries and raw tool noise.',
-      input: JSON.stringify({ snapshot: input.snapshot, workflowState: input.workflowState }),
-      model: createDeepSeekAgentsModelFromEnv(),
-      modelName: env.chatModel,
-      outputType: checkpointSchema,
-      outputExample:
-        '{"currentGoal":"...","confirmedFacts":[],"decisions":[],"preferences":[],"workflowState":"...","unresolved":[],"references":[]}',
-      toolChoice: 'none',
-      maxTurns: 1,
+    const modelName = input.generateCheckpoint
+      ? (input.checkpointModel ?? 'injected-checkpoint-generator')
+      : readLlmEnv().chatModel
+    const runCompact = input.generateCheckpoint ?? createCheckpointGenerator(input, modelName)
+    const summary = await runCompact(input.compactableSnapshot ?? input.snapshot)
+    const projected = projectContext({
+      snapshot: input.projectionBaseSnapshot ?? input.snapshot,
+      checkpoint: {
+        id: input.checkpointId,
+        conversationId: input.conversationId,
+        throughTraceId: input.throughTraceId,
+        version: 0,
+        summary,
+        tokenBefore,
+        tokenAfter: 0,
+        model: modelName,
+        createdAt: '',
+      },
+      memories: input.memories ?? [],
     })
-    const summary = await runCompact()
-    const tokenAfter = estimateContextTokens(summary)
+    const tokenAfter = estimateContextTokens(projected)
     const checkpoint = input.control.saveCheckpoint({
       id: input.checkpointId,
       conversationId: input.conversationId,
@@ -86,10 +106,33 @@ export async function compactContextIfNeeded(input: {
       summary: summary as unknown as JsonValue,
       tokenBefore,
       tokenAfter,
-      model: env.chatModel,
+      model: modelName,
     })
     return { checkpoint, tokenBefore, triggered: true }
   } catch {
-    return { tokenBefore, triggered: true }
+    return { tokenBefore, triggered: true, failureKind: 'generation_or_save_failed' }
   }
+}
+
+/** Builds the production DeepSeek structured checkpoint generator. */
+function createCheckpointGenerator(
+  input: { snapshot: MemorySnapshot; compactableSnapshot?: MemorySnapshot; workflowState: string },
+  modelName: string,
+): CheckpointGenerator {
+  const runStructured = createAgentsSdkStructuredRunner({
+    instructions:
+      'You compact one Chatty conversation into a handoff checkpoint. Preserve goals, confirmed facts, decisions, preferences, workflow state, unresolved work, and references. Drop retries and raw tool noise.',
+    input: JSON.stringify({
+      snapshot: input.compactableSnapshot ?? input.snapshot,
+      workflowState: input.workflowState,
+    }),
+    model: createDeepSeekAgentsModelFromEnv(),
+    modelName,
+    outputType: checkpointSchema,
+    outputExample:
+      '{"currentGoal":"...","confirmedFacts":[],"decisions":[],"preferences":[],"workflowState":"...","unresolved":[],"references":[]}',
+    toolChoice: 'none',
+    maxTurns: 1,
+  })
+  return async () => runStructured()
 }

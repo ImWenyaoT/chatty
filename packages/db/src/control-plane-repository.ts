@@ -351,6 +351,17 @@ export function createControlPlaneRepository(db: Db) {
       ).map(mapWorkflowEvent)
     },
 
+    /** Aggregates one durable workflow event type for control-plane health metrics. */
+    countRunEventsByType(type: string): number {
+      return Number(
+        (
+          db.prepare('SELECT COUNT(*) AS count FROM workflow_events WHERE type = ?').get(type) as {
+            count: number
+          }
+        ).count,
+      )
+    },
+
     enqueueConversationEvent(
       conversationId: string,
       idempotencyKey: string,

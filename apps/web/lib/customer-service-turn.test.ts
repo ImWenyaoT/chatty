@@ -117,6 +117,160 @@ test('runCustomerServiceTurn creates session, trace, continuity memory, and resp
   ])
 })
 
+test('Customer Service Turn checkpoints only the last persisted trace and replays after it', async () => {
+  const repos = createTestRepos()
+  repos.sessions.create({
+    id: 'session-compaction',
+    customerId: 'customer-compaction',
+    conversationId: 'conversation-compaction',
+  })
+  for (let index = 1; index <= 5; index += 1) {
+    repos.traces.append({
+      id: `trace-included-${index}`,
+      sessionId: 'session-compaction',
+      eventType: 'agent_reply_sent',
+      input: { question: `earlier-${index}` },
+    })
+  }
+  repos.memory.appendRecentMessages(
+    {
+      customerId: 'customer-compaction',
+      conversationId: 'conversation-compaction',
+      productId: 'general',
+    },
+    Array.from({ length: 10 }, (_, index) => ({ role: 'user', content: `raw-${index}` })),
+  )
+  let sequence = 0
+  let compactedMessages: unknown[] = []
+  let replayedMessages: unknown[] = []
+  const result = await runCustomerServiceTurn(
+    {
+      customerId: 'customer-compaction',
+      conversationId: 'conversation-compaction',
+      question: 'next question',
+    },
+    {
+      repos,
+      idGenerator: (prefix) => `${prefix}-compaction-${++sequence}`,
+      compactionTokenLimit: 1,
+      checkpointGenerator: async (compactionInput) => {
+        compactedMessages = compactionInput.recentMessages
+        return {
+          currentGoal: 'answer next question',
+          confirmedFacts: [],
+          decisions: [],
+          preferences: [],
+          workflowState: 'active',
+          unresolved: [],
+          references: ['trace-included-2'],
+        }
+      },
+      llmRuntimeFactory: () => ({
+        mode: 'agents-sdk',
+        sdkRunner: async (runtime) => {
+          replayedMessages = runtime.memory.recentMessages
+          return {
+            reply: 'done',
+            action: { action: 'answer_question', reply: 'done' },
+            toolCalls: [],
+            toolResults: [],
+            outputValidated: true as const,
+          }
+        },
+        summary: () => createEmptyLlmSummary(),
+      }),
+    },
+  )
+
+  const checkpoint = repos.control.latestCheckpoint('conversation-compaction')
+  assert.equal(checkpoint?.throughTraceId, 'trace-included-2')
+  assert.deepEqual(
+    compactedMessages.map((message) => (message as { content: string }).content),
+    ['raw-0', 'raw-1', 'raw-2', 'raw-3'],
+  )
+  assert.deepEqual(
+    replayedMessages.map((message) => (message as { content: string }).content),
+    ['raw-4', 'raw-5', 'raw-6', 'raw-7', 'raw-8', 'raw-9'],
+  )
+  assert.deepEqual(
+    repos.traces.queryBySession('session-compaction').map((trace) => trace.id),
+    [
+      'trace-included-1',
+      'trace-included-2',
+      'trace-included-3',
+      'trace-included-4',
+      'trace-included-5',
+      result.traceId,
+    ],
+  )
+})
+
+test('Customer Service Turn records non-destructive compaction failure evidence', async () => {
+  const repos = createTestRepos()
+  repos.sessions.create({
+    id: 'session-failed-compaction',
+    customerId: 'customer-failed-compaction',
+    conversationId: 'conversation-failed-compaction',
+  })
+  repos.traces.append({
+    id: 'trace-before-failure',
+    sessionId: 'session-failed-compaction',
+    eventType: 'agent_reply_sent',
+    input: { question: 'earlier' },
+  })
+  repos.memory.appendRecentMessages(
+    {
+      customerId: 'customer-failed-compaction',
+      conversationId: 'conversation-failed-compaction',
+      productId: 'general',
+    },
+    Array.from({ length: 8 }, (_, index) => ({ role: 'user', content: `raw-${index}` })),
+  )
+  const previous = repos.control.saveCheckpoint({
+    id: 'checkpoint-before-failure',
+    conversationId: 'conversation-failed-compaction',
+    throughTraceId: 'trace-before-failure',
+    summary: { currentGoal: 'preserve me' },
+    tokenBefore: 100,
+    tokenAfter: 20,
+    model: 'deepseek-v4-pro',
+  })
+  let sequence = 0
+  const result = await runCustomerServiceTurn(
+    {
+      customerId: 'customer-failed-compaction',
+      conversationId: 'conversation-failed-compaction',
+      question: 'continue',
+    },
+    {
+      repos,
+      idGenerator: (prefix) => `${prefix}-failed-compaction-${++sequence}`,
+      compactionTokenLimit: 1,
+      checkpointGenerator: async () => {
+        throw new Error('provider unavailable')
+      },
+      llmRuntimeFactory: () => ({
+        mode: 'agents-sdk',
+        sdkRunner: async () => ({
+          reply: 'fallback succeeded',
+          action: { action: 'answer_question', reply: 'fallback succeeded' },
+          toolCalls: [],
+          toolResults: [],
+          outputValidated: true as const,
+        }),
+        summary: () => createEmptyLlmSummary(),
+      }),
+    },
+  )
+
+  assert.deepEqual(repos.control.latestCheckpoint('conversation-failed-compaction'), previous)
+  assert.equal(
+    repos.control.listRunEvents(result.runId).some((event) => event.type === 'compaction_failed'),
+    true,
+  )
+  assert.equal(repos.control.countRunEventsByType('compaction_failed'), 1)
+})
+
 test('runCustomerServiceTurn persists configuration failure state and trace', async () => {
   const repos = createTestRepos()
   await assert.rejects(
