@@ -73,6 +73,8 @@ CREATE TABLE IF NOT EXISTS workflow_runs (
   version INTEGER NOT NULL DEFAULT 1,
   failure_kind TEXT,
   result_json TEXT,
+  cancel_requested_at TEXT,
+  cancel_reason TEXT,
   lease_owner TEXT,
   lease_expires_at TEXT,
   heartbeat_at TEXT,

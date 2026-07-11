@@ -23,6 +23,7 @@ import {
   runCustomerServiceTurn,
   type CustomerServiceTurnRepos,
 } from './customer-service-turn'
+import { HarnessRunController } from './harness-run-controller'
 
 /** Builds in-memory repositories for one Customer Service Turn use-case test. */
 function createTestRepos(): CustomerServiceTurnRepos & {
@@ -386,6 +387,127 @@ test('runCustomerServiceTurn re-enters multiple durable FIFO inputs through the 
   assert.equal(repos.traces.queryBySession(session?.id ?? '').length, 3)
   assert.equal(repos.control.claimConversationEvent('conversation-real-fifo'), undefined)
   db.close()
+})
+
+test('runCustomerServiceTurn observes a durable cancel from another controller and fences side effects', async () => {
+  const path = join(mkdtempSync(join(tmpdir(), 'chatty-cancel-')), 'control.sqlite')
+  const workerDb = openDatabase(path)
+  const workerRepos = {
+    sessions: createSessionRepository(workerDb),
+    traces: createTraceRepository(workerDb),
+    memory: createMemoryRepository(workerDb),
+    knowledge: createKnowledgeRepository(workerDb),
+    control: createControlPlaneRepository(workerDb),
+  }
+  const cancellerDb = openDatabase(path)
+  const cancellerControl = createControlPlaneRepository(cancellerDb)
+  let executionSignal!: AbortSignal
+  const turn = runCustomerServiceTurn(
+    { customerId: 'cx-cancel', conversationId: 'conversation-cancel', question: '稍后提醒我' },
+    {
+      repos: workerRepos,
+      idGenerator: (prefix) => `${prefix}-cancel`,
+      idempotencyKey: 'request-cancel',
+      cancellationPollMs: 5,
+      llmRuntimeFactory: () => ({
+        mode: 'agents-sdk',
+        sdkRunner: async (runtime) => {
+          executionSignal = runtime.signal!
+          await new Promise<void>((_resolve, reject) => {
+            runtime.signal?.addEventListener(
+              'abort',
+              () => reject(runtime.signal?.reason ?? new Error('cancelled')),
+              { once: true },
+            )
+          })
+          throw new Error('unreachable')
+        },
+        summary: () => createEmptyLlmSummary(),
+      }),
+    },
+  )
+
+  while (!executionSignal) await new Promise((resolve) => setTimeout(resolve, 0))
+  const firstCancel = new HarnessRunController(cancellerControl).cancel('run-cancel')
+  const repeatedCancel = new HarnessRunController(cancellerControl).cancel('run-cancel')
+  assert.equal(firstCancel.cancelRequestedAt !== undefined, true)
+  assert.equal(repeatedCancel.cancelRequestedAt, firstCancel.cancelRequestedAt)
+  await assert.rejects(turn, /cancel/i)
+
+  assert.equal(executionSignal.aborted, true)
+  assert.equal(workerRepos.control.getRun('run-cancel')?.status, 'cancelled')
+  assert.equal(workerRepos.traces.queryBySession('sess-cancel').length, 0)
+  assert.deepEqual(
+    workerRepos.memory.snapshot({
+      customerId: 'cx-cancel',
+      conversationId: 'conversation-cancel',
+    }).recentMessages,
+    [],
+  )
+  assert.equal(workerRepos.control.listJobs().length, 0)
+  assert.equal(
+    workerRepos.control
+      .listRunEvents('run-cancel')
+      .filter((event) => event.type === 'cancel_requested').length,
+    1,
+  )
+  cancellerDb.close()
+  workerDb.close()
+  const restartedDb = openDatabase(path)
+  const restartedRepos = {
+    sessions: createSessionRepository(restartedDb),
+    traces: createTraceRepository(restartedDb),
+    memory: createMemoryRepository(restartedDb),
+    knowledge: createKnowledgeRepository(restartedDb),
+    control: createControlPlaneRepository(restartedDb),
+  }
+  assert.deepEqual(await recoverCustomerServiceTurns({ repos: restartedRepos }), [])
+  assert.equal(restartedRepos.control.getRun('run-cancel')?.status, 'cancelled')
+  restartedDb.close()
+})
+
+test('a cancelled Customer Service Turn continues the durable FIFO with the next input', async () => {
+  const repos = createTestRepos()
+  let signal!: AbortSignal
+  const dispatched: string[] = []
+  const turn = runCustomerServiceTurn(
+    {
+      customerId: 'cx-cancel-fifo',
+      conversationId: 'conversation-cancel-fifo',
+      question: '第一条',
+    },
+    {
+      repos,
+      idGenerator: (prefix) => `${prefix}-cancel-fifo`,
+      cancellationPollMs: 5,
+      queuedTurnDispatcher: async (input) => {
+        dispatched.push(input.question)
+      },
+      llmRuntimeFactory: () => ({
+        mode: 'agents-sdk',
+        sdkRunner: async (runtime) => {
+          signal = runtime.signal!
+          await new Promise<void>((_resolve, reject) =>
+            runtime.signal?.addEventListener('abort', () => reject(runtime.signal?.reason), {
+              once: true,
+            }),
+          )
+          throw new Error('unreachable')
+        },
+        summary: () => createEmptyLlmSummary(),
+      }),
+    },
+  )
+  while (!signal) await new Promise((resolve) => setTimeout(resolve, 0))
+  repos.control.enqueueConversationEvent('conversation-cancel-fifo', 'queued-after-cancel', {
+    eventId: 'queued-after-cancel',
+    customerId: 'cx-cancel-fifo',
+    conversationId: 'conversation-cancel-fifo',
+    payload: { question: '第二条' },
+  })
+  new HarnessRunController(repos.control).cancel('run-cancel-fifo')
+  await assert.rejects(turn, /cancel/i)
+  assert.deepEqual(dispatched, ['第二条'])
 })
 
 /** Builds the zero-usage telemetry summary used by deterministic use-case tests. */

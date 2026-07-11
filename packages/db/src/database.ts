@@ -34,7 +34,14 @@ function ensureControlPlaneColumns(db: Db): void {
       (column) => column.name,
     ),
   )
-  for (const column of ['lease_owner', 'lease_expires_at', 'heartbeat_at', 'result_json']) {
+  for (const column of [
+    'lease_owner',
+    'lease_expires_at',
+    'heartbeat_at',
+    'result_json',
+    'cancel_requested_at',
+    'cancel_reason',
+  ]) {
     if (!workflowColumns.has(column)) {
       db.exec(`ALTER TABLE workflow_runs ADD COLUMN ${column} TEXT`)
     }

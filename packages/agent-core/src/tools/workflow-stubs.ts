@@ -43,15 +43,18 @@ export const scheduleFollowupTool: RuntimeTool<
 
 /** Builds the follow-up capability around a durable scheduler when one is available. */
 export function createScheduleFollowupTool(
-  schedule?: (input: Record<string, JsonValue>) => Promise<JsonValue> | JsonValue,
+  schedule?: (
+    input: Record<string, JsonValue>,
+    options?: { signal?: AbortSignal },
+  ) => Promise<JsonValue> | JsonValue,
 ): RuntimeTool<Record<string, JsonValue>, JsonValue> {
   return {
     name: 'schedule_followup',
     description: 'Schedule a follow-up touch on a conversation for a future time.',
     risk: 'low',
     approvalRequired: false,
-    async execute(input) {
-      if (schedule) return schedule(input)
+    async execute(input, options) {
+      if (schedule) return schedule(input, options)
       const conversationId = String(input.conversationId ?? '')
       const dueAt = String(input.dueAt ?? '')
       const reason = String(input.reason ?? '')

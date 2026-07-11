@@ -97,9 +97,15 @@ export function createPlaygroundSdkRunner(
           runtime.emitEvent?.('tool_attempted', call as unknown as JsonValue)
           let result: JsonValue
           try {
-            result = await runtime.registry.invokeWithPolicy(name, args, runtime.policy, {
-              sessionStatus: runtime.sessionStatus,
-            })
+            result = await runtime.registry.invokeWithPolicy(
+              name,
+              args,
+              runtime.policy,
+              {
+                sessionStatus: runtime.sessionStatus,
+              },
+              { signal: runtime.signal },
+            )
           } catch (error) {
             if (!(error instanceof ApprovalRequiredError) && !(error instanceof PolicyDenyError)) {
               throw error

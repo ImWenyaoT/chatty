@@ -41,12 +41,20 @@ type CustomerServiceTurnOptions = {
   idempotencyKey?: string
   queuedTurnDispatcher?: (input: LegacyChatInput) => Promise<void>
   recoverRunId?: string
+  cancellationPollMs?: number
 }
 
 export class CustomerServiceProviderError extends Error {
   constructor(cause: unknown) {
     super('DeepSeek Agents SDK run failed', { cause })
     this.name = 'CustomerServiceProviderError'
+  }
+}
+
+export class CustomerServiceCancelledError extends Error {
+  constructor() {
+    super('Customer Service Turn cancelled')
+    this.name = 'CustomerServiceCancelledError'
   }
 }
 
@@ -107,6 +115,11 @@ export async function runCustomerServiceTurn(
   }
   const heartbeat = setInterval(() => runController.heartbeat(runId), 20_000)
   heartbeat.unref()
+  const cancellationPoll = setInterval(
+    () => runController.observeCancellation(runId),
+    options.cancellationPollMs ?? 100,
+  )
+  cancellationPoll.unref()
   try {
     const snapshot = repos.memory.snapshot({
       customerId: input.customerId,
@@ -153,6 +166,7 @@ export async function runCustomerServiceTurn(
     try {
       llm = options.llmRuntimeFactory ? options.llmRuntimeFactory() : createPlaygroundLlmRuntime()
     } catch (error) {
+      throwIfTurnCancelled(started.signal, repos.control, runId)
       repos.traces.append({
         id: traceId,
         sessionId: session.id,
@@ -173,7 +187,8 @@ export async function runCustomerServiceTurn(
         event,
         memory: projectedSnapshot,
         registry: createDefaultToolRegistry(repos.knowledge, {
-          scheduleFollowup: (args) => {
+          scheduleFollowup: (args, capabilityOptions) => {
+            capabilityOptions?.signal?.throwIfAborted()
             const job = repos.control.enqueueJob({
               id: id('job'),
               type: 'scheduled_followup',
@@ -193,6 +208,7 @@ export async function runCustomerServiceTurn(
         emitEvent: (type, payload = {}) => runController.event(runId, type, payload),
       })
     } catch (error) {
+      throwIfTurnCancelled(started.signal, repos.control, runId)
       repos.traces.append({
         id: traceId,
         sessionId: session.id,
@@ -274,41 +290,67 @@ export async function runCustomerServiceTurn(
       runController.event(runId, 'completed', { traceId, terminality: result.terminality })
     }
 
-    let queuedEntry = repos.control.claimConversationEvent(conversationId)
-    while (queuedEntry) {
-      const queuedInput = inputFromQueuedEvent(queuedEntry.event)
-      if (queuedInput) {
-        try {
-          if (options.queuedTurnDispatcher) {
-            await options.queuedTurnDispatcher(queuedInput)
-          } else {
-            await runCustomerServiceTurn(queuedInput, {
-              ...options,
-              idempotencyKey: queuedEventId(queuedEntry.event),
-            })
-          }
-          repos.control.completeConversationEvent(queuedEntry.id)
-        } catch (error) {
-          repos.control.releaseConversationEvent(queuedEntry.id)
-          throw error
-        }
-      } else {
-        repos.control.completeConversationEvent(queuedEntry.id)
-      }
-      if (!options.queuedTurnDispatcher) break
-      queuedEntry = repos.control.claimConversationEvent(conversationId)
-    }
+    await drainQueuedTurns(conversationId, repos, options)
 
     clearInterval(heartbeat)
+    clearInterval(cancellationPoll)
     return response
   } catch (error) {
     clearInterval(heartbeat)
+    clearInterval(cancellationPoll)
     const current = repos.control.getRun(runId)
     if (current && ['queued', 'running', 'paused'].includes(current.status)) {
       repos.sessions.update(session.id, { status: 'failed', currentStep: 'control_plane_error' })
       runController.transition(runId, 'failed', { failureKind: 'control_plane_error' })
     }
+    if (current?.status === 'cancelled') {
+      await drainQueuedTurns(conversationId, repos, options)
+      throw new CustomerServiceCancelledError()
+    }
     throw error
+  }
+}
+
+/** Normalizes any observed durable or in-process cancellation into the public turn error. */
+function throwIfTurnCancelled(
+  signal: AbortSignal,
+  control: ControlPlaneRepository,
+  runId: string,
+): void {
+  if (signal.aborted || control.getRun(runId)?.cancelRequestedAt) {
+    throw new CustomerServiceCancelledError()
+  }
+}
+
+/** Dispatches durable FIFO inputs after any terminal workflow outcome. */
+async function drainQueuedTurns(
+  conversationId: string,
+  repos: CustomerServiceTurnRepos,
+  options: CustomerServiceTurnOptions,
+): Promise<void> {
+  let queuedEntry = repos.control.claimConversationEvent(conversationId)
+  while (queuedEntry) {
+    const queuedInput = inputFromQueuedEvent(queuedEntry.event)
+    if (queuedInput) {
+      try {
+        if (options.queuedTurnDispatcher) {
+          await options.queuedTurnDispatcher(queuedInput)
+        } else {
+          await runCustomerServiceTurn(queuedInput, {
+            ...options,
+            idempotencyKey: queuedEventId(queuedEntry.event),
+          })
+        }
+        repos.control.completeConversationEvent(queuedEntry.id)
+      } catch (error) {
+        repos.control.releaseConversationEvent(queuedEntry.id)
+        throw error
+      }
+    } else {
+      repos.control.completeConversationEvent(queuedEntry.id)
+    }
+    if (!options.queuedTurnDispatcher) break
+    queuedEntry = repos.control.claimConversationEvent(conversationId)
   }
 }
 

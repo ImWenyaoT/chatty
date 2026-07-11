@@ -6,7 +6,7 @@ import {
 } from '@rental/db'
 import type { JsonValue } from '@rental/shared'
 
-const activeAbortControllers = new Map<string, AbortController>()
+const activeAbortControllers = new Map<string, { controller: AbortController; owner: string }>()
 
 /** Coordinates one durable active run per conversation and emits its ordered lifecycle events. */
 export class HarnessRunController {
@@ -37,7 +37,7 @@ export class HarnessRunController {
       const replayed = false
       this.repository.appendRunEvent(run.id, 'scheduled', input.event)
       const controller = new AbortController()
-      activeAbortControllers.set(run.id, controller)
+      activeAbortControllers.set(run.id, { controller, owner: this.owner })
       const claimed = this.repository.claimRun(run.id, this.owner, new Date().toISOString())
       if (!claimed) throw new Error(`workflow run could not be claimed: ${run.id}`)
       return { run: claimed, signal: controller.signal, replayed }
@@ -70,7 +70,7 @@ export class HarnessRunController {
     const controller = new AbortController()
     const run = this.repository.claimRun(runId, this.owner, new Date().toISOString())
     if (!run) throw new Error(`workflow run is not recoverable: ${runId}`)
-    activeAbortControllers.set(runId, controller)
+    activeAbortControllers.set(runId, { controller, owner: this.owner })
     this.repository.appendRunEvent(runId, 'recovered', { owner: this.owner })
     return { run, signal: controller.signal }
   }
@@ -83,7 +83,9 @@ export class HarnessRunController {
   /** Renews the active workflow lease while model or tool execution is still running. */
   heartbeat(runId: string): boolean {
     const renewed = this.repository.heartbeatRun(runId, this.owner, new Date().toISOString())
-    if (!renewed) activeAbortControllers.get(runId)?.abort('workflow_lease_lost')
+    if (!renewed) {
+      activeAbortControllers.get(runId)?.controller.abort('workflow_lease_lost')
+    }
     return renewed
   }
 
@@ -92,10 +94,22 @@ export class HarnessRunController {
     return this.repository.saveRunResult(runId, this.owner, result)
   }
 
-  /** Cancels the active signal before persisting the terminal workflow state. */
+  /** Durably requests cancellation, then wakes any same-process signal as an optimization. */
   cancel(runId: string): WorkflowRun {
-    activeAbortControllers.get(runId)?.abort()
-    return this.transition(runId, 'cancelled', { reason: 'explicit_cancel' })
+    const run = this.repository.requestRunCancellation(runId)
+    const active = activeAbortControllers.get(runId)
+    if (active?.owner === this.owner) active.controller.abort(new Error('workflow cancelled'))
+    return run
+  }
+
+  /** Aborts this worker's shared signal after observing durable cancellation. */
+  observeCancellation(runId: string): boolean {
+    const run = this.repository.getRun(runId)
+    if (!run?.cancelRequestedAt) return false
+    activeAbortControllers
+      .get(runId)
+      ?.controller.abort(new Error(run.cancelReason ?? 'workflow cancelled'))
+    return true
   }
 
   /** Resumes a durable human handoff only for the worker that acquires the next lease. */

@@ -124,6 +124,7 @@ export function createAgentsSdkToolLoopFn(options: AgentsSdkToolLoopOptions) {
   return async (input: string): Promise<string> => {
     const result = await run(agent, input, {
       maxTurns: options.maxTurns ?? 4,
+      signal: options.signal,
     })
     if (options.telemetry) {
       for (const response of result.rawResponses ?? []) {

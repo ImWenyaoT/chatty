@@ -59,6 +59,32 @@ test('schedule_followup echoes a deterministic receipt', async () => {
   assert.equal((out as { followupId: string }).followupId, 'FU-c:SUIT-001')
 })
 
+test('schedule_followup observes cancellation while its capability is running', async () => {
+  const controller = new AbortController()
+  let capabilitySignal!: AbortSignal
+  const tools = createDefaultToolRegistry(undefined, {
+    scheduleFollowup: async (_input, options) => {
+      assert.ok(options?.signal)
+      capabilitySignal = options.signal
+      await new Promise<void>((_resolve, reject) =>
+        options?.signal?.addEventListener('abort', () => reject(options.signal?.reason), {
+          once: true,
+        }),
+      )
+      return { ok: true }
+    },
+  })
+  const execution = tools.invoke(
+    'schedule_followup',
+    { conversationId: 'cancel-tool', dueAt: '2026-07-12T00:00:00.000Z', reason: 'test' },
+    { signal: controller.signal },
+  )
+  while (!capabilitySignal) await new Promise((resolve) => setTimeout(resolve, 0))
+  controller.abort(new Error('workflow cancelled'))
+  await assert.rejects(execution, /workflow cancelled/)
+  assert.equal(capabilitySignal, controller.signal)
+})
+
 test('issue_refund is high risk + approvalRequired => invoke throws ApprovalRequiredError', async () => {
   await assert.rejects(
     () => registry().invoke('issue_refund', { orderNo: 'ORD-1001', amount: 100, reason: '破损' }),

@@ -31,12 +31,17 @@ export class ToolRegistry {
   }
 
   /** Runs a tool by name, throwing a typed error if unknown/approval-gated. */
-  async invoke(name: string, args: Record<string, JsonValue>): Promise<JsonValue> {
+  async invoke(
+    name: string,
+    args: Record<string, JsonValue>,
+    options?: { signal?: AbortSignal },
+  ): Promise<JsonValue> {
     const tool = this.tools.get(name)
     if (!tool) throw new ToolNotFoundError(name)
     // Hard safety gate: approvalRequired tools (high risk) never auto-run.
     if (tool.approvalRequired) throw new ApprovalRequiredError(name)
-    return tool.execute(args)
+    options?.signal?.throwIfAborted()
+    return tool.execute(args, options)
   }
 
   /**
@@ -49,6 +54,7 @@ export class ToolRegistry {
     args: Record<string, JsonValue>,
     policy: Policy,
     context: PolicyContext,
+    options?: { signal?: AbortSignal },
   ): Promise<JsonValue> {
     const tool = this.tools.get(name)
     if (!tool) throw new ToolNotFoundError(name)
@@ -58,7 +64,8 @@ export class ToolRegistry {
     )
     if (decision.action === 'deny') throw new PolicyDenyError(name, decision.reason)
     if (decision.action === 'require_approval') throw new ApprovalRequiredError(name)
-    return tool.execute(args)
+    options?.signal?.throwIfAborted()
+    return tool.execute(args, options)
   }
 }
 
@@ -93,7 +100,10 @@ export class PolicyDenyError extends Error {
 export function createDefaultToolRegistry(
   knowledge?: KnowledgeSearcher,
   workflow?: {
-    scheduleFollowup?: (input: Record<string, JsonValue>) => Promise<JsonValue> | JsonValue
+    scheduleFollowup?: (
+      input: Record<string, JsonValue>,
+      options?: { signal?: AbortSignal },
+    ) => Promise<JsonValue> | JsonValue
   },
 ): ToolRegistry {
   const registry = new ToolRegistry()

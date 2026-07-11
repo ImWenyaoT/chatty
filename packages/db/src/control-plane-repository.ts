@@ -26,6 +26,8 @@ export interface WorkflowRun {
   version: number
   failureKind?: string
   result?: JsonValue
+  cancelRequestedAt?: string
+  cancelReason?: string
   leaseOwner?: string
   leaseExpiresAt?: string
   createdAt: string
@@ -181,6 +183,27 @@ export function createControlPlaneRepository(db: Db) {
         .prepare('SELECT * FROM workflow_runs WHERE idempotency_key = ?')
         .get(idempotencyKey) as WorkflowRunRow | undefined
       return row ? mapRun(row) : undefined
+    },
+
+    /** Durably requests cancellation and terminally fences the run from further owner writes. */
+    requestRunCancellation(id: string, reason = 'explicit_cancel'): WorkflowRun {
+      return db.transaction(() => {
+        const current = this.getRun(id)
+        if (!current) throw new Error(`workflow run not found: ${id}`)
+        if (current.cancelRequestedAt) return current
+        const ts = nowIso()
+        const result = db
+          .prepare(
+            `UPDATE workflow_runs SET status = 'cancelled', cancel_requested_at = ?,
+             cancel_reason = ?, finished_at = ?, version = version + 1, updated_at = ?
+             WHERE id = ? AND status NOT IN ('completed','failed','cancelled')`,
+          )
+          .run(ts, reason, ts, ts, id)
+        if (result.changes !== 1) return this.getRun(id)!
+        this.appendRunEvent(id, 'cancel_requested', { reason })
+        this.appendRunEvent(id, 'state_changed', { status: 'cancelled', reason })
+        return this.getRun(id)!
+      })()
     },
 
     /** Lists workflows whose queued or expired lease state makes them eligible for recovery. */
@@ -704,6 +727,8 @@ interface WorkflowRunRow {
   version: number
   failure_kind: string | null
   result_json: string | null
+  cancel_requested_at: string | null
+  cancel_reason: string | null
   lease_owner: string | null
   lease_expires_at: string | null
   created_at: string
@@ -781,6 +806,8 @@ function mapRun(row: WorkflowRunRow): WorkflowRun {
     version: row.version,
     failureKind: row.failure_kind ?? undefined,
     result: row.result_json ? (JSON.parse(row.result_json) as JsonValue) : undefined,
+    cancelRequestedAt: row.cancel_requested_at ?? undefined,
+    cancelReason: row.cancel_reason ?? undefined,
     leaseOwner: row.lease_owner ?? undefined,
     leaseExpiresAt: row.lease_expires_at ?? undefined,
     createdAt: row.created_at,

@@ -90,7 +90,7 @@ export interface RuntimeTool<
   parameters?: Record<string, JsonValue>
   risk: RuntimeToolRisk
   approvalRequired: boolean
-  execute(input: TInput): Promise<TOutput>
+  execute(input: TInput, options?: { signal?: AbortSignal }): Promise<TOutput>
 }
 
 export interface MemorySnapshot {
