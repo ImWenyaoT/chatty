@@ -22,6 +22,7 @@ const rootPackageJson = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'
 const ciWorkflow = readFileSync(resolve(repoRoot, '.github/workflows/ci.yml'), 'utf8')
 const evalWorkflow = readFileSync(resolve(repoRoot, '.github/workflows/eval.yml'), 'utf8')
 const agentInstructions = readFileSync(resolve(repoRoot, 'AGENTS.md'), 'utf8')
+const designDoc = readFileSync(resolve(repoRoot, 'docs/design.md'), 'utf8')
 const developmentMethodDoc = readFileSync(resolve(repoRoot, 'docs/development-method.md'), 'utf8')
 
 /** 列出当前源码和当前文档文件；archive 是历史证据，不参与当前 runtime 契约。 */
@@ -109,9 +110,27 @@ test('manual LLM golden eval remains documented as the integration gate for mode
   assert.match(evalWorkflow, /OPENAI_API_KEY/)
 })
 
-test('repository maintenance rules protect read-only inputs and ignore boundaries', () => {
-  assert.match(agentInstructions, /docs\/jd\.md.*只读/)
-  assert.match(agentInstructions, /\.gitignore.*随项目演进维护/)
+test('agent instructions retain the current issue-tracker and pull-request contract', () => {
+  assert.match(agentInstructions, /GitHub Issues/)
+  for (const label of [
+    'needs-triage',
+    'needs-info',
+    'ready-for-agent',
+    'ready-for-human',
+    'wontfix',
+  ]) {
+    assert.match(agentInstructions, new RegExp(`\\b${label}\\b`))
+  }
+  assert.match(agentInstructions, /single-context repo/)
+  assert.match(agentInstructions, /\[chatty\] <Title>/)
+  assert.match(agentInstructions, /pnpm lint/)
+  assert.match(agentInstructions, /pnpm test/)
+})
+
+test('design contract protects the private JD input and repository boundary', () => {
+  assert.match(designDoc, /docs\/jd\.md.*私有输入/)
+  assert.match(designDoc, /\.gitignore.*不随开源仓分发/)
+  assert.match(designDoc, /不把实现决策反写回去/)
 })
 
 test('development method keeps implementation inside the reference bounds', () => {
@@ -130,8 +149,6 @@ test('development method keeps implementation inside the reference bounds', () =
 })
 
 test('reference debugging method is documented for future agent work', () => {
-  assert.match(agentInstructions, /参考实现三选一/)
-  assert.match(agentInstructions, /搭积木复现法/)
   assert.match(developmentMethodDoc, /参考实现三选一/)
   assert.match(developmentMethodDoc, /搭积木复现法/)
   assert.match(developmentMethodDoc, /自动化回归/)
