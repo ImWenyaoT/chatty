@@ -94,6 +94,7 @@ export function createPlaygroundSdkRunner(
             approvalRequired: capability.approvalRequired,
           }
           toolCalls.push(call)
+          runtime.emitEvent?.('tool_attempted', call as unknown as JsonValue)
           let result: JsonValue
           try {
             result = await runtime.registry.invokeWithPolicy(name, args, runtime.policy, {
@@ -106,6 +107,7 @@ export function createPlaygroundSdkRunner(
             result = { error: error.name, message: error.message }
           }
           toolResults.push(result)
+          runtime.emitEvent?.('tool_completed', { toolName: name, result })
           if (name === 'search_knowledge' && result && typeof result === 'object') {
             const output = (result as { output?: unknown }).output
             if (typeof output === 'string') {
@@ -130,7 +132,9 @@ export function createPlaygroundSdkRunner(
       toolUseBehavior: runtime.runPolicy.toolUseBehavior,
       maxTurns: runtime.runPolicy.maxTurns,
       telemetry: (record) => records.push(record),
+      signal: runtime.signal,
     })
+    runtime.emitEvent?.('model_called', { model: env.chatModel })
     const output = await runSdk()
     return {
       reply: output.reply,

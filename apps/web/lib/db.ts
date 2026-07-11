@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 import {
   createKnowledgeRepository,
+  createControlPlaneRepository,
   createMemoryRepository,
   createSessionRepository,
   createTraceRepository,
@@ -14,6 +15,7 @@ import {
   type SessionRepository,
   type TraceRepository,
   type TraceReviewRepository,
+  type ControlPlaneRepository,
 } from '@rental/db'
 
 // One SQLite connection per server process. The agent loop is single-process
@@ -27,6 +29,7 @@ interface Repos {
   reviews: TraceReviewRepository
   memory: MemoryRepository
   knowledge: KnowledgeRepository
+  control: ControlPlaneRepository
 }
 
 let repos: Repos | undefined
@@ -49,6 +52,7 @@ function ensureInitialized(): Repos {
     reviews: createTraceReviewRepository(db),
     memory: createMemoryRepository(db),
     knowledge: createKnowledgeRepository(db),
+    control: createControlPlaneRepository(db),
   }
   return repos
 }

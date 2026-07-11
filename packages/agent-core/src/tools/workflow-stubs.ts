@@ -36,22 +36,33 @@ export const createHandoffTool: RuntimeTool<Record<string, JsonValue>, JsonValue
 
 // --- schedule_followup(conversationId, dueAt, reason) -----------------------
 
-export const scheduleFollowupTool: RuntimeTool<Record<string, JsonValue>, JsonValue> = {
-  name: 'schedule_followup',
-  description: 'Schedule a follow-up touch on a conversation for a future time.',
-  risk: 'low',
-  approvalRequired: false,
-  async execute(input) {
-    const conversationId = String(input.conversationId ?? '')
-    const dueAt = String(input.dueAt ?? '')
-    const reason = String(input.reason ?? '')
-    return {
-      ok: true,
-      followupId: `FU-${conversationId || 'unknown'}`,
-      conversationId,
-      dueAt,
-      reason,
-      createdAt: nowIso(),
-    }
-  },
+export const scheduleFollowupTool: RuntimeTool<
+  Record<string, JsonValue>,
+  JsonValue
+> = createScheduleFollowupTool()
+
+/** Builds the follow-up capability around a durable scheduler when one is available. */
+export function createScheduleFollowupTool(
+  schedule?: (input: Record<string, JsonValue>) => Promise<JsonValue> | JsonValue,
+): RuntimeTool<Record<string, JsonValue>, JsonValue> {
+  return {
+    name: 'schedule_followup',
+    description: 'Schedule a follow-up touch on a conversation for a future time.',
+    risk: 'low',
+    approvalRequired: false,
+    async execute(input) {
+      if (schedule) return schedule(input)
+      const conversationId = String(input.conversationId ?? '')
+      const dueAt = String(input.dueAt ?? '')
+      const reason = String(input.reason ?? '')
+      return {
+        ok: true,
+        followupId: `FU-${conversationId || 'unknown'}`,
+        conversationId,
+        dueAt,
+        reason,
+        createdAt: nowIso(),
+      }
+    },
+  }
 }

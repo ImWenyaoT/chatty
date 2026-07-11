@@ -33,11 +33,15 @@ export type AgentsSdkToolLoopOptions = {
   telemetry?: (record: ChatCompletionTelemetry) => void
   toolChoice?: 'auto' | 'required' | 'none' | (string & {})
   toolUseBehavior?: 'run_llm_again' | 'stop_on_first_tool' | { stopAtToolNames: string[] }
+  signal?: AbortSignal
 }
 
 export const CUSTOMER_SERVICE_FINAL_OUTPUT_SCHEMA = z.object({ reply: z.string().min(1) }).strict()
 
 export type CustomerServiceFinalOutput = z.infer<typeof CUSTOMER_SERVICE_FINAL_OUTPUT_SCHEMA>
+
+export type AgentsSdkStructuredRunnerOptions<TSchema extends z.ZodObject> =
+  AgentsSdkToolLoopOptions & { outputType: TSchema; outputExample: string }
 
 /**
  * Builds the Agents SDK Chat Completions model around DeepSeek's OpenAI-format
@@ -132,17 +136,28 @@ export function createAgentsSdkToolLoopFn(options: AgentsSdkToolLoopOptions) {
 
 /** Runs one structured, bounded customer-service turn through a clone of one base Agent. */
 export function createAgentsSdkCustomerServiceRunner(options: AgentsSdkToolLoopOptions) {
+  return createAgentsSdkStructuredRunner({
+    ...options,
+    outputType: CUSTOMER_SERVICE_FINAL_OUTPUT_SCHEMA,
+    outputExample: '{"reply":"..."}',
+  })
+}
+
+/** Runs one bounded structured-output clone of the single base Chatty Agent. */
+export function createAgentsSdkStructuredRunner<TSchema extends z.ZodObject>(
+  options: AgentsSdkStructuredRunnerOptions<TSchema>,
+) {
   setTracingDisabled(true)
   const baseAgent = Agent.create({
     name: options.name ?? 'Chatty Customer Service Agent',
-    instructions: `${options.instructions}\nFinal output must be one JSON object exactly shaped like {"reply":"..."}.`,
+    instructions: `${options.instructions}\nFinal output must be one JSON object shaped like ${options.outputExample}.`,
     model: options.model,
-    outputType: CUSTOMER_SERVICE_FINAL_OUTPUT_SCHEMA,
+    outputType: options.outputType,
     tools: [],
   })
   const modelName = options.modelName ?? 'deepseek-v4-pro'
 
-  return async (): Promise<CustomerServiceFinalOutput> => {
+  return async (): Promise<z.infer<TSchema>> => {
     const agent = baseAgent.clone({
       tools: (options.tools ?? []).map(toAgentsSdkFunctionTool),
       modelSettings: {
@@ -154,13 +169,14 @@ export function createAgentsSdkCustomerServiceRunner(options: AgentsSdkToolLoopO
     })
     const result = await run(agent, options.input ?? options.instructions, {
       maxTurns: options.maxTurns ?? 4,
+      signal: options.signal,
     })
     if (options.telemetry) {
       for (const response of result.rawResponses ?? []) {
         options.telemetry(agentsSdkUsageToTelemetry(modelName, response.usage))
       }
     }
-    return CUSTOMER_SERVICE_FINAL_OUTPUT_SCHEMA.parse(result.finalOutput)
+    return options.outputType.parse(result.finalOutput) as z.infer<TSchema>
   }
 }
 

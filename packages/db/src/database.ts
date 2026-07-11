@@ -23,7 +23,33 @@ export function openDatabase(path = ':memory:'): Db {
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
   db.exec(getSqliteSchemaSql())
+  ensureControlPlaneColumns(db)
   return db
+}
+
+/** Adds control-plane lease columns when opening a database created by an older build. */
+function ensureControlPlaneColumns(db: Db): void {
+  const workflowColumns = new Set(
+    (db.prepare('PRAGMA table_info(workflow_runs)').all() as { name: string }[]).map(
+      (column) => column.name,
+    ),
+  )
+  for (const column of ['lease_owner', 'lease_expires_at', 'heartbeat_at', 'result_json']) {
+    if (!workflowColumns.has(column)) {
+      db.exec(`ALTER TABLE workflow_runs ADD COLUMN ${column} TEXT`)
+    }
+  }
+  const queueColumns = new Set(
+    (db.prepare('PRAGMA table_info(conversation_event_queue)').all() as { name: string }[]).map(
+      (column) => column.name,
+    ),
+  )
+  if (!queueColumns.has('idempotency_key')) {
+    db.exec('ALTER TABLE conversation_event_queue ADD COLUMN idempotency_key TEXT')
+  }
+  db.exec(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_conversation_event_queue_idempotency ON conversation_event_queue (idempotency_key)',
+  )
 }
 
 /**

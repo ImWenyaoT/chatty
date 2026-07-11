@@ -19,6 +19,13 @@ type ChatTurn = {
   sessionId?: string
   terminality?: string
   status?: string
+  runId?: string
+}
+
+type ControlPlaneView = {
+  workflowEvents: Array<{ sequence: number; type: string; payload: unknown }>
+  checkpoint?: { version: number; tokenBefore: number; tokenAfter: number; summary: unknown }
+  memories: Array<{ id: string; category: string; key: string; status: string; usageCount: number }>
 }
 
 const PRODUCT_ID_BY_ORDER_ID: Record<string, string> = {
@@ -35,6 +42,7 @@ export default function CustomerServicePage() {
   const [turns, setTurns] = useState<ChatTurn[]>([])
   const [status, setStatus] = useState('等待客户消息')
   const [sending, setSending] = useState(false)
+  const [controlPlane, setControlPlane] = useState<ControlPlaneView>()
   const nextId = useRef(1)
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -91,6 +99,10 @@ export default function CustomerServicePage() {
       if (!response.ok) throw new Error(data?.error ?? '请求失败')
 
       const reply = data as PlaygroundResponse
+      const controlResponse = await fetch(
+        `/api/control-plane?conversationId=${encodeURIComponent(conversationId)}&customerId=${encodeURIComponent(selectedOrder.customer)}&runId=${encodeURIComponent(reply.runId)}`,
+      )
+      if (controlResponse.ok) setControlPlane((await controlResponse.json()) as ControlPlaneView)
       setTurns((prev) => [
         ...prev,
         {
@@ -102,6 +114,7 @@ export default function CustomerServicePage() {
           sessionId: reply.sessionId,
           terminality: reply.terminality,
           status: reply.status,
+          runId: reply.runId,
         },
       ])
       setStatus(reply.terminality === 'terminal' ? '本轮已完成' : '等待继续跟进')
@@ -234,6 +247,34 @@ export default function CustomerServicePage() {
               </Button>
             </form>
           </div>
+          <section className="dashboard-panel" aria-label="Harness 控制面">
+            <div className="dashboard-panel-head">
+              <h2>Workflow 时间线</h2>
+              <span>{controlPlane?.workflowEvents.length ?? 0} EVENTS</span>
+            </div>
+            <div className="dashboard-detail-grid">
+              {(controlPlane?.workflowEvents ?? []).map((event) => (
+                <div key={`${event.sequence}-${event.type}`}>
+                  <span>#{event.sequence}</span>
+                  <strong>{event.type}</strong>
+                </div>
+              ))}
+            </div>
+            <div className="dashboard-panel-head">
+              <h2>Context / Memory</h2>
+              <span>CHECKPOINT {controlPlane?.checkpoint?.version ?? 0}</span>
+            </div>
+            <p>
+              压缩 tokens：{controlPlane?.checkpoint?.tokenBefore ?? 0} →{' '}
+              {controlPlane?.checkpoint?.tokenAfter ?? 0}
+            </p>
+            <p>
+              长期记忆：
+              {(controlPlane?.memories ?? [])
+                .map((memory) => `${memory.key} · ${memory.status} · used ${memory.usageCount}`)
+                .join(' / ') || '暂无'}
+            </p>
+          </section>
         </main>
       </div>
     </div>

@@ -101,6 +101,9 @@ export type CustomerServiceSdkRunner = (input: {
   registry: ToolRegistry
   sessionStatus: AgentSessionStatus
   policy: Policy
+  runId?: string
+  signal?: AbortSignal
+  emitEvent?: (type: string, payload?: JsonValue) => void
 }) => Promise<CustomerServiceSdkRunResult>
 
 export interface CustomerServiceTurnInput {
@@ -179,6 +182,9 @@ export interface RunCustomerServiceHarnessStepInput extends CustomerServiceTurnI
   policy?: Policy
   /** Production path: one task-aware Agents SDK runner. */
   sdkRunner?: CustomerServiceSdkRunner
+  runId?: string
+  signal?: AbortSignal
+  emitEvent?: (type: string, payload?: JsonValue) => void
 }
 
 /**
@@ -626,6 +632,9 @@ export async function runCustomerServiceHarnessStep(
       registry: input.registry,
       sessionStatus: input.sessionStatus ?? 'active',
       policy: input.policy ?? createDefaultPolicy(),
+      runId: input.runId,
+      signal: input.signal,
+      emitEvent: input.emitEvent,
     })
     const traceId = input.event.traceId ?? input.event.eventId
     return {

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { isPlaygroundAuthorized, legacyChatInputSchema } from '@rental/shared'
+import { ConversationBusyError, InvalidWorkflowTransitionError } from '@rental/db'
 import { CustomerServiceProviderError, runCustomerServiceTurn } from '@/lib/customer-service-turn'
 import { MissingLlmApiKeyError } from '@/lib/llm'
 
@@ -45,6 +46,9 @@ export async function POST(request: Request) {
     }
     if (error instanceof CustomerServiceProviderError) {
       return NextResponse.json({ error: 'llm_provider_failed' }, { status: 502 })
+    }
+    if (error instanceof ConversationBusyError || error instanceof InvalidWorkflowTransitionError) {
+      return NextResponse.json({ error: 'workflow_conflict' }, { status: 409 })
     }
     throw error
   }

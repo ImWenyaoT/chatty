@@ -48,6 +48,7 @@ export type HarnessTrace = {
 export type PlaygroundResponse = {
   reply: string
   traceId: string
+  runId: string
   sessionId: string
   status: string
   terminality: string

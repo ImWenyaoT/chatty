@@ -1,6 +1,6 @@
 import type { RuntimeTool, JsonValue } from '@rental/shared'
 import { getProductTool, checkAvailabilityTool } from './catalog-stubs.js'
-import { createHandoffTool, scheduleFollowupTool } from './workflow-stubs.js'
+import { createHandoffTool, createScheduleFollowupTool } from './workflow-stubs.js'
 import { issueRefundTool } from './refund-stub.js'
 import { createSearchKnowledgeTool, type KnowledgeSearcher } from './search-knowledge.js'
 import type { Policy, PolicyContext } from '../policies/policy.js'
@@ -90,12 +90,17 @@ export class PolicyDenyError extends Error {
  * high-risk issue_refund that anchors the approval gate. Passing a knowledge
  * searcher additionally registers search_knowledge (agentic search, B2).
  */
-export function createDefaultToolRegistry(knowledge?: KnowledgeSearcher): ToolRegistry {
+export function createDefaultToolRegistry(
+  knowledge?: KnowledgeSearcher,
+  workflow?: {
+    scheduleFollowup?: (input: Record<string, JsonValue>) => Promise<JsonValue> | JsonValue
+  },
+): ToolRegistry {
   const registry = new ToolRegistry()
     .register(getProductTool)
     .register(checkAvailabilityTool)
     .register(createHandoffTool)
-    .register(scheduleFollowupTool)
+    .register(createScheduleFollowupTool(workflow?.scheduleFollowup))
     .register(issueRefundTool)
   if (knowledge) registry.register(createSearchKnowledgeTool(knowledge))
   return registry

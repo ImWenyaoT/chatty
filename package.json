@@ -22,7 +22,9 @@
     "build:skeleton": "tsc -b packages/shared packages/db packages/agent-core packages/llm --pretty false",
     "typecheck:skeleton": "pnpm build:skeleton && pnpm --filter @rental/agent-core typecheck && pnpm --filter @rental/llm typecheck",
     "smoke": "pnpm build:skeleton && node scripts/smoke.mts",
-    "eval": "pnpm build:skeleton && node --import tsx eval/run.ts"
+    "eval": "pnpm build:skeleton && node --import tsx eval/run.ts",
+    "worker": "node --env-file-if-exists=.env --import tsx scripts/worker.mts",
+    "worker:once": "node --env-file-if-exists=.env --import tsx scripts/worker.mts --once"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

@@ -64,6 +64,123 @@ CREATE TABLE IF NOT EXISTS agent_trace_reviews (
 CREATE INDEX IF NOT EXISTS idx_agent_trace_reviews_label
   ON agent_trace_reviews (label, updated_at);
 
+CREATE TABLE IF NOT EXISTS workflow_runs (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  conversation_id TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1,
+  failure_kind TEXT,
+  result_json TEXT,
+  lease_owner TEXT,
+  lease_expires_at TEXT,
+  heartbeat_at TEXT,
+  started_at TEXT,
+  finished_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_workflow_runs_active_conversation
+  ON workflow_runs (conversation_id)
+  WHERE status IN ('queued', 'running', 'waiting_for_approval', 'waiting_for_handoff', 'paused');
+
+CREATE TABLE IF NOT EXISTS workflow_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id TEXT NOT NULL,
+  sequence INTEGER NOT NULL,
+  type TEXT NOT NULL,
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  UNIQUE (run_id, sequence)
+);
+
+CREATE TABLE IF NOT EXISTS conversation_event_queue (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  conversation_id TEXT NOT NULL,
+  event_json TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  idempotency_key TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS conversation_checkpoints (
+  id TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL,
+  through_trace_id TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  summary_json TEXT NOT NULL,
+  token_before INTEGER NOT NULL,
+  token_after INTEGER NOT NULL,
+  model TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE (conversation_id, version)
+);
+
+CREATE TABLE IF NOT EXISTS memory_candidates (
+  id TEXT PRIMARY KEY,
+  customer_id TEXT NOT NULL,
+  conversation_id TEXT NOT NULL,
+  source_trace_id TEXT NOT NULL,
+  category TEXT NOT NULL,
+  memory_key TEXT NOT NULL,
+  value_json TEXT NOT NULL,
+  confidence REAL NOT NULL,
+  sensitivity TEXT NOT NULL,
+  status TEXT NOT NULL,
+  usage_count INTEGER NOT NULL DEFAULT 0,
+  last_used_at TEXT,
+  expires_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_memory_candidates_customer
+  ON memory_candidates (customer_id, status, usage_count, updated_at);
+
+CREATE TABLE IF NOT EXISTS background_jobs (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  status TEXT NOT NULL,
+  conversation_id TEXT,
+  customer_id TEXT,
+  payload_json TEXT NOT NULL,
+  due_at TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  max_attempts INTEGER NOT NULL DEFAULT 3,
+  lease_owner TEXT,
+  lease_expires_at TEXT,
+  heartbeat_at TEXT,
+  idempotency_key TEXT NOT NULL UNIQUE,
+  last_error TEXT,
+  run_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_background_jobs_due
+  ON background_jobs (status, due_at, lease_expires_at);
+
+CREATE TABLE IF NOT EXISTS background_job_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_id TEXT NOT NULL,
+  type TEXT NOT NULL,
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS outbox_messages (
+  id TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL,
+  run_id TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  idempotency_key TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL,
+  sent_at TEXT
+);
+
 -- 知识库全文索引（docs/archive/agentic-search-design.md §2.1）：单 FTS5 虚拟表，
 -- trigram tokenizer（§2.2），元数据列 UNINDEXED，chunk_id 即 rowid。
 CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_chunks USING fts5(
