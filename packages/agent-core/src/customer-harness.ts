@@ -59,12 +59,49 @@ export interface CustomerServiceTrace {
   action: CustomerServiceAction
   toolCalls: RuntimeToolCall[]
   toolResults: JsonValue[]
+  sdk?: {
+    runStatus: 'completed'
+    outputValidated: boolean
+    failureKind?: string
+  }
 }
 
 export interface CustomerServiceHarnessStepResult {
   step: AgentStepResult
   trace: CustomerServiceTrace
 }
+
+export type CustomerServiceToolChoice = 'none' | 'auto' | CustomerServiceActionToolName
+export type CustomerServiceActionToolName =
+  'search_knowledge' | 'check_availability' | 'create_handoff' | 'schedule_followup'
+
+export interface CustomerServiceRunPolicy {
+  toolNames: CustomerServiceActionToolName[]
+  toolChoice: CustomerServiceToolChoice
+  toolUseBehavior: 'run_llm_again'
+  maxTurns: number
+  terminality: AgentStepTerminality
+  nextStatus: AgentSessionStatus
+}
+
+export interface CustomerServiceSdkRunResult {
+  reply: string
+  action: CustomerServiceAction
+  toolCalls: RuntimeToolCall[]
+  toolResults: JsonValue[]
+  outputValidated: true
+}
+
+export type CustomerServiceSdkRunner = (input: {
+  task: CustomerServiceTask
+  runPolicy: CustomerServiceRunPolicy
+  context: CustomerServiceContext
+  event: ConversationEvent
+  memory: MemorySnapshot
+  registry: ToolRegistry
+  sessionStatus: AgentSessionStatus
+  policy: Policy
+}) => Promise<CustomerServiceSdkRunResult>
 
 export interface CustomerServiceTurnInput {
   event: ConversationEvent
@@ -140,6 +177,8 @@ export interface RunCustomerServiceHarnessStepInput extends CustomerServiceTurnI
   toolLoopFn?: CustomerServiceToolLoopFn
   sessionStatus?: AgentSessionStatus
   policy?: Policy
+  /** Production path: one task-aware Agents SDK runner. */
+  sdkRunner?: CustomerServiceSdkRunner
 }
 
 /**
@@ -201,6 +240,15 @@ export const CUSTOMER_SERVICE_COMPOSE_INSTRUCTIONS = [
   '推荐尺码只用 M、L、XL 这套字母码（按身高体重区间对应），不要用 46/48/50 这类数字西装码。',
 ].join('\n')
 
+export const CUSTOMER_SERVICE_SDK_INSTRUCTIONS = [
+  '你是 Chatty 的单一租赁电商客服 Agent。Chatty harness 已经确定当前任务和可用工具。',
+  '只处理当前任务，不得尝试调用未暴露的工具，也不得自行改变任务类型。',
+  '需要工具时必须使用当前提供的 function tool；工具结果回填后，以结果为事实依据。',
+  '不要编造商品、库存、政策、工单、提醒时间或系统执行结果。',
+  '最终输出必须符合结构化输出 schema，只填写发给用户的简短中文 reply。',
+  '回复保持口语化、清晰、务实，不使用 Markdown、编号、内部任务名或工具名。',
+].join('\n')
+
 /**
  * Schedules the next bounded customer-service task from the current user turn.
  * This is intentionally deterministic: the LLM may decide wording and action
@@ -259,6 +307,60 @@ export function scheduleCustomerServiceTask(input: CustomerServiceTurnInput): Cu
     terminality: 'reply_and_wait',
     requiredContext: ['userMessage', 'recentMessages'],
     risk: 'low',
+  }
+}
+
+/** Maps one deterministic customer-service task to its bounded Agents SDK run policy. */
+export function createCustomerServiceRunPolicy(
+  task: CustomerServiceTask,
+  options: { requireKnowledgeSearch?: boolean } = {},
+): CustomerServiceRunPolicy {
+  switch (task.kind) {
+    case 'collect_missing_info':
+      return {
+        toolNames: [],
+        toolChoice: 'none',
+        toolUseBehavior: 'run_llm_again',
+        maxTurns: 1,
+        terminality: task.terminality,
+        nextStatus: 'waiting_for_user',
+      }
+    case 'answer_question':
+      return {
+        toolNames: ['search_knowledge'],
+        toolChoice: options.requireKnowledgeSearch ? 'search_knowledge' : 'auto',
+        toolUseBehavior: 'run_llm_again',
+        maxTurns: 4,
+        terminality: task.terminality,
+        nextStatus: 'waiting_for_user',
+      }
+    case 'check_availability':
+      return {
+        toolNames: ['check_availability'],
+        toolChoice: 'check_availability',
+        toolUseBehavior: 'run_llm_again',
+        maxTurns: 3,
+        terminality: task.terminality,
+        nextStatus: 'waiting_for_user',
+      }
+    case 'handoff':
+      return {
+        toolNames: ['create_handoff'],
+        toolChoice: 'create_handoff',
+        toolUseBehavior: 'run_llm_again',
+        maxTurns: 3,
+        terminality: task.terminality,
+        nextStatus: 'waiting_for_human',
+      }
+    case 'follow_up':
+      return {
+        toolNames: ['schedule_followup'],
+        toolChoice: 'schedule_followup',
+        toolUseBehavior: 'run_llm_again',
+        maxTurns: 3,
+        terminality: task.terminality,
+        nextStatus: 'waiting_for_user',
+      }
   }
 }
 
@@ -511,6 +613,48 @@ export async function runCustomerServiceHarnessStep(
 ): Promise<CustomerServiceHarnessStepResult> {
   const task = scheduleCustomerServiceTask(input)
   const context = buildCustomerServiceContext({ ...input, task })
+  if (input.sdkRunner) {
+    const runPolicy = createCustomerServiceRunPolicy(task, {
+      requireKnowledgeSearch: requiresKnowledgeSearch(readQuestionFromEvent(input.event)),
+    })
+    const executed = await input.sdkRunner({
+      task,
+      runPolicy,
+      context,
+      event: input.event,
+      memory: input.memory,
+      registry: input.registry,
+      sessionStatus: input.sessionStatus ?? 'active',
+      policy: input.policy ?? createDefaultPolicy(),
+    })
+    const traceId = input.event.traceId ?? input.event.eventId
+    return {
+      step: {
+        sessionId: input.event.conversationId,
+        traceId,
+        terminality: runPolicy.terminality,
+        reply: executed.reply,
+        toolCalls: executed.toolCalls,
+        nextStatus: runPolicy.nextStatus,
+        memoryPatch: {
+          lastHarnessTask: task.kind,
+          lastHarnessAction: executed.action.action,
+        },
+      },
+      trace: {
+        traceId,
+        task,
+        context,
+        action: executed.action,
+        toolCalls: executed.toolCalls,
+        toolResults: executed.toolResults,
+        sdk: {
+          runStatus: 'completed',
+          outputValidated: executed.outputValidated,
+        },
+      },
+    }
+  }
   // 搜索循环调用记录收集器（无 toolLoopFn 时恒空）；搜索在前、动作工具在后合成审计记录
   const searchTrace = { toolCalls: [] as RuntimeToolCall[], toolResults: [] as JsonValue[] }
   const modelOutput =
@@ -550,6 +694,11 @@ export async function runCustomerServiceHarnessStep(
       toolResults: [...searchTrace.toolResults, ...executed.toolResults],
     },
   }
+}
+
+/** Requires grounded retrieval only for policy/store facts, leaving catalog questions on auto. */
+function requiresKnowledgeSearch(question: string): boolean {
+  return /押金|规则|租期|计费|续租|售后|换码|换货|店名|电话|地址|营业|清洗|包邮/.test(question)
 }
 
 function replyAfterToolExecution(action: CustomerServiceAction, toolResults: JsonValue[]): string {

@@ -287,17 +287,18 @@ export const DEEPSEEK_HARNESS_COMPATIBILITY: readonly DeepSeekHarnessCompatibili
   {
     feature: 'tool_calls',
     status: 'supported',
-    decision: '用于 bounded search/tool loop；工具参数仍由 harness parser/policy 做容错和审批。',
+    decision:
+      '用于单 Agent 的 bounded SDK tool loop；Zod strict schema 校验参数，Chatty policy 负责业务审批。',
   },
   {
     feature: 'json_object_output',
     status: 'supported',
-    decision: '可用于 action JSON，但必须在 prompt 明确要求 JSON，且保留 parser fallback。',
+    decision: '用于 DeepSeek outputType 兼容传输；Agents SDK 仍以 Zod schema 校验最终输出。',
   },
   {
     feature: 'thinking_and_reasoning_effort',
     status: 'supported',
-    decision: 'DeepSeek 参数可作为 pro harness 调优项；默认不把 reasoning 文本暴露给业务 UI。',
+    decision: '指定 tool_choice 的任务显式关闭 thinking；不把 reasoning 文本暴露给业务 UI。',
   },
   {
     feature: 'context_cache_usage',
@@ -315,7 +316,7 @@ export const DEEPSEEK_HARNESS_COMPATIBILITY: readonly DeepSeekHarnessCompatibili
     feature: 'agents_sdk_function_tools',
     status: 'supported',
     decision:
-      '已用 SDK function tools 承接 search_knowledge orchestration；执行仍映射回 Chatty registry、policy 和 trace。',
+      '所有在线客服工具均由 task policy 暴露为 SDK strict function tools；执行映射回 Chatty registry、policy 和 trace。',
   },
   {
     feature: 'agents_sdk_sessions',

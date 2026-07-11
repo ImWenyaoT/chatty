@@ -7,6 +7,7 @@ import {
   createLlmTelemetrySummary,
   createPlaygroundLlmRuntime,
   createPlaygroundModelFn,
+  MissingLlmApiKeyError,
 } from './llm'
 
 test('createLlmTelemetrySummary aggregates pro usage and estimated cost', () => {
@@ -71,13 +72,12 @@ test('createPlaygroundLlmRuntime accepts a custom pro call budget for trace warn
   const savedKey = process.env.OPENAI_API_KEY
   const savedModel = process.env.CHAT_MODEL
   try {
-    process.env.OPENAI_API_KEY = ''
+    process.env.OPENAI_API_KEY = 'sk-test'
     process.env.CHAT_MODEL = 'deepseek-v4-pro'
 
     const runtime = createPlaygroundLlmRuntime({ callBudget: 2 })
 
-    assert.equal(runtime.modelFn, undefined)
-    assert.equal(runtime.toolLoopFn, undefined)
+    assert.equal(typeof runtime.sdkRunner, 'function')
     assert.equal(runtime.summary().callBudget, 2)
   } finally {
     process.env.OPENAI_API_KEY = savedKey
@@ -85,31 +85,14 @@ test('createPlaygroundLlmRuntime accepts a custom pro call budget for trace warn
   }
 })
 
-test('createPlaygroundLlmRuntime exposes zero-call summary only when the DeepSeek key is absent', () => {
+test('createPlaygroundLlmRuntime requires a DeepSeek key', () => {
   const savedKey = process.env.OPENAI_API_KEY
   const savedModel = process.env.CHAT_MODEL
   try {
     process.env.OPENAI_API_KEY = ''
     process.env.CHAT_MODEL = 'deepseek-v4-pro'
 
-    const runtime = createPlaygroundLlmRuntime()
-
-    assert.equal(runtime.mode, 'disabled')
-    assert.equal(runtime.modelFn, undefined)
-    assert.equal(runtime.toolLoopFn, undefined)
-    assert.deepEqual(runtime.summary(), {
-      model: 'deepseek-v4-pro',
-      calls: 0,
-      callBudget: 3,
-      inputCacheHitTokens: 0,
-      inputCacheMissTokens: 0,
-      inputCacheHitRatio: 0,
-      outputTokens: 0,
-      totalTokens: 0,
-      estimatedCostCny: 0,
-      operations: [],
-      warnings: [],
-    })
+    assert.throws(() => createPlaygroundLlmRuntime(), MissingLlmApiKeyError)
   } finally {
     process.env.OPENAI_API_KEY = savedKey
     process.env.CHAT_MODEL = savedModel
@@ -126,8 +109,7 @@ test('createPlaygroundLlmRuntime uses Agents SDK whenever a DeepSeek key is pres
     const runtime = createPlaygroundLlmRuntime()
 
     assert.equal(runtime.mode, 'agents-sdk')
-    assert.equal(typeof runtime.modelFn, 'function')
-    assert.equal(runtime.toolLoopFn, undefined)
+    assert.equal(typeof runtime.sdkRunner, 'function')
   } finally {
     process.env.OPENAI_API_KEY = savedKey
     process.env.CHAT_MODEL = savedModel
@@ -144,7 +126,7 @@ test('createPlaygroundLlmRuntime does not expose a direct Chat Completions tool 
     const runtime = createPlaygroundLlmRuntime()
 
     assert.equal(runtime.mode, 'agents-sdk')
-    assert.equal(runtime.toolLoopFn, undefined)
+    assert.equal(typeof runtime.sdkRunner, 'function')
   } finally {
     process.env.OPENAI_API_KEY = savedKey
     process.env.CHAT_MODEL = savedModel

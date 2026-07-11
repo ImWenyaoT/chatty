@@ -35,6 +35,13 @@ type CustomerServiceTurnOptions = {
   llmRuntimeFactory?: () => CustomerServiceTurnLlmRuntime
 }
 
+export class CustomerServiceProviderError extends Error {
+  constructor(cause: unknown) {
+    super('DeepSeek Agents SDK run failed', { cause })
+    this.name = 'CustomerServiceProviderError'
+  }
+}
+
 /**
  * Runs one seller-side Customer Service Turn from parsed input. This module is
  * the product use-case seam: it owns session creation, event shaping, harness
@@ -48,7 +55,6 @@ export async function runCustomerServiceTurn(
   const repos = options.repos ?? getRepos()
   const id = options.idGenerator ?? newId
   const now = options.now ?? (() => new Date().toISOString())
-  const llm = options.llmRuntimeFactory ? options.llmRuntimeFactory() : createPlaygroundLlmRuntime()
   const conversationId =
     input.conversationId ?? `${input.customerId}:${input.productId ?? 'general'}`
 
@@ -79,15 +85,45 @@ export async function runCustomerServiceTurn(
     conversationId,
     productId: input.productId,
   })
+  let llm: CustomerServiceTurnLlmRuntime
+  try {
+    llm = options.llmRuntimeFactory ? options.llmRuntimeFactory() : createPlaygroundLlmRuntime()
+  } catch (error) {
+    repos.traces.append({
+      id: traceId,
+      sessionId: session.id,
+      eventType: 'evaluation_failed',
+      input: { question: input.question },
+      output: { failureKind: 'configuration_error', message: String(error) },
+      toolCalls: [],
+      references: [],
+    })
+    repos.sessions.update(session.id, { status: 'failed', currentStep: 'configuration_error' })
+    throw error
+  }
 
-  const harness = await runCustomerServiceHarnessStep({
-    event,
-    memory: snapshot,
-    registry: createDefaultToolRegistry(repos.knowledge),
-    sessionStatus: session.status,
-    modelFn: llm.modelFn,
-    toolLoopFn: llm.toolLoopFn,
-  })
+  let harness
+  try {
+    harness = await runCustomerServiceHarnessStep({
+      event,
+      memory: snapshot,
+      registry: createDefaultToolRegistry(repos.knowledge),
+      sessionStatus: session.status,
+      sdkRunner: llm.sdkRunner,
+    })
+  } catch (error) {
+    repos.traces.append({
+      id: traceId,
+      sessionId: session.id,
+      eventType: 'evaluation_failed',
+      input: { question: input.question },
+      output: { failureKind: 'provider_or_output_validation', message: String(error) },
+      toolCalls: [],
+      references: [],
+    })
+    repos.sessions.update(session.id, { status: 'failed', currentStep: 'provider_error' })
+    throw new CustomerServiceProviderError(error)
+  }
   const result = harness.step
   const harnessTrace = { ...harness.trace, llm: llm.summary() } as unknown as HarnessTrace
 

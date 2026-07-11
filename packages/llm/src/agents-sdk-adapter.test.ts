@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   createAgentsSdkToolLoopFn,
   createDeepSeekAgentsModelFromEnv,
+  createDeepSeekCompatibleFetch,
   toAgentsSdkFunctionTool,
 } from './agents-sdk-adapter.js'
 
@@ -33,7 +34,7 @@ test('toAgentsSdkFunctionTool converts a Chatty tool into an SDK function tool',
     required: ['query'],
     additionalProperties: false,
   })
-  assert.equal(sdkTool.strict, false)
+  assert.equal(sdkTool.strict, true)
   assert.equal(await sdkTool.needsApproval({} as never, '{"query":"押金"}', undefined), false)
   assert.equal(
     await sdkTool.invoke({} as never, '{"query":"押金"}'),
@@ -70,4 +71,19 @@ test('createDeepSeekAgentsModelFromEnv wraps DeepSeek with SDK Chat Completions 
   })
 
   assert.equal(model.constructor.name, 'OpenAIChatCompletionsModel')
+})
+
+test('DeepSeek transport maps SDK json_schema output to supported json_object', async () => {
+  let capturedBody = ''
+  const compatibleFetch = createDeepSeekCompatibleFetch(async (_input, init) => {
+    capturedBody = String(init?.body ?? '')
+    return new Response('{}', { status: 200 })
+  })
+  await compatibleFetch('https://api.deepseek.com/beta/chat/completions', {
+    method: 'POST',
+    body: JSON.stringify({
+      response_format: { type: 'json_schema', json_schema: { name: 'output' } },
+    }),
+  })
+  assert.deepEqual(JSON.parse(capturedBody).response_format, { type: 'json_object' })
 })

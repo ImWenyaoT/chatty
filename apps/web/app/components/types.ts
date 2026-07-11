@@ -1,6 +1,11 @@
 // Shared UI types for the Chatty concierge surface.
 
 export type HarnessTrace = {
+  sdk?: {
+    runStatus?: string
+    outputValidated?: boolean
+    failureKind?: string
+  }
   llm?: {
     model?: string
     calls?: number

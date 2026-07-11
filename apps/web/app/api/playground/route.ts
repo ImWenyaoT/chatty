@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { isPlaygroundAuthorized, legacyChatInputSchema } from '@rental/shared'
-import { runCustomerServiceTurn } from '@/lib/customer-service-turn'
+import { CustomerServiceProviderError, runCustomerServiceTurn } from '@/lib/customer-service-turn'
+import { MissingLlmApiKeyError } from '@/lib/llm'
 
 // Customer-service endpoint: drives one bounded seller-assistant Harness step.
 // Request:  POST { customerId, productId?, conversationId?, question, imageUrl? }
@@ -36,5 +37,15 @@ export async function POST(request: Request) {
   }
   const input = parsed.data
 
-  return NextResponse.json(await runCustomerServiceTurn(input))
+  try {
+    return NextResponse.json(await runCustomerServiceTurn(input))
+  } catch (error) {
+    if (error instanceof MissingLlmApiKeyError) {
+      return NextResponse.json({ error: 'llm_not_configured' }, { status: 503 })
+    }
+    if (error instanceof CustomerServiceProviderError) {
+      return NextResponse.json({ error: 'llm_provider_failed' }, { status: 502 })
+    }
+    throw error
+  }
 }

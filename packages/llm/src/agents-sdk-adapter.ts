@@ -8,19 +8,21 @@ import {
   type Model,
 } from '@openai/agents'
 import OpenAI from 'openai'
+import { z } from 'zod'
 import { readLlmEnv } from './client-from-env.js'
 import { agentsSdkUsageToTelemetry, type ChatCompletionTelemetry } from './usage-telemetry.js'
 
 export type AgentsSdkRuntimeTool = {
   name: string
   description: string
-  parameters: Record<string, unknown>
+  parameters: Record<string, unknown> | z.ZodType
   needsApproval?: boolean
   execute(input: unknown): Promise<unknown> | unknown
 }
 
 export type AgentsSdkToolLoopOptions = {
   instructions: string
+  input?: string
   model: Model
   /** 用于遥测记录的模型名（Model 对象本身不带名字）。 */
   modelName?: string
@@ -29,7 +31,13 @@ export type AgentsSdkToolLoopOptions = {
   maxTurns?: number
   /** 每次 SDK model 调用回传一条归一化遥测（含 KV cache 命中）。 */
   telemetry?: (record: ChatCompletionTelemetry) => void
+  toolChoice?: 'auto' | 'required' | 'none' | (string & {})
+  toolUseBehavior?: 'run_llm_again' | 'stop_on_first_tool' | { stopAtToolNames: string[] }
 }
+
+export const CUSTOMER_SERVICE_FINAL_OUTPUT_SCHEMA = z.object({ reply: z.string().min(1) }).strict()
+
+export type CustomerServiceFinalOutput = z.infer<typeof CUSTOMER_SERVICE_FINAL_OUTPUT_SCHEMA>
 
 /**
  * Builds the Agents SDK Chat Completions model around DeepSeek's OpenAI-format
@@ -38,10 +46,35 @@ export type AgentsSdkToolLoopOptions = {
  */
 export function createDeepSeekAgentsModelFromEnv(env: NodeJS.ProcessEnv = process.env): Model {
   const { apiKey, baseURL, chatModel } = readLlmEnv(env)
-  const client = new OpenAI({ apiKey, baseURL })
+  const client = new OpenAI({ apiKey, baseURL, fetch: createDeepSeekCompatibleFetch() })
   return new OpenAIChatCompletionsModel(client as never, chatModel, {
     strictFeatureValidation: true,
   })
+}
+
+/** Maps Agents SDK json_schema output requests to DeepSeek's supported json_object wire format. */
+export function createDeepSeekCompatibleFetch(baseFetch: typeof fetch = fetch): typeof fetch {
+  return async (input, init) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+    if (!url.includes('/chat/completions') || typeof init?.body !== 'string') {
+      return baseFetch(input, init)
+    }
+    let body: Record<string, unknown>
+    try {
+      body = JSON.parse(init.body) as Record<string, unknown>
+    } catch {
+      return baseFetch(input, init)
+    }
+    const responseFormat = body.response_format
+    if (
+      responseFormat &&
+      typeof responseFormat === 'object' &&
+      (responseFormat as { type?: unknown }).type === 'json_schema'
+    ) {
+      body.response_format = { type: 'json_object' }
+    }
+    return baseFetch(input, { ...init, body: JSON.stringify(body) })
+  }
 }
 
 /**
@@ -53,7 +86,7 @@ export function toAgentsSdkFunctionTool(definition: AgentsSdkRuntimeTool): Funct
     name: definition.name,
     description: definition.description,
     parameters: definition.parameters as never,
-    strict: false,
+    strict: true,
     needsApproval: definition.needsApproval ?? false,
     execute: async (input) => {
       const result = await definition.execute(input)
@@ -76,7 +109,10 @@ export function createAgentsSdkToolLoopFn(options: AgentsSdkToolLoopOptions) {
     tools: (options.tools ?? []).map(toAgentsSdkFunctionTool),
     modelSettings: {
       parallelToolCalls: false,
+      toolChoice: options.toolChoice,
+      providerData: { thinking: { type: 'disabled' } },
     },
+    toolUseBehavior: options.toolUseBehavior ?? 'run_llm_again',
   })
 
   const modelName = options.modelName ?? 'deepseek-v4-pro'
@@ -91,6 +127,40 @@ export function createAgentsSdkToolLoopFn(options: AgentsSdkToolLoopOptions) {
       }
     }
     return String(result.finalOutput ?? '')
+  }
+}
+
+/** Runs one structured, bounded customer-service turn through a clone of one base Agent. */
+export function createAgentsSdkCustomerServiceRunner(options: AgentsSdkToolLoopOptions) {
+  setTracingDisabled(true)
+  const baseAgent = Agent.create({
+    name: options.name ?? 'Chatty Customer Service Agent',
+    instructions: `${options.instructions}\nFinal output must be one JSON object exactly shaped like {"reply":"..."}.`,
+    model: options.model,
+    outputType: CUSTOMER_SERVICE_FINAL_OUTPUT_SCHEMA,
+    tools: [],
+  })
+  const modelName = options.modelName ?? 'deepseek-v4-pro'
+
+  return async (): Promise<CustomerServiceFinalOutput> => {
+    const agent = baseAgent.clone({
+      tools: (options.tools ?? []).map(toAgentsSdkFunctionTool),
+      modelSettings: {
+        parallelToolCalls: false,
+        toolChoice: options.toolChoice,
+        providerData: { thinking: { type: 'disabled' } },
+      },
+      toolUseBehavior: options.toolUseBehavior ?? 'run_llm_again',
+    })
+    const result = await run(agent, options.input ?? options.instructions, {
+      maxTurns: options.maxTurns ?? 4,
+    })
+    if (options.telemetry) {
+      for (const response of result.rawResponses ?? []) {
+        options.telemetry(agentsSdkUsageToTelemetry(modelName, response.usage))
+      }
+    }
+    return CUSTOMER_SERVICE_FINAL_OUTPUT_SCHEMA.parse(result.finalOutput)
   }
 }
 

@@ -211,9 +211,9 @@ The first live path is the customer-service Harness Core:
 - `scheduleCustomerServiceTask`: maps a customer utterance into a narrow service task
   (`collect_missing_info` / `answer_question` / `check_availability` / `handoff` / `follow_up`).
 - `buildCustomerServiceContext`: assembles customer, product, memory, policy, and retrieved context fragments.
-- `parseCustomerServiceOutput`: parses strict JSON action output with a deterministic fallback.
-- `executeCustomerServiceAction`: runs low-risk tools through policy-aware executors and escalates sensitive actions.
-- `runCustomerServiceHarnessStep`: returns a step result plus a harness trace. The step carries reply, terminality, tool calls, next status, and memory patch; the trace carries task, context, parsed action, tool calls, and tool results.
+- `createCustomerServiceRunPolicy`: maps the scheduled task to SDK tools, tool choice, loop behavior, and bounds.
+- `CustomerServiceSdkRunner`: clones one base customer-service Agent for the task and executes strict function tools through Chatty policy.
+- `runCustomerServiceHarnessStep`: returns a step result plus a harness trace derived from the scheduled task and actual SDK run items.
 
 This keeps Chatty scoped to a rental customer-service project instead of a
 general-purpose agent runtime. SDK usage replaces model/tool orchestration where
@@ -230,12 +230,9 @@ Current live model path:
 - Low-level DeepSeek Chat Completions adapter utilities remain for JSON
   extraction, telemetry, eval, and adapter tests; they are not an env-routable
   runtime lane.
-- Harness compose path (`apps/web` playground, live LLM by default when a key is
-  present; no key or model failure falls back deterministically).
-- Agentic search (`search_knowledge`) uses SDK function tools in the SDK lane,
-  while execution still goes through Chatty registry, policy, knowledge
-  fragments, and persisted trace.
-- Reply generation fallback.
+- Harness compose path requires a DeepSeek API key; missing configuration is 503 and provider/output validation failure is 502.
+- All live customer-service tools use Agents SDK strict function tools while execution still goes through Chatty registry, policy, knowledge fragments, and persisted trace.
+- DeepSeek V4 runs in non-thinking mode when task policy requires a specific `tool_choice`.
 - Evaluator judge (`eval/judge.ts`).
 - Usage telemetry for DeepSeek cache hit/miss tokens, output tokens, total tokens, and estimated CNY cost.
 
@@ -243,7 +240,7 @@ DeepSeek compatibility that is safe to rely on:
 
 - Chat Completions request/response shape.
 - Function tool calls and `role: "tool"` result messages.
-- `response_format: { "type": "json_object" }`, with explicit JSON instruction in prompt and parser fallback.
+- `response_format: { "type": "json_object" }`, adapted from SDK `outputType` and validated by the same Zod schema.
 - `thinking` and `reasoning_effort` as DeepSeek-specific tuning knobs.
 - Context-cache usage fields for observability.
 

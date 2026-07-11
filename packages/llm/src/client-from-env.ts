@@ -20,7 +20,7 @@ export interface LlmEnvConfig {
 export function readLlmEnv(env: NodeJS.ProcessEnv = process.env): LlmEnvConfig {
   return {
     apiKey: env.OPENAI_API_KEY ?? '',
-    baseURL: env.OPENAI_BASE_URL || undefined,
+    baseURL: env.OPENAI_BASE_URL || 'https://api.deepseek.com/beta',
     chatModel: normalizeChatModel(env.CHAT_MODEL),
   }
 }

@@ -11,6 +11,7 @@ import {
   parseCustomerServiceOutput,
   runCustomerServiceHarnessStep,
   scheduleCustomerServiceTask,
+  createCustomerServiceRunPolicy,
   type CustomerServiceLoopMessage,
   type CustomerServiceToolLoopFn,
 } from './index.js'
@@ -48,6 +49,44 @@ test('scheduler maps size-and-date slot collection to check_availability when re
   assert.equal(task.kind, 'check_availability')
   assert.equal(task.terminality, 'tool_then_continue')
   assert.deepEqual(task.requiredContext, ['productId', 'rentalPeriod', 'bodyMeasurements'])
+})
+
+test('task run policies expose one bounded SDK tool strategy without handoffs', () => {
+  const cases = [
+    ['collect_missing_info', [], 'none', 1],
+    ['answer_question', ['search_knowledge'], 'search_knowledge', 4],
+    ['check_availability', ['check_availability'], 'check_availability', 3],
+    ['handoff', ['create_handoff'], 'create_handoff', 3],
+    ['follow_up', ['schedule_followup'], 'schedule_followup', 3],
+  ] as const
+  for (const [kind, toolNames, toolChoice, maxTurns] of cases) {
+    const policy = createCustomerServiceRunPolicy(
+      {
+        kind,
+        goal: kind,
+        requiredContext: [],
+        risk: kind === 'handoff' ? 'medium' : 'low',
+        terminality: kind === 'handoff' ? 'handoff_and_wait' : 'reply_and_wait',
+      },
+      { requireKnowledgeSearch: true },
+    )
+    assert.deepEqual(policy.toolNames, toolNames)
+    assert.equal(policy.toolChoice, toolChoice)
+    assert.equal(policy.maxTurns, maxTurns)
+    assert.equal(policy.toolUseBehavior, 'run_llm_again')
+  }
+})
+
+test('answer task keeps knowledge search optional unless grounding is required', () => {
+  const task = scheduleCustomerServiceTask({
+    event: userEvent('这款多少钱一天？'),
+    memory: memory(),
+  })
+  assert.equal(createCustomerServiceRunPolicy(task).toolChoice, 'auto')
+  assert.equal(
+    createCustomerServiceRunPolicy(task, { requireKnowledgeSearch: true }).toolChoice,
+    'search_knowledge',
+  )
 })
 
 test('compose instructions define harness, output, action and tool contracts', () => {

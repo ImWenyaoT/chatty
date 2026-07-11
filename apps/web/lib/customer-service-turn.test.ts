@@ -52,9 +52,14 @@ test('runCustomerServiceTurn creates session, trace, continuity memory, and resp
       idGenerator: testId,
       now: () => '2026-07-06T09:00:00.000Z',
       llmRuntimeFactory: () => ({
-        mode: 'disabled',
-        modelFn: undefined,
-        toolLoopFn: undefined,
+        mode: 'agents-sdk',
+        sdkRunner: async () => ({
+          reply: '这款西装每天 199 元。',
+          action: { action: 'answer_question', reply: '这款西装每天 199 元。' },
+          toolCalls: [],
+          toolResults: [],
+          outputValidated: true,
+        }),
         summary: () => ({
           model: 'deepseek-v4-pro',
           calls: 0,
@@ -99,3 +104,64 @@ test('runCustomerServiceTurn creates session, trace, continuity memory, and resp
     { role: 'assistant', content: result.reply },
   ])
 })
+
+test('runCustomerServiceTurn persists configuration failure state and trace', async () => {
+  const repos = createTestRepos()
+  await assert.rejects(
+    runCustomerServiceTurn(
+      { customerId: 'cx-config', question: '在吗' },
+      {
+        repos,
+        idGenerator: testId,
+        llmRuntimeFactory: () => {
+          throw new Error('missing key')
+        },
+      },
+    ),
+    /missing key/,
+  )
+  const session = repos.sessions.findByConversation('cx-config:general')
+  assert.equal(session?.status, 'failed')
+  assert.equal(repos.traces.queryBySession(session?.id ?? '').length, 1)
+})
+
+test('runCustomerServiceTurn persists provider failure before returning an error', async () => {
+  const repos = createTestRepos()
+  await assert.rejects(
+    runCustomerServiceTurn(
+      { customerId: 'cx-provider', question: '押金规则是什么' },
+      {
+        repos,
+        idGenerator: testId,
+        llmRuntimeFactory: () => ({
+          mode: 'agents-sdk',
+          sdkRunner: async () => {
+            throw new Error('provider unavailable')
+          },
+          summary: () => createEmptyLlmSummary(),
+        }),
+      },
+    ),
+    /Agents SDK run failed/,
+  )
+  const session = repos.sessions.findByConversation('cx-provider:general')
+  assert.equal(session?.status, 'failed')
+  assert.equal(repos.traces.queryBySession(session?.id ?? '').length, 1)
+})
+
+/** Builds the zero-usage telemetry summary used by deterministic use-case tests. */
+function createEmptyLlmSummary() {
+  return {
+    model: 'deepseek-v4-pro',
+    calls: 0,
+    callBudget: 3,
+    inputCacheHitTokens: 0,
+    inputCacheMissTokens: 0,
+    inputCacheHitRatio: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    estimatedCostCny: 0,
+    operations: [],
+    warnings: [],
+  }
+}
