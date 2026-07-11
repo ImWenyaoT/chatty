@@ -9,6 +9,7 @@ import { Textarea } from '../components/ui/textarea'
 import { SellerNavigation } from '../components/seller/SellerNavigation'
 import { SELLER_ORDERS } from '../components/seller/orderData'
 import type { HarnessTrace, PlaygroundResponse } from '../components/types'
+import type { ConversationControlApiView } from '@/lib/control-plane-read-model'
 
 type ChatTurn = {
   id: number
@@ -20,12 +21,6 @@ type ChatTurn = {
   terminality?: string
   status?: string
   runId?: string
-}
-
-type ControlPlaneView = {
-  workflowEvents: Array<{ sequence: number; type: string; payload: unknown }>
-  checkpoint?: { version: number; tokenBefore: number; tokenAfter: number; summary: unknown }
-  memories: Array<{ id: string; category: string; key: string; status: string; usageCount: number }>
 }
 
 const PRODUCT_ID_BY_ORDER_ID: Record<string, string> = {
@@ -42,7 +37,8 @@ export default function CustomerServicePage() {
   const [turns, setTurns] = useState<ChatTurn[]>([])
   const [status, setStatus] = useState('等待客户消息')
   const [sending, setSending] = useState(false)
-  const [controlPlane, setControlPlane] = useState<ControlPlaneView>()
+  const [controlPlane, setControlPlane] = useState<ConversationControlApiView>()
+  const [controlPlaneError, setControlPlaneError] = useState<string>()
   const nextId = useRef(1)
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -62,6 +58,8 @@ export default function CustomerServicePage() {
     setQuestion('')
     setImageUrl('')
     setStatus('等待客户消息')
+    setControlPlane(undefined)
+    setControlPlaneError(undefined)
   }
 
   /** Sends a customer message through the harness using product-safe defaults. */
@@ -102,7 +100,13 @@ export default function CustomerServicePage() {
       const controlResponse = await fetch(
         `/api/control-plane?conversationId=${encodeURIComponent(conversationId)}&customerId=${encodeURIComponent(selectedOrder.customer)}&runId=${encodeURIComponent(reply.runId)}`,
       )
-      if (controlResponse.ok) setControlPlane((await controlResponse.json()) as ControlPlaneView)
+      if (controlResponse.ok) {
+        setControlPlane((await controlResponse.json()) as ConversationControlApiView)
+        setControlPlaneError(undefined)
+      } else {
+        setControlPlane(undefined)
+        setControlPlaneError('控制面状态读取失败')
+      }
       setTurns((prev) => [
         ...prev,
         {
@@ -248,11 +252,36 @@ export default function CustomerServicePage() {
             </form>
           </div>
           <section className="dashboard-panel" aria-label="Harness 控制面">
+            {controlPlaneError ? <p role="alert">{controlPlaneError}</p> : null}
             <div className="dashboard-panel-head">
               <h2>Workflow 时间线</h2>
               <span>{controlPlane?.workflowEvents.length ?? 0} EVENTS</span>
             </div>
             <div className="dashboard-detail-grid">
+              <div>
+                <span>当前状态</span>
+                <strong>{controlPlane?.workflow.displayState ?? 'unknown'}</strong>
+              </div>
+              <div>
+                <span>排队消息</span>
+                <strong>{controlPlane ? controlPlane.queueDepth : '未知'}</strong>
+              </div>
+              <div>
+                <span>Lease</span>
+                <strong>
+                  {controlPlane?.workflow.leaseOwner
+                    ? `${controlPlane.workflow.leaseOwner} · ${controlPlane.workflow.leaseExpired ? '已过期，等待恢复' : '有效'}`
+                    : '无 active lease'}
+                </strong>
+              </div>
+              <div>
+                <span>Heartbeat</span>
+                <strong>{controlPlane?.workflow.heartbeatAt ?? '无 heartbeat 证据'}</strong>
+              </div>
+              <div>
+                <span>取消原因</span>
+                <strong>{controlPlane?.workflow.cancelReason ?? '无取消证据'}</strong>
+              </div>
               {(controlPlane?.workflowEvents ?? []).map((event) => (
                 <div key={`${event.sequence}-${event.type}`}>
                   <span>#{event.sequence}</span>

@@ -99,6 +99,18 @@ test('customer service workspace keeps product language with technical observabi
   assert.doesNotMatch(playgroundSource, /固定测试/)
 })
 
+test('control-plane surfaces render durable status and explicit unknown or empty evidence', () => {
+  assert.match(playgroundSource, /controlPlane\?\.workflow\.displayState \?\? 'unknown'/)
+  assert.match(playgroundSource, /排队消息/)
+  assert.match(playgroundSource, /已过期，等待恢复/)
+  assert.match(playgroundSource, /无 heartbeat 证据/)
+  assert.match(playgroundSource, /控制面状态读取失败/)
+  assert.match(dashboardSource, /job\.events/)
+  assert.match(dashboardSource, /暂无事件证据/)
+  assert.match(dashboardSource, /未知（无 attempt）/)
+  assert.match(dashboardSource, /暂无投递记录/)
+})
+
 test('order operations stays as workflow evidence instead of an empty route', () => {
   const visibleOrderCopy = [dashboardSource, ordersSource, JSON.stringify(SELLER_WORKSPACE_ROUTES)]
     .join('\n')

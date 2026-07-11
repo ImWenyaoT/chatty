@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { isPlaygroundAuthorized } from '@rental/shared'
 import { getRepos } from '@/lib/db'
+import { buildOperationsControlView } from '@/lib/control-plane-read-model'
 
 /** Lists durable background jobs and outbox messages for the operations GUI. */
 export async function GET(request: Request) {
@@ -8,7 +9,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
   const { control } = getRepos()
-  return NextResponse.json({ jobs: control.listJobs(), outbox: control.listOutbox() })
+  return NextResponse.json(buildOperationsControlView(control))
 }
 
 /** Cancels or retries one durable background job through an explicit state transition. */

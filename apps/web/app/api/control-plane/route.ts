@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { isPlaygroundAuthorized } from '@rental/shared'
 import { getRepos } from '@/lib/db'
 import { HarnessRunController } from '@/lib/harness-run-controller'
+import { buildConversationControlView } from '@/lib/control-plane-read-model'
 
 /** Returns workflow, checkpoint, and long-term memory evidence for observability panels. */
 export async function GET(request: Request) {
@@ -14,8 +15,7 @@ export async function GET(request: Request) {
   const runId = url.searchParams.get('runId') ?? ''
   const { control, memory } = getRepos()
   return NextResponse.json({
-    run: runId ? control.getRun(runId) : undefined,
-    workflowEvents: runId ? control.listRunEvents(runId) : [],
+    ...buildConversationControlView(control, { conversationId, runId }),
     checkpoint: conversationId ? control.latestCheckpoint(conversationId) : undefined,
     memories: customerId ? control.listMemoryCandidates(customerId) : [],
     memory:

@@ -4,6 +4,7 @@ import { SELLER_ORDERS } from '../components/seller/orderData'
 import { summarizeAutomationImpact } from '../components/seller/productMetrics'
 import { getRepos } from '@/lib/db'
 import { JobActions } from './JobActions'
+import { buildOperationsControlView } from '@/lib/control-plane-read-model'
 
 // 复盘视图以演示会话/知识面板为主，但会读取 trace review 汇总，展示真实任务
 // 反馈闭环的最小产品指标。质量回归仍由根级 `pnpm eval` 的朴素金标回归承担。
@@ -20,8 +21,9 @@ export default function DashboardPage() {
   const selected = SELLER_ORDERS[0]
   const reviewSummary = getRepos().reviews.summarize()
   const automationSummary = summarizeAutomationImpact(SELLER_ORDERS)
-  const jobs = getRepos().control.listJobs(12)
-  const outbox = getRepos().control.listOutbox(12)
+  const operations = buildOperationsControlView(getRepos().control)
+  const jobs = operations.jobs.slice(0, 12)
+  const outbox = operations.outbox.slice(0, 12)
   const topTags = Object.entries(reviewSummary.tags)
     .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
     .slice(0, 3)
@@ -170,15 +172,67 @@ export default function DashboardPage() {
                   </div>
                   <p>{job.conversationId ?? job.customerId ?? 'global'}</p>
                   <small>
-                    attempt {job.attempts}/{job.maxAttempts} · due {job.dueAt}
+                    attempt {job.attempts}/{job.maxAttempts} · due {job.dueAt} · lease{' '}
+                    {job.leaseOwner ?? 'none'} · heartbeat {job.heartbeatAt ?? 'unknown'}
+                    {job.retryDelayMs !== undefined ? ` · retry in ${job.retryDelayMs}ms` : ''}
                     {job.lastError ? ` · ${job.lastError}` : ''}
                   </small>
+                  <p>事件：{job.events.map((event) => event.type).join(' → ') || '暂无事件证据'}</p>
+                  <p>取消：{job.status === 'cancelled' ? '已取消' : '无取消证据'}</p>
                   <JobActions jobId={job.id} status={job.status} />
                 </article>
               ))
             ) : (
               <p>暂无后台任务</p>
             )}
+          </div>
+        </section>
+      </section>
+      <section className="dashboard-wide-panel" aria-label="Control Plane 健康指标">
+        <section className="dashboard-panel">
+          <div className="dashboard-panel-head">
+            <h2>Control Plane 健康指标</h2>
+            <span>DURABLE EVIDENCE</span>
+          </div>
+          <div className="dashboard-detail-grid">
+            <div>
+              <span>Workflow failures</span>
+              <strong>{operations.metrics.workflowFailures}</strong>
+            </div>
+            <div>
+              <span>Compaction</span>
+              <strong>
+                {operations.metrics.compactions} / failed {operations.metrics.compactionFailures}
+              </strong>
+            </div>
+            <div>
+              <span>Memory no-op</span>
+              <strong>{operations.metrics.memoryNoOps}</strong>
+            </div>
+            <div>
+              <span>Retry rate</span>
+              <strong>
+                {operations.metrics.retryRate === null
+                  ? '未知（无 attempt）'
+                  : `${(operations.metrics.retryRate * 100).toFixed(1)}%`}
+              </strong>
+            </div>
+            <div>
+              <span>Follow-up latency</span>
+              <strong>
+                {operations.metrics.followupLatencyMs === null
+                  ? '未知（无已完成 follow-up）'
+                  : `${Math.round(operations.metrics.followupLatencyMs)} ms`}
+              </strong>
+            </div>
+            <div>
+              <span>Outbox delivery</span>
+              <strong>
+                {outbox.length
+                  ? outbox.map((message) => `${message.status}:${message.id}`).join(' / ')
+                  : '暂无投递记录'}
+              </strong>
+            </div>
           </div>
         </section>
       </section>

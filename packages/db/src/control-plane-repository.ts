@@ -30,6 +30,7 @@ export interface WorkflowRun {
   cancelReason?: string
   leaseOwner?: string
   leaseExpiresAt?: string
+  heartbeatAt?: string
   createdAt: string
   updatedAt: string
 }
@@ -89,6 +90,7 @@ export interface BackgroundJob {
   leaseOwner?: string
   claimFence: number
   leaseExpiresAt?: string
+  heartbeatAt?: string
   lastError?: string
   runId?: string
   createdAt: string
@@ -186,6 +188,57 @@ export function createControlPlaneRepository(db: Db) {
       const row = db.prepare('SELECT * FROM workflow_runs WHERE id = ?').get(id) as
         WorkflowRunRow | undefined
       return row ? mapRun(row) : undefined
+    },
+
+    /** Counts durable queued inputs that have not completed for one conversation. */
+    countQueuedConversationEvents(conversationId: string): number {
+      const row = db
+        .prepare(
+          `SELECT COUNT(*) AS count FROM conversation_event_queue
+           WHERE conversation_id = ? AND status IN ('pending','processing')`,
+        )
+        .get(conversationId) as { count: number }
+      return Number(row.count)
+    },
+
+    /** Counts workflows in one durable status for aggregate health reporting. */
+    countRunsByStatus(status: WorkflowRunStatus): number {
+      const row = db
+        .prepare('SELECT COUNT(*) AS count FROM workflow_runs WHERE status = ?')
+        .get(status) as { count: number }
+      return Number(row.count)
+    },
+
+    /** Aggregates all durable jobs without applying the operations-list display limit. */
+    aggregateJobHealth(): {
+      memoryNoOps: number
+      attemptedJobs: number
+      retriedJobs: number
+      followupLatencyMs: number | null
+    } {
+      const row = db
+        .prepare(
+          `SELECT
+        SUM(CASE WHEN type = 'memory_extract' AND status = 'succeeded_no_output' THEN 1 ELSE 0 END) AS memory_no_ops,
+        SUM(CASE WHEN attempts > 0 THEN 1 ELSE 0 END) AS attempted_jobs,
+        SUM(CASE WHEN attempts > 1 THEN 1 ELSE 0 END) AS retried_jobs,
+        AVG(CASE WHEN type = 'scheduled_followup' AND status = 'succeeded'
+          THEN (julianday(updated_at) - julianday(created_at)) * 86400000 END) AS followup_latency_ms
+        FROM background_jobs`,
+        )
+        .get() as {
+        memory_no_ops: number | null
+        attempted_jobs: number | null
+        retried_jobs: number | null
+        followup_latency_ms: number | null
+      }
+      return {
+        memoryNoOps: Number(row.memory_no_ops ?? 0),
+        attemptedJobs: Number(row.attempted_jobs ?? 0),
+        retriedJobs: Number(row.retried_jobs ?? 0),
+        followupLatencyMs:
+          row.followup_latency_ms === null ? null : Math.max(0, row.followup_latency_ms),
+      }
     },
 
     /** Finds the durable workflow associated with one externally supplied request identity. */
@@ -1076,6 +1129,7 @@ interface WorkflowRunRow {
   cancel_reason: string | null
   lease_owner: string | null
   lease_expires_at: string | null
+  heartbeat_at: string | null
   created_at: string
   updated_at: string
 }
@@ -1126,6 +1180,7 @@ interface BackgroundJobRow {
   lease_owner: string | null
   claim_fence: number
   lease_expires_at: string | null
+  heartbeat_at: string | null
   last_error: string | null
   run_id: string | null
   created_at: string
@@ -1156,6 +1211,7 @@ function mapRun(row: WorkflowRunRow): WorkflowRun {
     cancelReason: row.cancel_reason ?? undefined,
     leaseOwner: row.lease_owner ?? undefined,
     leaseExpiresAt: row.lease_expires_at ?? undefined,
+    heartbeatAt: row.heartbeat_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -1218,6 +1274,7 @@ function mapJob(row: BackgroundJobRow): BackgroundJob {
     leaseOwner: row.lease_owner ?? undefined,
     claimFence: row.claim_fence,
     leaseExpiresAt: row.lease_expires_at ?? undefined,
+    heartbeatAt: row.heartbeat_at ?? undefined,
     lastError: row.last_error ?? undefined,
     runId: row.run_id ?? undefined,
     createdAt: row.created_at,
