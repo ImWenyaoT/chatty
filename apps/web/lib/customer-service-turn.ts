@@ -42,10 +42,12 @@ type CustomerServiceTurnOptions = {
   idempotencyKey?: string
   queuedTurnDispatcher?: (input: LegacyChatInput) => Promise<void>
   recoverRunId?: string
+  resumeHandoffRunId?: string
   cancellationPollMs?: number
   signal?: AbortSignal
   checkpointGenerator?: CheckpointGenerator
   compactionTokenLimit?: number
+  handoffResolution?: string
 }
 
 export class CustomerServiceProviderError extends Error {
@@ -100,17 +102,19 @@ export async function runCustomerServiceTurn(
     occurredAt: now(),
     traceId,
   }
-  const runId = options.recoverRunId ?? id('run')
+  const runId = options.recoverRunId ?? options.resumeHandoffRunId ?? id('run')
   const runController = new HarnessRunController(repos.control)
-  const started = options.recoverRunId
-    ? { ...runController.recover(runId), replayed: false }
-    : runController.start({
-        runId,
-        sessionId: session.id,
-        conversationId,
-        idempotencyKey: options.idempotencyKey ?? event.eventId,
-        event: event as unknown as JsonValue,
-      })
+  const started = options.resumeHandoffRunId
+    ? { ...runController.resumeHandoff(runId), replayed: false }
+    : options.recoverRunId
+      ? { ...runController.recover(runId), replayed: false }
+      : runController.start({
+          runId,
+          sessionId: session.id,
+          conversationId,
+          idempotencyKey: options.idempotencyKey ?? event.eventId,
+          event: event as unknown as JsonValue,
+        })
   if (started.replayed) {
     if (started.run.status === 'completed' && started.run.result) {
       return started.run.result as unknown as CustomerServiceTurnResponse
@@ -335,6 +339,21 @@ export async function runCustomerServiceTurn(
     }
     throw error
   }
+}
+
+/** Resumes one durable human handoff through the Customer Service Turn execution seam. */
+export async function resumeCustomerServiceHandoff(
+  runId: string,
+  options: CustomerServiceTurnOptions = {},
+): Promise<CustomerServiceTurnResponse> {
+  const repos = options.repos ?? getRepos()
+  const scheduled = repos.control.listRunEvents(runId).find((event) => event.type === 'scheduled')
+  const input = scheduled ? inputFromQueuedEvent(scheduled.payload) : undefined
+  if (!input) throw new Error(`workflow handoff has no resumable input: ${runId}`)
+  return runCustomerServiceTurn(
+    { ...input, question: options.handoffResolution ?? input.question },
+    { ...options, repos, resumeHandoffRunId: runId },
+  )
 }
 
 /** Converts the fixed latest-six raw-message policy into its turn-sized replay tail. */

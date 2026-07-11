@@ -65,6 +65,12 @@ async function processOne(): Promise<boolean> {
       },
       /** Executes one scheduled turn and returns its delivery for atomic publication. */
       async scheduledFollowup(job, signal) {
+        if (process.env.CHATTY_WORKER_FIXTURE === 'scheduled-followup') {
+          return {
+            event: { fixture: 'scheduled-followup' },
+            followup: { runId: 'integration-run', payload: { reply: 'integration delivery' } },
+          }
+        }
         const payload = asObject(job.payload)
         const response = await runCustomerServiceTurn(
           {

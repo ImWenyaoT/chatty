@@ -20,6 +20,7 @@ import {
 } from '@rental/db'
 import {
   recoverCustomerServiceTurns,
+  resumeCustomerServiceHandoff,
   runCustomerServiceTurn,
   type CustomerServiceTurnRepos,
 } from './customer-service-turn'
@@ -44,6 +45,83 @@ function createTestRepos(): CustomerServiceTurnRepos & {
     control: createControlPlaneRepository(db),
   }
 }
+
+test('resumeCustomerServiceHandoff reopens SQLite and completes through the public turn seam', async () => {
+  const path = join(mkdtempSync(join(tmpdir(), 'chatty-handoff-')), 'control.sqlite')
+  const firstDb = openDatabase(path)
+  let sequence = 0
+  const firstRepos = {
+    sessions: createSessionRepository(firstDb),
+    traces: createTraceRepository(firstDb),
+    memory: createMemoryRepository(firstDb),
+    knowledge: createKnowledgeRepository(firstDb),
+    control: createControlPlaneRepository(firstDb),
+  }
+  const handedOff = await runCustomerServiceTurn(
+    {
+      customerId: 'cx-handoff',
+      conversationId: 'conversation-handoff',
+      question: '我要人工处理退款',
+    },
+    {
+      repos: firstRepos,
+      idGenerator: (prefix) => `${prefix}-handoff-${++sequence}`,
+      llmRuntimeFactory: () => ({
+        mode: 'agents-sdk',
+        sdkRunner: async () => ({
+          reply: '已转人工处理。',
+          action: {
+            action: 'handoff' as const,
+            reply: '已转人工处理。',
+            toolName: 'create_handoff' as const,
+            toolArgs: { conversationId: 'conversation-handoff', reason: '退款' },
+          },
+          toolCalls: [],
+          toolResults: [],
+          outputValidated: true as const,
+        }),
+        summary: () => createEmptyLlmSummary(),
+      }),
+    },
+  )
+  assert.equal(firstRepos.control.getRun(handedOff.runId)?.status, 'waiting_for_handoff')
+  firstDb.close()
+
+  const resumedDb = openDatabase(path)
+  const resumedRepos = {
+    sessions: createSessionRepository(resumedDb),
+    traces: createTraceRepository(resumedDb),
+    memory: createMemoryRepository(resumedDb),
+    knowledge: createKnowledgeRepository(resumedDb),
+    control: createControlPlaneRepository(resumedDb),
+  }
+  const resumed = await resumeCustomerServiceHandoff(handedOff.runId, {
+    repos: resumedRepos,
+    handoffResolution: '这款西装多少钱一天？',
+    idGenerator: (prefix) => `${prefix}-resumed-${++sequence}`,
+    llmRuntimeFactory: () => ({
+      mode: 'agents-sdk',
+      sdkRunner: async () => ({
+        reply: '人工处理后已恢复自动服务。',
+        action: { action: 'answer_question' as const, reply: '人工处理后已恢复自动服务。' },
+        toolCalls: [],
+        toolResults: [],
+        outputValidated: true as const,
+      }),
+      summary: () => createEmptyLlmSummary(),
+    }),
+  })
+
+  assert.equal(resumed.runId, handedOff.runId)
+  assert.equal(resumedRepos.control.getRun(handedOff.runId)?.status, 'completed')
+  assert.ok(
+    resumedRepos.control
+      .listRunEvents(handedOff.runId)
+      .some((event) => event.type === 'handoff_resumed'),
+  )
+  assert.equal(resumedRepos.traces.queryBySession(resumed.sessionId).length, 2)
+  resumedDb.close()
+})
 
 /** Deterministic id adapter so the use-case can be tested without random UUIDs. */
 function testId(prefix: string): string {

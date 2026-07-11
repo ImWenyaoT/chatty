@@ -113,15 +113,17 @@ export class HarnessRunController {
   }
 
   /** Resumes a durable human handoff only for the worker that acquires the next lease. */
-  resumeHandoff(runId: string): WorkflowRun {
+  resumeHandoff(runId: string): { run: WorkflowRun; signal: AbortSignal } {
     const current = this.repository.getRun(runId)
     if (current?.status !== 'waiting_for_handoff') {
       throw new Error(`workflow run is not waiting for handoff: ${runId}`)
     }
     const run = this.repository.resumeHandoff(runId, this.owner, new Date().toISOString())
     if (!run) throw new Error(`workflow handoff could not be resumed: ${runId}`)
+    const controller = new AbortController()
+    activeAbortControllers.set(runId, { controller, owner: this.owner })
     this.repository.appendRunEvent(runId, 'handoff_resumed', { owner: this.owner })
-    return run
+    return { run, signal: controller.signal }
   }
 }
 

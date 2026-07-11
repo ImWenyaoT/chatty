@@ -19,12 +19,14 @@
     "lint": "eslint . && prettier \"**/*.{js,jsx,ts,tsx,json,css,yml,yaml}\" --check",
     "lint:fix": "eslint . --fix && prettier \"**/*.{js,jsx,ts,tsx,json,css,yml,yaml}\" --write",
     "test:frontend": "pnpm --filter @chatty/web test:frontend",
+    "test:control-plane-integration": "pnpm --filter @chatty/web exec node --test --import tsx lib/customer-service-turn.test.ts lib/background-job-worker.test.ts lib/memory-control-plane.test.ts lib/context-control.test.ts lib/control-plane-read-model.test.ts lib/control-plane-api-render.test.ts && pnpm test:worker-integration",
     "build:skeleton": "tsc -b packages/shared packages/db packages/agent-core packages/llm --pretty false",
     "typecheck:skeleton": "pnpm build:skeleton && pnpm --filter @rental/agent-core typecheck && pnpm --filter @rental/llm typecheck",
     "smoke": "pnpm build:skeleton && node scripts/smoke.mts",
     "eval": "pnpm build:skeleton && node --import tsx eval/run.ts",
     "worker": "node --env-file-if-exists=.env --import tsx scripts/worker.mts",
     "worker:once": "node --env-file-if-exists=.env --import tsx scripts/worker.mts --once",
+    "test:worker-integration": "node --import tsx scripts/worker-integration.mts",
     "test:deepseek-contracts": "pnpm --filter @rental/llm test:deepseek-contracts"
   },
   "devDependencies": {
