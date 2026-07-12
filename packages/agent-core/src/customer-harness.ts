@@ -56,6 +56,14 @@ export interface CustomerServiceAction {
   toolArgs?: Record<string, JsonValue>;
 }
 
+/** Raised when model output cannot satisfy the public customer-service action contract. */
+export class CustomerServiceOutputParseError extends Error {
+  constructor(message = "customer-service model output is invalid") {
+    super(message);
+    this.name = "CustomerServiceOutputParseError";
+  }
+}
+
 export interface CustomerServiceTrace {
   traceId: string;
   task: CustomerServiceTask;
@@ -456,8 +464,8 @@ export function buildCustomerServiceContext(
 
 /**
  * Parses model output into a constrained customer-service action. Invalid or
- * over-freeform output falls back to a safe answer action instead of controlling
- * tools directly.
+ * over-freeform output fails explicitly instead of masquerading as a successful
+ * customer reply.
  */
 export function parseCustomerServiceOutput(raw: string): CustomerServiceAction {
   try {
@@ -466,7 +474,7 @@ export function parseCustomerServiceOutput(raw: string): CustomerServiceAction {
       !isCustomerServiceActionKind(parsed.action) ||
       typeof parsed.reply !== "string"
     ) {
-      return fallbackAction();
+      throw new CustomerServiceOutputParseError();
     }
     return {
       action: parsed.action,
@@ -477,8 +485,9 @@ export function parseCustomerServiceOutput(raw: string): CustomerServiceAction {
         ? parsed.toolArgs
         : undefined,
     };
-  } catch {
-    return fallbackAction();
+  } catch (error) {
+    if (error instanceof CustomerServiceOutputParseError) throw error;
+    throw new CustomerServiceOutputParseError();
   }
 }
 
@@ -844,13 +853,6 @@ function terminalityForAction(action: CustomerServiceActionKind): {
     nextStatus: "waiting_for_user",
     toolCalls: [],
     toolResults: [],
-  };
-}
-
-function fallbackAction(): CustomerServiceAction {
-  return {
-    action: "answer_question",
-    reply: "我先帮您确认一下，再继续处理。",
   };
 }
 

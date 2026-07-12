@@ -2,6 +2,16 @@
 
 import { useState } from "react";
 import { Button } from "../components/ui/button";
+import { updateBackgroundJob, type JobActionResult } from "./actions";
+
+export function jobActionMessage(
+  result: JobActionResult,
+  action: "cancel" | "retry",
+): string {
+  if (result.ok) return `${action} 已提交`;
+  if (result.error === "not_found") return "任务不存在或已被清理";
+  return "任务状态已变化，请刷新后重试";
+}
 
 /** Provides explicit cancel and retry controls for one durable background job. */
 export function JobActions({
@@ -15,12 +25,13 @@ export function JobActions({
 
   /** Sends one explicit background-job transition to the control-plane API. */
   async function update(action: "cancel" | "retry") {
-    const response = await fetch("/api/jobs", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ jobId, action }),
-    });
-    setMessage(response.ok ? `${action} 已提交` : `${action} 失败`);
+    try {
+      setMessage(
+        jobActionMessage(await updateBackgroundJob(jobId, action), action),
+      );
+    } catch {
+      setMessage("无法连接服务，请稍后重试");
+    }
   }
 
   return (

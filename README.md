@@ -43,7 +43,7 @@ pnpm eval     # 金标回归（需真实 LLM key）
 
 ## 质量门禁
 
-`pnpm test` / `pnpm smoke` / `pnpm typecheck` / `pnpm lint` 在 PR 与 `main` 上由 [CI](.github/workflows/ci.yml) 跑；真实 LLM 的金标回归是手动 workflow（[`eval.yml`](.github/workflows/eval.yml)）。命令与 CI 步骤的契约是可执行文档，见 [`quality-gates.ts`](packages/shared/src/quality-gates.ts)。
+`pnpm test` / `pnpm test:fullstack` / `pnpm test:coverage` / `pnpm test:coverage:core` / `pnpm smoke` / `pnpm typecheck` / `pnpm lint` 在 PR 与 `main` 上由 [CI](.github/workflows/ci.yml) 跑；full-stack 门禁覆盖 Next API、SQLite 与 worker 的真实联调。真实 LLM 的金标回归是手动 workflow（[`eval.yml`](.github/workflows/eval.yml)）。命令与 CI 步骤的契约是可执行文档，见 [`quality-gates.ts`](packages/shared/src/quality-gates.ts)。
 
 ## 文档
 

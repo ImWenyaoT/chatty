@@ -9,6 +9,7 @@ import {
   executeCustomerServiceAction,
   MAX_SEARCH_CALLS,
   parseCustomerServiceOutput,
+  CustomerServiceOutputParseError,
   runCustomerServiceHarnessStep,
   scheduleCustomerServiceTask,
   createCustomerServiceRunPolicy,
@@ -174,16 +175,17 @@ test("context builder keeps ordered fragments for prompt assembly and inspection
   assert.ok(context.prompt.includes("SUIT-001"));
 });
 
-test("output parser accepts strict JSON actions and falls back to answer_question on invalid output", () => {
+test("output parser accepts strict JSON actions and rejects invalid output explicitly", () => {
   const parsed = parseCustomerServiceOutput(
     '{"action":"check_availability","reply":"我先帮您查库存","toolName":"check_availability","toolArgs":{"productId":"SUIT-001","size":"L"}}',
   );
   assert.equal(parsed.action, "check_availability");
   assert.equal(parsed.toolName, "check_availability");
 
-  const fallback = parseCustomerServiceOutput("不是 JSON");
-  assert.equal(fallback.action, "answer_question");
-  assert.equal(fallback.reply, "我先帮您确认一下，再继续处理。");
+  assert.throws(
+    () => parseCustomerServiceOutput("不是 JSON"),
+    CustomerServiceOutputParseError,
+  );
 });
 
 test("model output composer turns scheduled tasks into constrained customer-service actions", () => {
@@ -309,16 +311,16 @@ test("compose step rejects an empty model reply", async () => {
   );
 });
 
-test("unparseable modelFn output falls back to the safe answer action via the parser", async () => {
-  const result = await runCustomerServiceHarnessStep({
-    event: userEvent("这款有 L 吗，5月10到12号穿"),
-    memory: memory(),
-    registry: createDefaultToolRegistry(),
-    modelFn: async () => "抱歉，这不是一个 JSON 回复",
-  });
-
-  assert.equal(result.trace.action.action, "answer_question");
-  assert.equal(result.step.reply, "我先帮您确认一下，再继续处理。");
+test("unparseable modelFn output remains an explicit parser failure", async () => {
+  await assert.rejects(
+    runCustomerServiceHarnessStep({
+      event: userEvent("这款有 L 吗，5月10到12号穿"),
+      memory: memory(),
+      registry: createDefaultToolRegistry(),
+      modelFn: async () => "抱歉，这不是一个 JSON 回复",
+    }),
+    CustomerServiceOutputParseError,
+  );
 });
 
 test("harness step returns trace fields and a separate memory patch", async () => {

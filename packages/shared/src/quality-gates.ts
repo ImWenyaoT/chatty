@@ -61,6 +61,18 @@ export const REQUIRED_LOCAL_QUALITY_COMMANDS: readonly QualityCommand[] = [
     purpose: "用 Node 原生 coverage 阈值约束 web 核心业务路径的回归",
   },
   {
+    scriptName: "test:coverage:core",
+    command:
+      "node --experimental-test-coverage --test-coverage-include='packages/*/src/**' --test-coverage-lines=90 --test-coverage-branches=84 --test-coverage-functions=84 --test --import tsx packages/shared/src/*.test.ts packages/db/src/*.test.ts packages/agent-core/src/*.test.ts packages/agent-core/src/policies/*.test.ts packages/agent-core/src/tools/*.test.ts packages/llm/src/*.test.ts",
+    purpose: "为 shared/db/agent-core/llm 设置全仓覆盖率下限",
+  },
+  {
+    scriptName: "test:fullstack",
+    command:
+      "pnpm --filter @chatty/web build && node --import tsx scripts/fullstack-integration.mts && pnpm --filter @chatty/web exec node --test --import tsx lib/control-plane-api-render.test.ts lib/customer-service-turn.test.ts lib/background-job-worker.test.ts lib/memory-control-plane.test.ts lib/context-control.test.ts lib/control-plane-read-model.test.ts lib/job-actions.test.ts && pnpm test:worker-integration",
+    purpose: "验证 React/Next API/SQLite/worker 之间的真实跨层契约",
+  },
+  {
     scriptName: "typecheck",
     command:
       "pnpm -r --if-present typecheck && tsc -p eval/tsconfig.json --noEmit",
@@ -95,10 +107,15 @@ export const REQUIRED_PULL_REQUEST_CHECKS: readonly PullRequestCheck[] = [
     purpose: "运行全部自动化单元测试和轻量集成测试",
   },
   {
-    name: "Control-plane integration",
-    command: "pnpm test:control-plane-integration",
+    name: "Full-stack integration",
+    command: "pnpm test:fullstack",
     purpose:
       "验证 durable workflow、worker、memory 与 API read model 的跨模块语义",
+  },
+  {
+    name: "Core package coverage",
+    command: "pnpm test:coverage:core",
+    purpose: "阻断核心 TypeScript 包的覆盖率回退",
   },
   {
     name: "Web core coverage",

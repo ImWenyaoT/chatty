@@ -1,6 +1,6 @@
 # Chatty Current Architecture
 
-Last updated: 2026-07-07
+Last updated: 2026-07-12
 
 This is the supplemental diagram set for the current implementation. The main
 agent architecture design document is [design.md](design.md), which owns the
@@ -49,7 +49,7 @@ Keep the architecture boring:
 
 - One active agent harness path.
 - One knowledge-search mechanism: `search_knowledge` over SQLite FTS5/LIKE.
-- One model integration surface: DeepSeek `deepseek-v4-pro` through OpenAI-format Chat Completions.
+- One live model integration surface: DeepSeek `deepseek-v4-pro` through OpenAI Agents SDK over its OpenAI-format endpoint.
 - One persistence family for MVP state: SQLite repositories.
 - One quality story: automated tests + smoke + manual real-LLM golden eval.
 
@@ -84,7 +84,7 @@ sequenceDiagram
   participant Harness as agent-core harness
   participant Memory as SQLite memory/session
   participant Search as search_knowledge
-  participant LLM as DeepSeek Chat Completions adapter
+  participant LLM as DeepSeek Agents SDK adapter
   participant Tools as Tool registry + policy
   participant Eval as Tests / smoke / eval
 

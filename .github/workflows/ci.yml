@@ -50,8 +50,11 @@ jobs:
       - name: Test workspaces
         run: pnpm test
 
-      - name: Control-plane integration
-        run: pnpm test:control-plane-integration
+      - name: Full-stack integration
+        run: pnpm test:fullstack
+
+      - name: Core package coverage
+        run: pnpm test:coverage:core
 
       - name: Web core coverage
         run: pnpm test:coverage

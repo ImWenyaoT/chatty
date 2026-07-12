@@ -49,10 +49,10 @@ This supports both resume variants.
 
 The live playground compose path uses OpenAI Agents SDK:
 
-- `apps/web/lib/llm.ts` imports `createDeepSeekAgentsSdkToolLoop`.
-- `createPlaygroundModelFn()` enables the live model function when a DeepSeek key is present.
-- `createAgentsSdkComposeModelFn()` wraps the compose step with `createDeepSeekAgentsSdkToolLoop`.
-- `createPlaygroundLlmRuntime()` reports `mode: 'agents-sdk'` when the key is present.
+- `apps/web/lib/llm.ts` imports `createAgentsSdkCustomerServiceRunner`.
+- `createPlaygroundLlmRuntime()` requires a DeepSeek key and returns the live SDK runner.
+- `createAgentsSdkCustomerServiceRunner()` wraps the structured compose step with the Agents SDK.
+- `createPlaygroundLlmRuntime()` reports `mode: 'agents-sdk'` for the live lane.
 
 The SDK adapter is explicit:
 

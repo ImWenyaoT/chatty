@@ -1,26 +1,17 @@
 import {
   ApprovalRequiredError,
-  CUSTOMER_SERVICE_COMPOSE_INSTRUCTIONS,
   CUSTOMER_SERVICE_SDK_INSTRUCTIONS,
   PolicyDenyError,
   createCustomerServiceRunPolicy,
-  executeSearchRequest,
-  type CustomerServiceModelFn,
   type CustomerServiceSdkRunner,
 } from "@rental/agent-core";
 import {
   type ChatCompletionTelemetry,
   createAgentsSdkCustomerServiceRunner,
   createDeepSeekAgentsModelFromEnv,
-  createDeepSeekAgentsSdkToolLoop,
-  parseJsonObject,
   readLlmEnv,
 } from "@rental/llm";
-import {
-  readQuestionFromEvent,
-  type JsonValue,
-  type RuntimeToolCall,
-} from "@rental/shared";
+import { type JsonValue, type RuntimeToolCall } from "@rental/shared";
 import { z } from "zod";
 
 export type LlmTelemetrySummary = {
@@ -214,87 +205,6 @@ function calculateInputCacheHitRatio(
   const totalInputTokens = hitTokens + missTokens;
   if (totalInputTokens <= 0) return 0;
   return Number((hitTokens / totalInputTokens).toFixed(4));
-}
-
-/**
- * Builds the live LLM compose call for the playground harness step.
- *
- * Builds the live DeepSeek compose call for the playground harness step.
- *
- * DeepSeek is enabled whenever an API key is present; otherwise the harness
- * runs the deterministic composer and keeps no-key demo/smoke behavior.
- */
-export function createPlaygroundModelFn(): CustomerServiceModelFn | undefined {
-  if (!readLlmEnv().apiKey) return undefined;
-  return createAgentsSdkComposeModelFn();
-}
-
-/** Wraps the Agents SDK run loop into the existing harness modelFn contract. */
-function createAgentsSdkComposeModelFn(
-  records: ChatCompletionTelemetry[] = [],
-): CustomerServiceModelFn {
-  return async (prompt, runtime) => {
-    const searchTool =
-      runtime?.task.kind === "answer_question"
-        ? runtime.registry?.get("search_knowledge")
-        : undefined;
-    const runSdk = createDeepSeekAgentsSdkToolLoop({
-      instructions: CUSTOMER_SERVICE_COMPOSE_INSTRUCTIONS,
-      maxTurns: searchTool ? 4 : 2,
-      telemetry: (record) => records.push(record),
-      tools:
-        runtime && searchTool
-          ? [
-              {
-                name: searchTool.name,
-                description: searchTool.description,
-                parameters: searchTool.parameters ?? {
-                  type: "object",
-                  properties: {},
-                },
-                needsApproval: searchTool.approvalRequired,
-                execute: async (input) =>
-                  executeSdkSearchTool(input, runtime, searchTool.name),
-              },
-            ]
-          : [],
-    });
-    const raw = await runSdk(prompt);
-    return JSON.stringify(parseJsonObject<Record<string, unknown>>(raw));
-  };
-}
-
-/**
- * Executes search_knowledge from an Agents SDK function tool while preserving
- * the harness-owned policy gate, knowledge references, and auditable trace.
- */
-async function executeSdkSearchTool(
-  input: unknown,
-  runtime: NonNullable<Parameters<CustomerServiceModelFn>[1]>,
-  toolName: string,
-): Promise<string> {
-  const registry = runtime.registry;
-  if (!registry)
-    return "工具注册表不可用。请基于已知信息谨慎回答，不确定的内容如实告知用户无法确认。";
-
-  const result = await executeSearchRequest({
-    toolName,
-    input,
-    registry,
-    question: readQuestionFromEvent(runtime.event),
-    productId: runtime.event.productId ?? runtime.memory.productId,
-    searchedQueries:
-      runtime.searchTrace?.toolCalls.flatMap((call) =>
-        typeof call.arguments.query === "string" ? [call.arguments.query] : [],
-      ) ?? [],
-    sessionStatus: runtime.sessionStatus,
-    policy: runtime.policy,
-  });
-  if (result.kind === "retry") return result.output;
-  runtime.context.fragments.push(result.fragment);
-  runtime.searchTrace?.toolCalls.push(result.toolCall);
-  runtime.searchTrace?.toolResults.push(result.toolResult);
-  return result.output;
 }
 
 /** Aggregates per-call LLM telemetry into a compact trace payload for the playground inspector. */

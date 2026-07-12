@@ -96,8 +96,8 @@ mindmap
 | Q06 | input 拼接 prompt | Codex | 结构化 context fragments | `buildCustomerServiceContext` |
 | Q07 | 如何实现 long-term memory | OpenClaw | SQLite memory + chunk/index/summary + `search_knowledge`，不做 embedding RAG | `memory-repository.ts` |
 | Q08 | 如何实现 skills 和 plugins | Claude Code | 不做 runtime plugin；出现 plugin runtime 先删 | `tools/registry.ts` |
-| Q09 | 如何做好 context auto compression | Codex | 只做 recentMessages 滑窗，暂不 auto-compact | `memory-repository.ts` |
-| Q10 | output parser | Codex | JSON action parser + 安全 fallback | `parseCustomerServiceOutput` |
+| Q09 | 如何做好 context auto compression | Codex | recentMessages 滑窗 + 超预算后生成持久化 checkpoint；失败保留旧 checkpoint 并记录事件 | `context-control.ts` / `memory-repository.ts` |
+| Q10 | output parser | Codex | JSON action parser + 显式失败；上层将失败持久化到 trace/session/workflow | `parseCustomerServiceOutput` / `customer-service-turn.ts` |
 | Q11 | 执行器 executor | Codex | action -> policy -> tool result | `executeCustomerServiceAction` |
 | Q12 | 如何设计可以自由配置的 MCP | Claude Code | 只保留 tool contract；出现 MCP runtime 先删 | `ToolDefinition` |
 | Q13 | 如何做好 eval 和自动化测试 | Codex | unit + smoke + manual golden eval | `quality-gates.ts` / `eval/` |
