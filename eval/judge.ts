@@ -162,6 +162,7 @@ export interface EvaluationResult {
 export async function evaluateCustomerServiceReply(
   conversationHistory: Array<{ role: string; content: string }>,
   customerServiceReply: string,
+  options: { signal?: AbortSignal } = {},
 ): Promise<EvaluationResult> {
   const historyText = conversationHistory
     .map(
@@ -176,23 +177,26 @@ export async function evaluateCustomerServiceReply(
   });
 
   const evaluatorModel = resolveEvaluatorModel();
-  const completion = await getClient().chat.completions.create({
-    model: evaluatorModel,
-    temperature: 0.0,
-    top_p: 1,
-    // v4-pro judge 的 issues+suggestions+suggestedReply 中文输出常超 800，导致 JSON 被
-    // 截断、宽松解析抠不回真实分而钉在下限 1（在完美回复上打 1 分，污染金标测量）。
-    // 提到 2000 让判分 JSON 完整，是测量保真修复（R4 定档），单 lane 后一样保留。
-    max_tokens: 2000,
-    // DeepSeek 等 OpenAI 兼容后端不支持 json_schema structured outputs，统一用 json_object（JSON mode），
-    // OpenAI 同样支持。解析端已用 extractJsonFromText + parseLooseEvaluation 兜底，不依赖 schema 强校验；
-    // 字段结构由 evaluator 的 system/user 模板用文字约定。注意 json_object 模式要求 prompt 含 "json" 字样（已满足）。
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: EVALUATOR_SYSTEM_PROMPT },
-      { role: "user", content: userPrompt },
-    ],
-  });
+  const completion = await getClient().chat.completions.create(
+    {
+      model: evaluatorModel,
+      temperature: 0.0,
+      top_p: 1,
+      // v4-pro judge 的 issues+suggestions+suggestedReply 中文输出常超 800，导致 JSON 被
+      // 截断、宽松解析抠不回真实分而钉在下限 1（在完美回复上打 1 分，污染金标测量）。
+      // 提到 2000 让判分 JSON 完整，是测量保真修复（R4 定档），单 lane 后一样保留。
+      max_tokens: 2000,
+      // DeepSeek 等 OpenAI 兼容后端不支持 json_schema structured outputs，统一用 json_object（JSON mode），
+      // OpenAI 同样支持。解析端已用 extractJsonFromText + parseLooseEvaluation 兜底，不依赖 schema 强校验；
+      // 字段结构由 evaluator 的 system/user 模板用文字约定。注意 json_object 模式要求 prompt 含 "json" 字样（已满足）。
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: EVALUATOR_SYSTEM_PROMPT },
+        { role: "user", content: userPrompt },
+      ],
+    },
+    { signal: options.signal },
+  );
 
   const rawText = completion.choices[0]?.message?.content ?? "";
   const jsonText = extractJsonFromText(rawText.trim());

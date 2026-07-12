@@ -3,6 +3,7 @@
 //   pnpm eval                          # 跑全部金标场景（harness lane，唯一活路径）
 //   pnpm eval -- --filter store-contact # 只跑名字匹配的场景
 //   pnpm eval -- --repeat 3            # 跑 3 次聚合，抵消 LLM judge 评分噪声
+//   pnpm eval -- --timeout-ms 60000    # 限制每次 harness/judge 网络请求
 //   pnpm eval -- --save v1             # 跑完把结果存到 eval/reports/v1.json
 //   pnpm eval -- --baseline v1         # 跑完和 eval/reports/v1.json 对比
 //
@@ -42,6 +43,7 @@ import {
 import type { ConversationEvent } from "@rental/shared";
 import YAML from "yaml";
 import { evaluateCustomerServiceReply } from "./judge.js";
+import { parseEvalTimeoutMs, withEvalDeadline } from "./deadline.js";
 
 interface ExpectBlock {
   contains?: string[];
@@ -94,6 +96,7 @@ interface ScenarioResult {
   runCount?: number;
   /** --repeat 聚合：每次运行的场景均分样本（用于看噪声幅度） */
   scoreSamples?: number[];
+  errors?: string[];
 }
 
 /** 单个回合的被测结果：harness 步的回复 + trace 里的 action/taskKind + judge 回填分。 */
@@ -102,6 +105,7 @@ interface TurnOutcome {
   action?: string;
   taskKind?: string;
   score?: number;
+  evaluationError?: string;
 }
 
 const EVAL_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -162,6 +166,7 @@ function checkExpectations(
   prevAnswer?: string,
 ): string[] {
   const failures: string[] = [];
+  if (turn.evaluationError) failures.push(turn.evaluationError);
   for (const needle of expect.contains ?? []) {
     if (!turn.answer.includes(needle))
       failures.push(`contains "${needle}" not found in answer`);
@@ -211,6 +216,7 @@ interface HarnessSession {
   /** 本场景累积的对话（judge 的历史切片来源，口径含当前轮）。 */
   history: Array<{ role: string; content: string }>;
   turn: number;
+  requestTimeoutMs: number;
 }
 
 /**
@@ -241,7 +247,10 @@ function createHarnessSdkRunner(): CustomerServiceSdkRunner | undefined {
 }
 
 /** 打开一个场景会话：删除重建独立 tmp SQLite，同步知识索引，装配 repos。 */
-async function openHarnessSession(scenario: Scenario): Promise<HarnessSession> {
+async function openHarnessSession(
+  scenario: Scenario,
+  requestTimeoutMs: number,
+): Promise<HarnessSession> {
   const dbPath = path.join(TMP_DIR, `harness-${scenario.name}.sqlite`);
   await fs.mkdir(TMP_DIR, { recursive: true });
   await Promise.all(
@@ -261,6 +270,7 @@ async function openHarnessSession(scenario: Scenario): Promise<HarnessSession> {
       `${scenario.customerId}:${scenario.productId ?? "general"}`,
     history: [],
     turn: 0,
+    requestTimeoutMs,
   };
 }
 
@@ -273,8 +283,9 @@ async function sendTurn(
   question: string,
   session: HarnessSession,
 ): Promise<TurnOutcome> {
+  const turnIndex = session.turn++;
   const event: ConversationEvent = {
-    eventId: `eval-${scenario.name}-${session.turn++}`,
+    eventId: `eval-${scenario.name}-${turnIndex}`,
     type: "user_message",
     customerId: scenario.customerId,
     conversationId: session.conversationId,
@@ -288,13 +299,19 @@ async function sendTurn(
     conversationId: session.conversationId,
     productId: scenario.productId,
   });
-  const harness = await runCustomerServiceHarnessStep({
-    event,
-    memory: snapshot,
-    registry: session.registry,
-    sessionStatus: "active",
-    sdkRunner: session.sdkRunner,
-  });
+  const harness = await withEvalDeadline(
+    `harness:${scenario.name}:${turnIndex}`,
+    session.requestTimeoutMs,
+    (signal) =>
+      runCustomerServiceHarnessStep({
+        event,
+        memory: snapshot,
+        registry: session.registry,
+        sessionStatus: "active",
+        sdkRunner: session.sdkRunner,
+        signal,
+      }),
+  );
   const answer = harness.step.reply ?? "";
   // route.ts 步骤 5b 同款连续性写入：只追加消息滑窗，不提升 profile 字段
   session.memory.appendRecentMessages(
@@ -313,27 +330,38 @@ async function sendTurn(
     { role: "assistant", content: answer },
   );
   let score: number | undefined;
+  let evaluationError: string | undefined;
   try {
     score = (
-      await evaluateCustomerServiceReply(session.history.slice(-10), answer)
+      await withEvalDeadline(
+        `judge:${scenario.name}:${turnIndex}`,
+        session.requestTimeoutMs,
+        (signal) =>
+          evaluateCustomerServiceReply(session.history.slice(-10), answer, {
+            signal,
+          }),
+      )
     ).score;
   } catch (error) {
     // judge 失败不吞错也不中断场景：留 undefined，minScore 断言会以"未拿到评分"失败
-    console.error(
-      `    judge error: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    evaluationError = `judge failed: ${error instanceof Error ? error.message : String(error)}`;
+    console.error(`    ${evaluationError}`);
   }
   return {
     answer,
     action: harness.trace.action.action,
     taskKind: harness.trace.task.kind,
     score,
+    evaluationError,
   };
 }
 
 /** 跑一个场景的全部 step，按 minScore 落后置检查，返回聚合结果。 */
-async function runScenario(scenario: Scenario): Promise<ScenarioResult> {
-  const session = await openHarnessSession(scenario);
+async function runScenario(
+  scenario: Scenario,
+  requestTimeoutMs: number,
+): Promise<ScenarioResult> {
+  const session = await openHarnessSession(scenario, requestTimeoutMs);
   const stepResults: StepResult[] = [];
 
   try {
@@ -376,6 +404,13 @@ async function runScenario(scenario: Scenario): Promise<ScenarioResult> {
   const avgScore =
     scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
   const passed = stepResults.every((s) => s.failures.length === 0);
+  const errors = [
+    ...new Set(
+      stepResults.flatMap((step) =>
+        step.failures.filter((failure) => failure.startsWith("judge failed:")),
+      ),
+    ),
+  ];
 
   return {
     name: scenario.name,
@@ -383,6 +418,7 @@ async function runScenario(scenario: Scenario): Promise<ScenarioResult> {
     passed,
     steps: stepResults,
     avgScore,
+    errors,
   };
 }
 
@@ -413,13 +449,14 @@ async function mapWithConcurrency<T, R>(
 async function runAllScenarios(
   scenarios: Scenario[],
   concurrency = 6,
+  requestTimeoutMs = 60_000,
 ): Promise<ScenarioResult[]> {
   return mapWithConcurrency(
     scenarios,
     Math.max(1, concurrency),
     async (scenario) => {
       try {
-        return await runScenario(scenario);
+        return await runScenario(scenario, requestTimeoutMs);
       } catch (error) {
         console.error(
           `    ${scenario.name} error: ${error instanceof Error ? error.message : String(error)}`,
@@ -430,6 +467,7 @@ async function runAllScenarios(
           passed: false,
           steps: [],
           avgScore: 0,
+          errors: [error instanceof Error ? error.message : String(error)],
         };
       }
     },
@@ -461,6 +499,7 @@ function aggregateRuns(
       passCount,
       runCount: perRun.length,
       scoreSamples,
+      errors: [...new Set(perRun.flatMap((result) => result.errors ?? []))],
     };
   });
 }
@@ -484,6 +523,10 @@ function printReport(results: ScenarioResult[]) {
       `\n${badge} ${passText}  ${r.name}  (avgScore=${r.avgScore.toFixed(2)})${sampleText}`,
     );
     if (r.description) console.log(`        ${r.description}`);
+    const displayedFailures = new Set(r.steps.flatMap((step) => step.failures));
+    for (const error of r.errors ?? []) {
+      if (!displayedFailures.has(error)) console.log(`     ✗  ${error}`);
+    }
     for (const step of r.steps) {
       const scoreText = step.score !== undefined ? ` [${step.score}/10]` : "";
       const actionText = step.action ? ` {${step.action}}` : "";
@@ -570,6 +613,9 @@ async function main() {
   const repeat = Math.max(1, Number(args.repeat ?? 1) || 1);
   // 场景并发数。默认 6，兼顾墙钟与 DeepSeek 速率限制。
   const concurrency = Math.max(1, Number(args.concurrency ?? 6) || 6);
+  const requestTimeoutMs = parseEvalTimeoutMs(
+    args["timeout-ms"] ?? process.env.EVAL_REQUEST_TIMEOUT_MS,
+  );
 
   const scenarios = await loadScenarios(
     GOLDEN_DIR,
@@ -587,14 +633,14 @@ async function main() {
     .slice(0, 6)}`;
 
   console.log(
-    `Running ${scenarios.length} scenario(s) × ${repeat} repeat, concurrency=${concurrency}, promptVersion=${promptVersion}`,
+    `Running ${scenarios.length} scenario(s) × ${repeat} repeat, concurrency=${concurrency}, timeoutMs=${requestTimeoutMs}, promptVersion=${promptVersion}`,
   );
   console.log(`Tmp store dir: ${TMP_DIR}\n`);
 
   const runs: ScenarioResult[][] = [];
   for (let i = 0; i < repeat; i++) {
     if (repeat > 1) process.stdout.write(`  run ${i + 1}/${repeat} ...`);
-    const r = await runAllScenarios(scenarios, concurrency);
+    const r = await runAllScenarios(scenarios, concurrency, requestTimeoutMs);
     runs.push(r);
     if (repeat > 1)
       process.stdout.write(

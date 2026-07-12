@@ -47,8 +47,8 @@ export const REQUIRED_LOCAL_QUALITY_COMMANDS: readonly QualityCommand[] = [
   },
   {
     scriptName: "test",
-    command: "pnpm -r --if-present test",
-    purpose: "运行 workspace 单元测试和轻量集成测试",
+    command: "pnpm -r --if-present test && pnpm test:eval",
+    purpose: "运行 workspace 单元测试、轻量集成测试和 eval deadline 离线测试",
   },
   {
     scriptName: "test:frontend",
