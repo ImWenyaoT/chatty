@@ -139,6 +139,7 @@ export const CUSTOMER_SERVICE_SDK_INSTRUCTIONS = [
   "需要工具时必须使用当前提供的 function tool；工具结果回填后，以结果为事实依据。",
   "事实任务中，工具结果是唯一可引用的证据：价格、次数、时限、费用和政策口径必须来自其中；没有明确证据时如实说明需要确认，不能补全或猜测。",
   "当工具选择是 search_knowledge 时，先调用一次精准关键词搜索；收到结果后直接根据结果回答，不要再次搜索。",
+  "解释“怎么租”或按天计费时，用“租期”明确说明在途时间不计入租期，不要只改写成“不算租金”。",
   "不要编造商品、库存、政策、工单、提醒时间或系统执行结果。",
   "直接输出发给用户的简短中文回复本身，不要包成 JSON、不要写字段名、任务名或工具名。",
   "回复保持口语化、清晰、务实，不使用 Markdown、编号、内部任务名或工具名。",
@@ -497,10 +498,18 @@ function hasEnoughRentalContext(
   question: string,
   memory: MemorySnapshot,
 ): boolean {
+  const rememberedConversation = memory.recentMessages
+    .flatMap((message) =>
+      isPlainJsonObject(message) && typeof message.content === "string"
+        ? [message.content]
+        : [],
+    )
+    .join("\n");
   return (
     hasRentalPeriod(question) ||
     hasBodyOrSize(question) ||
-    memory.recentMessages.length > 0
+    hasRentalPeriod(rememberedConversation) ||
+    hasBodyOrSize(rememberedConversation)
   );
 }
 

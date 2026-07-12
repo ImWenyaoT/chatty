@@ -109,6 +109,22 @@ test("scheduler routes safety, fact, link, period, and opening-hours turns", () 
   }
 });
 
+test("a greeting in history does not masquerade as rental context", () => {
+  const task = scheduleCustomerServiceTask({
+    event: userEvent("我想租这款黑色西装"),
+    memory: memory({
+      recentMessages: [
+        "legacy-noise",
+        { role: "user", content: "你好 在吗" },
+        { role: "assistant", content: "在的" },
+      ],
+    }),
+  });
+
+  assert.equal(task.kind, "collect_missing_info");
+  assert.match(task.goal, /档期/);
+});
+
 test("missing product questions collect only the product", () => {
   const event = { ...userEvent("这款多少钱一天？"), productId: undefined };
   const task = scheduleCustomerServiceTask({

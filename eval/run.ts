@@ -282,6 +282,7 @@ async function sendTurn(
   scenario: Scenario,
   question: string,
   session: HarnessSession,
+  requiresJudge: boolean,
 ): Promise<TurnOutcome> {
   const turnIndex = session.turn++;
   const event: ConversationEvent = {
@@ -331,21 +332,23 @@ async function sendTurn(
   );
   let score: number | undefined;
   let evaluationError: string | undefined;
-  try {
-    score = (
-      await withEvalDeadline(
-        `judge:${scenario.name}:${turnIndex}`,
-        session.requestTimeoutMs,
-        (signal) =>
-          evaluateCustomerServiceReply(session.history.slice(-10), answer, {
-            signal,
-          }),
-      )
-    ).score;
-  } catch (error) {
-    // judge 失败不吞错也不中断场景：留 undefined，minScore 断言会以"未拿到评分"失败
-    evaluationError = `judge failed: ${error instanceof Error ? error.message : String(error)}`;
-    console.error(`    ${evaluationError}`);
+  if (requiresJudge) {
+    try {
+      score = (
+        await withEvalDeadline(
+          `judge:${scenario.name}:${turnIndex}`,
+          session.requestTimeoutMs,
+          (signal) =>
+            evaluateCustomerServiceReply(session.history.slice(-10), answer, {
+              signal,
+            }),
+        )
+      ).score;
+    } catch (error) {
+      // judge 失败不吞错也不中断场景：留 undefined，minScore 断言会以"未拿到评分"失败
+      evaluationError = `judge failed: ${error instanceof Error ? error.message : String(error)}`;
+      console.error(`    ${evaluationError}`);
+    }
   }
   return {
     answer,
@@ -366,7 +369,12 @@ async function runScenario(
 
   try {
     for (const step of scenario.steps) {
-      const turn = await sendTurn(scenario, step.user, session);
+      const turn = await sendTurn(
+        scenario,
+        step.user,
+        session,
+        step.expect?.minScore !== undefined,
+      );
       const failures = checkExpectations(
         step.expect ?? {},
         turn,
