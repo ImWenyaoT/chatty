@@ -39,9 +39,9 @@ test('frontend shell exposes keyboard and screen-reader navigation affordances',
 test('playground controls expose state beyond color alone', () => {
   assert.match(playgroundSource, /aria-label="发送客户消息"/)
   assert.match(playgroundSource, /aria-label="客户消息"/)
-  assert.match(playgroundSource, /<h2>客户队列<\/h2>/)
-  assert.match(playgroundSource, /support-inbox-shell/)
-  assert.match(playgroundSource, /className="legacy-composer-box"/)
+  assert.match(playgroundSource, /<h1>客服会话<\/h1>/)
+  assert.match(playgroundSource, /className="support-layout"/)
+  assert.match(playgroundSource, /className="support-composer-box"/)
   assert.match(playgroundSource, /aria-label="添加客户图片"/)
   assert.match(playgroundSource, /aria-label="发送"/)
   assert.doesNotMatch(playgroundSource, /客户详情/)
@@ -53,10 +53,18 @@ test('frontend CSS keeps focus visible and mobile touch targets large enough', (
   assert.match(cssSource, /:focus-visible/)
   assert.match(cssSource, /box-shadow: var\(--focus-ring\)/)
   assert.match(cssSource, /min-height: 44px/)
-  assert.match(cssSource, /scroll-snap-type: x mandatory/)
-  assert.match(cssSource, /\.legacy-composer-box:focus-within/)
-  assert.match(cssSource, /@media \(max-width: 760px\)[\s\S]*\.legacy-composer-box button/)
+  assert.match(cssSource, /\.support-search:focus-within/)
+  assert.match(cssSource, /\.support-composer-box:focus-within/)
+  assert.match(cssSource, /@media \(max-width: 680px\)[\s\S]*\.support-conversation-list/)
   assert.doesNotMatch(cssSource, /support-detail-panel/)
+})
+
+test('customer service workspace follows the system color scheme', () => {
+  assert.match(cssSource, /@media \(prefers-color-scheme: dark\)[\s\S]*\.support-workspace/)
+  assert.match(cssSource, /\.support-workspace \{[\s\S]*color-scheme: dark;/)
+  assert.match(cssSource, /--accent: #78a68e/)
+  assert.match(cssSource, /\.support-message\.user \.support-message-content/)
+  assert.match(cssSource, /\.support-risk/)
 })
 
 test('seller workspace cannot regress to a chat-only page', () => {
@@ -81,11 +89,12 @@ test('customer service workspace keeps product language with technical observabi
     SELLER_WORKSPACE_ROUTES.find((route) => route.key === 'playground')?.navLabel,
     '客服会话',
   )
-  assert.match(playgroundSource, /<h2>实时会话<\/h2>/)
-  assert.match(playgroundSource, /<h2>客户队列<\/h2>/)
-  assert.match(playgroundSource, /className="legacy-composer-box"/)
-  assert.match(playgroundSource, /className="legacy-attachment-details"/)
-  assert.match(playgroundSource, /className="legacy-send-button"/)
+  assert.match(playgroundSource, /<h1>客服会话<\/h1>/)
+  assert.match(playgroundSource, /<h2>订单信息<\/h2>/)
+  assert.match(playgroundSource, /className="support-composer-box"/)
+  assert.match(playgroundSource, /className="support-attachment-details"/)
+  assert.match(playgroundSource, /className="support-send-button"/)
+  assert.match(playgroundSource, /运行详情/)
   assert.doesNotMatch(playgroundSource, /className="legacy-inspector"/)
   assert.doesNotMatch(playgroundSource, /className="service-context-panel"/)
   assert.doesNotMatch(playgroundSource, /<h2>客户上下文<\/h2>/)
@@ -100,10 +109,10 @@ test('customer service workspace keeps product language with technical observabi
 })
 
 test('control-plane surfaces render durable status and explicit unknown or empty evidence', () => {
-  assert.match(playgroundSource, /controlPlane\?\.workflow\.displayState \?\? 'unknown'/)
-  assert.match(playgroundSource, /排队消息/)
-  assert.match(playgroundSource, /已过期，等待恢复/)
-  assert.match(playgroundSource, /无 heartbeat 证据/)
+  assert.match(playgroundSource, /controlPlane\?\.workflow\.displayState \?\? '尚未运行'/)
+  assert.match(playgroundSource, /<dt>排队<\/dt>/)
+  assert.match(playgroundSource, /<dt>最近心跳<\/dt>/)
+  assert.match(playgroundSource, /完成一次会话后可查看运行记录/)
   assert.match(playgroundSource, /控制面状态读取失败/)
   assert.match(dashboardSource, /job\.events/)
   assert.match(dashboardSource, /暂无事件证据/)

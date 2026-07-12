@@ -1,8 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { ImagePlus, Send } from 'lucide-react'
-import { Badge } from '../components/ui/badge'
+import { ChevronDown, ImagePlus, Search, Send } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Textarea } from '../components/ui/textarea'
@@ -37,6 +36,7 @@ export default function CustomerServicePage() {
   const [turns, setTurns] = useState<ChatTurn[]>([])
   const [status, setStatus] = useState('等待客户消息')
   const [sending, setSending] = useState(false)
+  const [search, setSearch] = useState('')
   const [controlPlane, setControlPlane] = useState<ConversationControlApiView>()
   const [controlPlaneError, setControlPlaneError] = useState<string>()
   const nextId = useRef(1)
@@ -46,6 +46,11 @@ export default function CustomerServicePage() {
     SELLER_ORDERS.find((order) => order.id === selectedOrderId) ?? SELLER_ORDERS[0]
   const productId = PRODUCT_ID_BY_ORDER_ID[selectedOrder.id] ?? 'SUIT-001'
   const conversationId = `${selectedOrder.customer}:${productId}`
+  const visibleOrders = SELLER_ORDERS.filter((order) =>
+    `${order.customer} ${order.product} ${order.channel}`
+      .toLowerCase()
+      .includes(search.toLowerCase()),
+  )
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' })
@@ -135,91 +140,101 @@ export default function CustomerServicePage() {
   }
 
   return (
-    <div className="legacy-console support-console">
+    <div className="support-workspace">
       <SellerNavigation active="playground" />
-      <div className="legacy-shell support-inbox-shell">
-        <aside className="legacy-sidebar">
-          <section>
-            <div className="support-sidebar-head">
-              <div>
-                <span>CUSTOMER SERVICE</span>
-                <h2>客户队列</h2>
-              </div>
-              <Badge>{SELLER_ORDERS.length}</Badge>
+      <div className="support-layout">
+        <aside className="support-inbox" aria-label="会话列表">
+          <header className="support-inbox-header">
+            <div>
+              <h1>客服会话</h1>
+              <span>{SELLER_ORDERS.length} 个待处理会话</span>
             </div>
-            <div className="legacy-conversation-list">
-              {SELLER_ORDERS.map((order) => (
-                <button
-                  aria-pressed={order.id === selectedOrder.id}
-                  data-active={order.id === selectedOrder.id}
-                  key={order.id}
-                  type="button"
-                  onClick={() => selectOrder(order.id)}
-                >
-                  <span>
-                    {order.channel} · {order.updatedAt}
-                  </span>
+          </header>
+          <label className="support-search">
+            <Search aria-hidden="true" />
+            <input
+              aria-label="搜索会话"
+              value={search}
+              placeholder="搜索客户或商品"
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </label>
+          <div className="support-inbox-tabs" aria-label="会话筛选">
+            <button className="active" type="button">
+              待处理
+            </button>
+            <button type="button">全部会话</button>
+          </div>
+          <div className="support-conversation-list">
+            {visibleOrders.map((order) => (
+              <button
+                aria-pressed={order.id === selectedOrder.id}
+                data-active={order.id === selectedOrder.id}
+                key={order.id}
+                type="button"
+                onClick={() => selectOrder(order.id)}
+              >
+                <span className="support-conversation-topline">
                   <strong>{order.customer}</strong>
-                  <small>
-                    {order.product} · {order.status}
-                  </small>
-                </button>
-              ))}
-            </div>
-          </section>
+                  <time>{order.updatedAt}</time>
+                </span>
+                <span className="support-conversation-product">{order.product}</span>
+                <small>
+                  {order.channel} · {order.status}
+                </small>
+              </button>
+            ))}
+          </div>
         </aside>
 
-        <main className="legacy-main" id="main-content">
-          <div className="legacy-chat-topbar">
+        <main className="support-thread" id="main-content">
+          <header className="support-thread-header">
             <div>
-              <h2>实时会话</h2>
+              <h2>{selectedOrder.customer}</h2>
               <p>
-                {selectedOrder.channel} · {selectedOrder.customer} · {selectedOrder.product}
+                {selectedOrder.channel} · {selectedOrder.product}
               </p>
             </div>
-            <div className="support-chat-actions">
-              <div className="legacy-hud" aria-live="polite" role="status">
-                <Badge variant={sending ? 'warning' : 'secondary'}>{status}</Badge>
-              </div>
+            <div className="support-thread-status" aria-live="polite" role="status">
+              <i data-active={sending} />
+              {status}
             </div>
-          </div>
+          </header>
 
           <div
             aria-busy={sending}
             aria-label="实时会话记录"
             aria-live="polite"
-            className="legacy-chat-history"
+            className="support-chat-history"
             role="log"
           >
             {turns.length === 0 ? (
-              <div className="legacy-empty">
-                当前客户尚未开始本轮会话。输入客户问题后，Chatty 会结合商品、档期和规则生成回复。
+              <div className="support-welcome">
+                <span>会话已就绪</span>
+                <h3>从客户原话开始</h3>
+                <p>Chatty 会结合商品、租期和订单规则生成回复建议。</p>
               </div>
             ) : (
               turns.map((turn) => <LegacyMessage key={turn.id} turn={turn} />)
             )}
-            {sending ? <div className="legacy-typing">Chatty 正在处理...</div> : null}
+            {sending ? <div className="support-typing">Chatty 正在整理回复…</div> : null}
             <div ref={bottomRef} />
           </div>
 
-          <div className="legacy-composer">
-            <div className="legacy-composer-meta">
-              <span>客户消息</span>
-              <span>{question.length} 字</span>
-            </div>
+          <div className="support-composer">
             <form
-              className="legacy-composer-box"
+              className="support-composer-box"
               aria-label="发送客户消息"
               onSubmit={(event) => {
                 event.preventDefault()
                 sendMessage(question)
               }}
             >
-              <details className="legacy-attachment-details">
+              <details className="support-attachment-details">
                 <summary aria-label="添加客户图片">
                   <ImagePlus data-icon="inline-start" />
                 </summary>
-                <label className="legacy-image-url">
+                <label className="support-image-url">
                   客户图片链接
                   <Input
                     value={imageUrl}
@@ -231,7 +246,7 @@ export default function CustomerServicePage() {
               <Textarea
                 aria-label="客户消息"
                 value={question}
-                placeholder="输入客户原话，例如：我身高180体重70，这款能穿吗？"
+                placeholder="输入客户原话…"
                 onChange={(event) => setQuestion(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && !event.shiftKey) {
@@ -241,7 +256,7 @@ export default function CustomerServicePage() {
                 }}
               />
               <Button
-                className="legacy-send-button"
+                className="support-send-button"
                 size="icon"
                 type="submit"
                 aria-label="发送"
@@ -250,61 +265,98 @@ export default function CustomerServicePage() {
                 <Send data-icon="inline-start" />
               </Button>
             </form>
+            <div className="support-composer-footer">
+              <span>Enter 发送 · Shift + Enter 换行</span>
+              <span>{question.length} 字</span>
+            </div>
           </div>
-          <section className="dashboard-panel" aria-label="Harness 控制面">
-            {controlPlaneError ? <p role="alert">{controlPlaneError}</p> : null}
-            <div className="dashboard-panel-head">
-              <h2>Workflow 时间线</h2>
-              <span>{controlPlane?.workflowEvents.length ?? 0} EVENTS</span>
-            </div>
-            <div className="dashboard-detail-grid">
-              <div>
-                <span>当前状态</span>
-                <strong>{controlPlane?.workflow.displayState ?? 'unknown'}</strong>
-              </div>
-              <div>
-                <span>排队消息</span>
-                <strong>{controlPlane ? controlPlane.queueDepth : '未知'}</strong>
-              </div>
-              <div>
-                <span>Lease</span>
-                <strong>
-                  {controlPlane?.workflow.leaseOwner
-                    ? `${controlPlane.workflow.leaseOwner} · ${controlPlane.workflow.leaseExpired ? '已过期，等待恢复' : '有效'}`
-                    : '无 active lease'}
-                </strong>
-              </div>
-              <div>
-                <span>Heartbeat</span>
-                <strong>{controlPlane?.workflow.heartbeatAt ?? '无 heartbeat 证据'}</strong>
-              </div>
-              <div>
-                <span>取消原因</span>
-                <strong>{controlPlane?.workflow.cancelReason ?? '无取消证据'}</strong>
-              </div>
-              {(controlPlane?.workflowEvents ?? []).map((event) => (
-                <div key={`${event.sequence}-${event.type}`}>
-                  <span>#{event.sequence}</span>
-                  <strong>{event.type}</strong>
-                </div>
-              ))}
-            </div>
-            <div className="dashboard-panel-head">
-              <h2>Context / Memory</h2>
-              <span>CHECKPOINT {controlPlane?.checkpoint?.version ?? 0}</span>
-            </div>
-            <p>
-              压缩 tokens：{controlPlane?.checkpoint?.tokenBefore ?? 0} →{' '}
-              {controlPlane?.checkpoint?.tokenAfter ?? 0}
-            </p>
-            <p>
-              长期记忆：
-              {(controlPlane?.memories ?? [])
-                .map((memory) => `${memory.key} · ${memory.status} · used ${memory.usageCount}`)
-                .join(' / ') || '暂无'}
-            </p>
-          </section>
         </main>
+
+        <aside className="support-context" aria-label="会话上下文">
+          <section className="support-context-section">
+            <div className="support-section-heading">
+              <h2>订单信息</h2>
+              <span className="support-order-status">{selectedOrder.status}</span>
+            </div>
+            <dl className="support-data-list">
+              <div>
+                <dt>商品</dt>
+                <dd>{selectedOrder.product}</dd>
+              </div>
+              <div>
+                <dt>租期</dt>
+                <dd>{selectedOrder.period}</dd>
+              </div>
+              <div>
+                <dt>尺码</dt>
+                <dd>{selectedOrder.size}</dd>
+              </div>
+              <div>
+                <dt>金额</dt>
+                <dd>{selectedOrder.amount}</dd>
+              </div>
+            </dl>
+            {selectedOrder.risk !== '无' ? (
+              <p className="support-risk">{selectedOrder.risk}</p>
+            ) : null}
+          </section>
+
+          <section className="support-context-section">
+            <div className="support-section-heading">
+              <h2>客户资料</h2>
+            </div>
+            <strong className="support-customer-name">{selectedOrder.customer}</strong>
+            <p className="support-address">{selectedOrder.address}</p>
+            <ul className="support-notes">
+              {selectedOrder.notes.map((note) => (
+                <li key={note}>{note}</li>
+              ))}
+            </ul>
+          </section>
+
+          <details className="support-runtime">
+            <summary>
+              <span>
+                <i data-active={Boolean(controlPlane?.workflow.leaseOwner)} />
+                运行详情
+              </span>
+              <ChevronDown aria-hidden="true" />
+            </summary>
+            <div className="support-runtime-body" aria-label="Harness 控制面">
+              {controlPlaneError ? <p role="alert">{controlPlaneError}</p> : null}
+              <dl className="support-runtime-list">
+                <div>
+                  <dt>状态</dt>
+                  <dd>{controlPlane?.workflow.displayState ?? '尚未运行'}</dd>
+                </div>
+                <div>
+                  <dt>排队</dt>
+                  <dd>{controlPlane ? `${controlPlane.queueDepth} 条` : '—'}</dd>
+                </div>
+                <div>
+                  <dt>最近心跳</dt>
+                  <dd>{controlPlane?.workflow.heartbeatAt ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt>检查点</dt>
+                  <dd>版本 {controlPlane?.checkpoint?.version ?? 0}</dd>
+                </div>
+              </dl>
+              {(controlPlane?.workflowEvents.length ?? 0) > 0 ? (
+                <ol className="support-event-list">
+                  {controlPlane?.workflowEvents.map((event) => (
+                    <li key={`${event.sequence}-${event.type}`}>
+                      <span>#{event.sequence}</span>
+                      {event.type}
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="support-runtime-empty">完成一次会话后可查看运行记录。</p>
+              )}
+            </div>
+          </details>
+        </aside>
       </div>
     </div>
   )
@@ -313,11 +365,11 @@ export default function CustomerServicePage() {
 /** Renders one chat message in the seller transcript style. */
 function LegacyMessage({ turn }: { turn: ChatTurn }) {
   return (
-    <article className={`legacy-message ${turn.role}`}>
-      <div className="legacy-message-role">
+    <article className={`support-message ${turn.role}`}>
+      <div className="support-message-role">
         {turn.role === 'user' ? '用户' : turn.role === 'assistant' ? '客服' : '系统'}
       </div>
-      <div className="legacy-message-content">{turn.content}</div>
+      <div className="support-message-content">{turn.content}</div>
       {turn.traceId ? (
         <p>
           状态：{turn.status} · 会话 {turn.sessionId}
