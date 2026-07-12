@@ -6,7 +6,6 @@ import test from "node:test";
 import {
   createLlmTelemetrySummary,
   createPlaygroundLlmRuntime,
-  createPlaygroundModelFn,
   MissingLlmApiKeyError,
 } from "./llm";
 
@@ -150,20 +149,5 @@ test("createPlaygroundLlmRuntime does not expose a direct Chat Completions tool 
   } finally {
     process.env.OPENAI_API_KEY = savedKey;
     process.env.CHAT_MODEL = savedModel;
-  }
-});
-
-test("createPlaygroundModelFn 只由 DeepSeek key 决定是否启用", () => {
-  const savedKey = process.env.OPENAI_API_KEY;
-  try {
-    process.env.OPENAI_API_KEY = "";
-    assert.equal(createPlaygroundModelFn(), undefined);
-
-    process.env.OPENAI_API_KEY = "sk-test";
-    assert.equal(typeof createPlaygroundModelFn(), "function");
-  } finally {
-    // 恢复环境变量，避免污染同进程的其他用例
-    if (savedKey === undefined) delete process.env.OPENAI_API_KEY;
-    else process.env.OPENAI_API_KEY = savedKey;
   }
 });

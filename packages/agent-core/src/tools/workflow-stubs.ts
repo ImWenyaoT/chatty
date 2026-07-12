@@ -40,11 +40,6 @@ export const createHandoffTool: RuntimeTool<
 
 // --- schedule_followup(conversationId, dueAt, reason) -----------------------
 
-export const scheduleFollowupTool: RuntimeTool<
-  Record<string, JsonValue>,
-  JsonValue
-> = createScheduleFollowupTool();
-
 /** Builds the follow-up capability around a durable scheduler when one is available. */
 export function createScheduleFollowupTool(
   schedule?: (

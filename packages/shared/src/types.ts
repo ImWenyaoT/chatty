@@ -115,14 +115,3 @@ export interface LegacyChatInput {
   imageUrl?: string;
   sessionContext?: Record<string, JsonPrimitive>;
 }
-
-export interface LegacyChatAnswer {
-  answer: string;
-  action: string;
-  answerSource?: string;
-  references?: JsonValue[];
-  imageReferences?: JsonValue[];
-  handoff?: JsonValue;
-  intent?: JsonValue;
-  extractedFacts?: JsonValue;
-}

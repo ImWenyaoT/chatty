@@ -9,6 +9,8 @@ import {
 } from "../app/api/control-plane/route";
 import { GET as getJobs, POST as postJobs } from "../app/api/jobs/route";
 import { POST as postTraceReview } from "../app/api/trace-reviews/route";
+import { POST as postOrder } from "../app/api/orders/place/route";
+import { getRepos } from "./db";
 
 test("control-plane APIs serialize explicit empty and unknown state", async () => {
   const controlResponse = await getControlPlane(
@@ -72,4 +74,38 @@ test("trace review API rejects malformed request JSON explicitly", async () => {
   );
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), { error: "invalid_json" });
+});
+
+test("order API persists the submitted order through the HTTP to SQLite seam", async () => {
+  const response = await postOrder(
+    new Request("http://localhost/api/orders/place", {
+      method: "POST",
+      body: JSON.stringify({
+        customerId: "integration-customer",
+        productId: "SUIT-001",
+        conversationId: "integration-conversation",
+        orderNo: "ORDER-INTEGRATION-001",
+      }),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as {
+    ok: boolean;
+    memory: { conversationProfile: { orderPlacement: { orderNo: string } } };
+  };
+  assert.equal(body.ok, true);
+  assert.equal(
+    body.memory.conversationProfile.orderPlacement.orderNo,
+    "ORDER-INTEGRATION-001",
+  );
+  const persisted = getRepos().memory.snapshot({
+    customerId: "integration-customer",
+    productId: "SUIT-001",
+    conversationId: "integration-conversation",
+  });
+  const profile = persisted.conversationProfile as {
+    orderPlacement: { orderNo: string };
+  };
+  assert.equal(profile.orderPlacement.orderNo, "ORDER-INTEGRATION-001");
 });

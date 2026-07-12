@@ -19,6 +19,7 @@ function readAppSource(path: string) {
 const layoutSource = readAppSource("app/layout.tsx");
 const homeSource = readAppSource("app/page.tsx");
 const dashboardSource = readAppSource("app/dashboard/page.tsx");
+const jobActionsSource = readAppSource("app/dashboard/JobActions.tsx");
 const ordersSource = readAppSource("app/orders/page.tsx");
 const orderDataSource = readAppSource("app/components/seller/orderData.ts");
 const playgroundSource = readAppSource("app/playground/page.tsx");
@@ -157,6 +158,7 @@ test("control-plane surfaces render durable status and explicit unknown or empty
   assert.match(dashboardSource, /暂无事件证据/);
   assert.match(dashboardSource, /未知（无 attempt）/);
   assert.match(dashboardSource, /暂无投递记录/);
+  assert.match(jobActionsSource, /updateBackgroundJob/);
 });
 
 test("order operations stays as workflow evidence instead of an empty route", () => {

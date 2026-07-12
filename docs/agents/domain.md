@@ -4,39 +4,35 @@ How the engineering skills should consume this repo's domain documentation when 
 
 ## Before exploring, read these
 
-- **`CONTEXT.md`** at the repo root, or
-- **`CONTEXT-MAP.md`** at the repo root if it exists -- it points at one `CONTEXT.md` per context. Read each one relevant to the topic.
-- **`docs/adr/`** -- read ADRs that touch the area you're about to work in. In multi-context repos, also check `src/<context>/docs/adr/` for context-scoped decisions.
+This is a multi-context monorepo. Start from the map:
+
+- **`CONTEXT-MAP.md`** at the repo root -- the entry point. It points at one `CONTEXT.md` per context (one per package/app, plus the eval and retrieval surfaces) and at the shared glossary. Read the map, then the `CONTEXT.md` for each context relevant to your topic.
+- **`CONTEXT.md`** at the repo root -- the shared, system-wide glossary of terms that span every context. Read it for any cross-cutting concept.
+- **`docs/adr/`** for system-wide decisions, and **`<context>/docs/adr/`** (e.g. `packages/agent-core/docs/adr/`) for context-scoped decisions that touch the area you're about to work in.
 
 If any of these files don't exist, continue without treating absence as an error or proposing speculative files. This instruction only suppresses expected missing-document noise; it does not permit runtime, data, or validation failures to be hidden. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
 
 ## File structure
 
-Single-context repo (most repos):
+Multi-context monorepo (this repo):
 
 ```text
 /
-├── CONTEXT.md
-├── docs/adr/
-│   ├── 0001-event-sourced-orders.md
-│   └── 0002-postgres-for-write-model.md
-└── src/
+├── CONTEXT-MAP.md                          <- entry point: maps contexts -> CONTEXT.md
+├── CONTEXT.md                              <- shared, system-wide glossary
+├── docs/adr/                               <- system-wide decisions
+├── packages/
+│   ├── agent-core/  (@rental/agent-core)   <- harness runtime; CONTEXT.md + docs/adr/ (lazy)
+│   ├── llm/         (@rental/llm)           <- model plumbing / SDK adapter
+│   ├── db/          (@rental/db)            <- SQLite harness store
+│   └── shared/      (@rental/shared)        <- browser-safe API contracts
+├── apps/
+│   └── web/         (@chatty/web)           <- seller workspace / web demo
+├── eval/                                    <- evaluation lane
+└── rag-service/ + knowledge/               <- search / retrieval
 ```
 
-Multi-context repo (presence of `CONTEXT-MAP.md` at the root):
-
-```text
-/
-├── CONTEXT-MAP.md
-├── docs/adr/                          <- system-wide decisions
-└── src/
-    ├── ordering/
-    │   ├── CONTEXT.md
-    │   └── docs/adr/                  <- context-specific decisions
-    └── billing/
-        ├── CONTEXT.md
-        └── docs/adr/
-```
+Per-context `CONTEXT.md` and `docs/adr/` are created lazily by `/domain-modeling`; treat their absence as "not resolved yet", not an error.
 
 ## Use the glossary's vocabulary
 

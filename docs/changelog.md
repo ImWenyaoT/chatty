@@ -2,6 +2,13 @@
 
 本文件记录和新版 JD 对齐的架构、测试、可观测性改动。发布级变更仍以 git commit 为准。
 
+## 2026-07-12
+
+- JD 对齐：加强 Harness 失败可观测性、TypeScript 契约、Next/SQLite 联调和自动化回归。
+- 主参考：Codex 的显式失败与可执行质量门禁。
+- 采用：非法模型输出显式失败，生产 Next server 通过 HTTP 连到隔离 SQLite 的 full-stack 测试，以及 core/web coverage 阈值。
+- 拒绝：不保留测试养活的备用 runtime lane，不用源码正则代替可执行的行为测试，不把进程内 route 调用冒充真实 HTTP 联调。
+
 ## 2026-07-06
 
 ### KV cache observability on the live Agents SDK lane

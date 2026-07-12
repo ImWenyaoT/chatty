@@ -80,6 +80,8 @@ test("required local quality commands are present in package scripts", () => {
     "test",
     "test:frontend",
     "test:coverage",
+    "test:coverage:core",
+    "test:fullstack",
     "typecheck",
     "build",
   ]);
@@ -92,7 +94,8 @@ test("pull request quality checks are wired into CI in the same order as the pol
     "Lint and format",
     "Smoke test (core data path, no network)",
     "Test workspaces",
-    "Control-plane integration",
+    "Full-stack integration",
+    "Core package coverage",
     "Web core coverage",
     "Frontend experience contract",
     "Typecheck workspaces",
@@ -124,14 +127,18 @@ test("pull request quality checks are wired into CI in the same order as the pol
   );
 });
 
-test("CI runs durable control-plane integration and enforces web-core coverage", () => {
+test("CI runs full-stack integration and enforces web and core coverage", () => {
   assert.equal(
     rootPackageJson.scripts["test:coverage"],
     "pnpm --filter @chatty/web test:coverage",
   );
   assert.match(
     ciWorkflow,
-    /name: Control-plane integration[\s\S]*run: pnpm test:control-plane-integration/,
+    /name: Full-stack integration[\s\S]*run: pnpm test:fullstack/,
+  );
+  assert.match(
+    ciWorkflow,
+    /name: Core package coverage[\s\S]*run: pnpm test:coverage:core/,
   );
   assert.match(
     ciWorkflow,
@@ -142,7 +149,7 @@ test("CI runs durable control-plane integration and enforces web-core coverage",
   ) as { scripts: Record<string, string> };
   assert.match(
     webPackageJson.scripts["test:coverage"],
-    /--test-coverage-lines=87/,
+    /--test-coverage-lines=89/,
   );
   assert.match(
     webPackageJson.scripts["test:coverage"],
@@ -150,7 +157,7 @@ test("CI runs durable control-plane integration and enforces web-core coverage",
   );
   assert.match(
     webPackageJson.scripts["test:coverage"],
-    /--test-coverage-functions=81/,
+    /--test-coverage-functions=84/,
   );
 });
 

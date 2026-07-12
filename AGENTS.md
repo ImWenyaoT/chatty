@@ -10,7 +10,7 @@ The repo uses the default canonical triage labels: `needs-triage`, `needs-info`,
 
 ### Domain docs
 
-This is a single-context repo. See `docs/agents/domain.md`.
+This is a multi-context monorepo (one context per package/app, plus eval and retrieval surfaces); root `CONTEXT-MAP.md` is the entry point. See `docs/agents/domain.md`.
 
 ## PR instructions
 
