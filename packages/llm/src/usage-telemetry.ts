@@ -1,12 +1,11 @@
 /**
- * LLM 单次调用的归一化遥测记录与成本估算，跨 chat-completions 与 agents-sdk
- * 两条 lane 共用，避免 DeepSeek 费率表在多处重复而漂移。
+ * Agents SDK 调用的归一化遥测记录与成本估算。
  */
 
 /** 一次模型调用的归一化遥测：cache 命中/未命中、输出 token 与人民币成本。 */
 export interface ChatCompletionTelemetry {
   model: string;
-  operation: "complete" | "completeJson" | "completeWithTools" | "agentsSdkRun";
+  operation: "agentsSdkRun";
   inputCacheHitTokens: number;
   inputCacheMissTokens: number;
   outputTokens: number;

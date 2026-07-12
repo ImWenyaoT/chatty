@@ -13,7 +13,7 @@ test("createLlmTelemetrySummary aggregates pro usage and estimated cost", () => 
   const summary = createLlmTelemetrySummary("deepseek-v4-pro", [
     {
       model: "deepseek-v4-pro",
-      operation: "completeWithTools",
+      operation: "agentsSdkRun",
       inputCacheHitTokens: 1000,
       inputCacheMissTokens: 200,
       outputTokens: 50,
@@ -22,7 +22,7 @@ test("createLlmTelemetrySummary aggregates pro usage and estimated cost", () => 
     },
     {
       model: "deepseek-v4-pro",
-      operation: "completeJson",
+      operation: "agentsSdkRun",
       inputCacheHitTokens: 500,
       inputCacheMissTokens: 100,
       outputTokens: 25,
@@ -41,7 +41,7 @@ test("createLlmTelemetrySummary aggregates pro usage and estimated cost", () => 
     outputTokens: 75,
     totalTokens: 1875,
     estimatedCostCny: 0.0013875,
-    operations: ["completeWithTools", "completeJson"],
+    operations: ["agentsSdkRun", "agentsSdkRun"],
     warnings: [],
   });
 });

@@ -171,7 +171,7 @@ export type CustomerServiceLoopMessage =
     }
   | { role: "tool"; toolCallId: string; content: string };
 
-/** 有界循环的每轮模型调用（§4.1 C2）：apps/web 用 completeWithTools 实现注入。 */
+/** 历史 compose lane 的每轮模型调用；生产 runtime 使用 sdkRunner。 */
 export type CustomerServiceToolLoopFn = (
   messages: CustomerServiceLoopMessage[],
   tools: CustomerServiceToolDefinition[],

@@ -42,7 +42,7 @@ Codex 源码树）。
 |---|---|---|---|
 | 模型名 | `deepseek-v4-pro` / `v4-flash`，1M 上下文、384K 输出；`deepseek-chat`/`reasoner` 2026-07-24 弃用 | 代码 pin `deepseek-v4-pro` | ✅ |
 | function calling | 非 strict 走标准端点；**strict 仅 `/beta`** | 标准端点 + `strict:false`，参数交执行器 policy | ✅ |
-| JSON | 支持 `json_object`；**无 `json_schema`**；需 prompt 含 "json" | fetch 补丁把 `json_schema→json_object` + parseJsonObject 兜底 | ✅ |
+| JSON | 支持 `json_object`；**无 `json_schema`**；需 prompt 含 "json" | fetch 补丁把 `json_schema→json_object`，Agents SDK structured runner 用 Zod 校验 | ✅ |
 | context/KV cache | 自动、best-effort，字段 `prompt_cache_hit/miss_tokens` | usage-telemetry 归一化 | ✅ |
 | thinking | `thinking:{type:enabled\|disabled}` + `reasoning_effort` | `providerData:{thinking:{type:"disabled"}}` | ✅ |
 | Responses API | 不兼容 | 标 `not_assumed`，强制 `OpenAIChatCompletionsModel` | ✅ |
@@ -62,7 +62,8 @@ lane
 ```
 
 live runtime 必须走 Agents SDK；源码扫描测试禁止 `apps/` 与 `packages/agent-core/` 直接编排
-Chat Completions。裸调只保留在 `eval/` 与兼容 adapter。此约束不变。
+Chat Completions。裸调只保留在 `eval/`；生产 DeepSeek 仍由 Agents SDK 的
+`OpenAIChatCompletionsModel` 走 `/chat/completions`。此约束不变。
 
 ## claude_code 子系统 → Chatty 参考映射（rationale 依据）
 
