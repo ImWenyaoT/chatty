@@ -195,6 +195,58 @@ test("createCustomerServiceSdkRunner routes knowledge search through the shared 
   );
 });
 
+test("createCustomerServiceSdkRunner grounds a price reply in the SQLite search evidence", async () => {
+  const runtime = answerQuestionRuntime();
+  runtime.event = {
+    ...runtime.event,
+    payload: { question: "这款多少钱一天？" },
+  };
+  runtime.context = {
+    ...runtime.context,
+    fragments: [
+      { kind: "task", label: "当前客服任务", content: "answer_question" },
+      {
+        kind: "user_message",
+        label: "用户本轮消息",
+        content: "这款多少钱一天？",
+      },
+    ],
+  };
+  runtime.runPolicy = createCustomerServiceRunPolicy(runtime.task, {
+    requireKnowledgeSearch: true,
+  });
+  runtime.registry = createDefaultToolRegistry({
+    search: () => [
+      {
+        section: "黑色双排扣西装 › 租赁价格",
+        text: "第一天租赁价格 199 元；续租每天 99.5 元。",
+      },
+    ],
+  });
+  const fakeRun: SdkStructuredRunFactory = (opts) => async () => {
+    assert.equal(opts.toolChoice, "search_knowledge");
+    const search = opts.tools.find((tool) => tool.name === "search_knowledge");
+    assert.ok(search);
+    const evidence = await search.execute({ query: "价格" });
+    assert.match(JSON.stringify(evidence), /199 元/);
+    return { reply: "这款第一天 199 元，续租每天 99.5 元。" };
+  };
+
+  const result = await createCustomerServiceSdkRunner(fakeRun)(runtime);
+
+  assert.equal(result.reply, "这款第一天 199 元，续租每天 99.5 元。");
+  assert.deepEqual(
+    result.toolCalls.map((call) => call.arguments),
+    [{ query: "价格" }],
+  );
+  assert.match(JSON.stringify(result.toolResults), /199 元/);
+  assert.match(
+    runtime.context.fragments.find((fragment) => fragment.kind === "knowledge")
+      ?.content ?? "",
+    /199 元/,
+  );
+});
+
 test("createCustomerServiceSdkRunner audits a knowledge search before cancellation", async () => {
   const runtime = answerQuestionRuntime();
   runtime.signal = AbortSignal.abort(new Error("search cancelled"));

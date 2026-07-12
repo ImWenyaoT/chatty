@@ -15,6 +15,12 @@ import type { ToolRegistry } from "./tools/registry.js";
 import { ApprovalRequiredError, PolicyDenyError } from "./tools/registry.js";
 import { executeSearchRequest } from "./search-execution.js";
 
+const POLICY_FACT_PATTERN =
+  /怎么租|如何租|流程|押金|规则|租期|计费|续租|售后|换码|换货|不合身|换吗|店名|电话|地址|营业|清洗|包邮/;
+const PRODUCT_FACT_PATTERN =
+  /价格|多少钱|租金|一天|费用|尺码|材质|颜色|款式|当前链接|这款吗/;
+const PRICE_FACT_PATTERN = /价格|多少钱|租金|一天|费用/;
+
 export type CustomerServiceTaskKind =
   | "collect_missing_info"
   | "answer_question"
@@ -802,10 +808,10 @@ export async function runCustomerServiceHarnessStep(
   };
 }
 
-/** Requires grounded retrieval only for policy/store facts, leaving catalog questions on auto. */
+/** Requires grounded retrieval for policies and price facts, leaving link confirmation on auto. */
 function requiresKnowledgeSearch(question: string): boolean {
-  return /价格|多少钱|租金|一天|费用|怎么租|如何租|流程|押金|规则|租期|计费|续租|售后|换码|换货|不合身|换吗|店名|电话|地址|营业|清洗|包邮/.test(
-    question,
+  return (
+    POLICY_FACT_PATTERN.test(question) || PRICE_FACT_PATTERN.test(question)
   );
 }
 
@@ -974,18 +980,9 @@ function mentionsAnswerableFactQuestion(
   question: string,
   productId?: string,
 ): boolean {
-  if (
-    /押金|规则|怎么租|如何租|流程|租期|计费|续租|售后|换码|换货|不合身|换吗|店名|电话|地址|营业/.test(
-      question,
-    )
-  ) {
-    return true;
-  }
   return (
-    Boolean(productId) &&
-    /价格|多少钱|租金|一天|费用|尺码|材质|颜色|款式|当前链接|这款吗/.test(
-      question,
-    )
+    POLICY_FACT_PATTERN.test(question) ||
+    (Boolean(productId) && PRODUCT_FACT_PATTERN.test(question))
   );
 }
 

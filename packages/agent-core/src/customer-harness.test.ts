@@ -168,7 +168,7 @@ test("scheduler does not mistake store opening hours for a rental period", () =>
   assert.equal(task.kind, "answer_question");
 });
 
-test("SDK lane requires SQLite evidence for price, rental and exchange facts", async () => {
+test("SDK lane forces search_knowledge for price, rental and exchange facts", async () => {
   for (const question of [
     "这款多少钱一天？",
     "你们家衣服怎么租？",

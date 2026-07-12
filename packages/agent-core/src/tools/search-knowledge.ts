@@ -39,8 +39,8 @@ export function createSearchKnowledgeTool(
 黑色双排扣西装商品说明（products）；历史客服问答（history）。
 返回最相关的前 ${SEARCH_KNOWLEDGE_TOP_K} 条，每条含出处和正文，结果超过 ${SEARCH_KNOWLEDGE_TOP_K} 条时会提示剩余数量。
 没有命中时，换更短或同义的关键词再搜一次；已经拿到答案后，不要用相同的
-关键词重复搜索。商品价格、尺码推荐、库存这类结构化事实优先用
-get_product / check_availability，不要靠本工具。`,
+关键词重复搜索。当前 answer_question 任务只暴露本工具：商品价格、商品说明与
+尺码规则同样通过本工具核验；库存档期才使用 check_availability。`,
     parameters: {
       type: "object",
       properties: {
