@@ -2,11 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createControlPlaneRepository, openDatabase } from "@rental/db";
 import type { MemorySnapshot } from "@rental/shared";
-import {
-  compactContextIfNeeded,
-  estimateContextTokens,
-  projectContext,
-} from "./context-control";
+import { prepareTurnContext } from "./context-control";
 
 /** Builds a snapshot large enough to force deterministic compaction. */
 function largeSnapshot(): MemorySnapshot {
@@ -54,11 +50,12 @@ test("compaction persists the included trace boundary and actual projected token
       updatedAt: "2026-07-11T00:00:00.000Z",
     },
   ];
-  const result = await compactContextIfNeeded({
+  const result = await prepareTurnContext({
     control,
     snapshot,
+    checkpoint: undefined,
+    traceIds: ["trace-1", "trace-2", "trace-3", "trace-4"],
     conversationId: "conversation-1",
-    throughTraceId: "trace-2",
     checkpointId: "checkpoint-1",
     workflowState: "answering",
     tokenLimit: 1,
@@ -66,15 +63,13 @@ test("compaction persists the included trace boundary and actual projected token
     generateCheckpoint: checkpointSummary,
   });
 
-  assert.equal(result.checkpoint?.throughTraceId, "trace-2");
-  const projected = projectContext({
-    snapshot,
-    checkpoint: result.checkpoint,
-    memories,
-  });
-  assert.equal(result.checkpoint?.tokenAfter, estimateContextTokens(projected));
+  assert.equal(result.checkpoint?.throughTraceId, "trace-1");
+  assert.equal(
+    result.checkpoint?.tokenAfter,
+    Math.ceil(JSON.stringify(result.snapshot).length / 2),
+  );
   assert.deepEqual(
-    projected.recentMessages.map((message) =>
+    result.snapshot.recentMessages.map((message) =>
       (message as { content: string }).content.slice(0, 9),
     ),
     [
@@ -87,9 +82,61 @@ test("compaction persists the included trace boundary and actual projected token
     ],
   );
   assert.deepEqual(
-    (projected.customerMemory as { longTerm: unknown[] }).longTerm,
+    (result.snapshot.customerMemory as { longTerm: unknown[] }).longTerm,
     [{ id: "memory-1", category: "measurement", key: "suit_size", value: "L" }],
   );
+  assert.deepEqual(result.events, [
+    {
+      type: "compacted",
+      payload: {
+        checkpointId: "checkpoint-1",
+        tokenBefore: result.tokenBefore,
+        tokenAfter: result.checkpoint?.tokenAfter,
+      },
+    },
+    {
+      type: "context_built",
+      payload: {
+        estimatedTokens: result.tokenBefore,
+        compactTriggered: true,
+        checkpointVersion: result.checkpoint?.version,
+        memoryIds: ["memory-1"],
+      },
+    },
+  ]);
+});
+
+test("context preparation skips checkpoint work below the budget", async () => {
+  const control = createControlPlaneRepository(openDatabase(":memory:"));
+  const result = await prepareTurnContext({
+    control,
+    snapshot: largeSnapshot(),
+    checkpoint: undefined,
+    traceIds: [],
+    conversationId: "conversation-1",
+    checkpointId: "checkpoint-unused",
+    workflowState: "answering",
+    memories: [],
+    tokenLimit: 100_000,
+    generateCheckpoint: async () => {
+      throw new Error("checkpoint generator must not run");
+    },
+  });
+
+  assert.equal(result.triggered, false);
+  assert.equal(result.checkpoint, undefined);
+  assert.equal(result.snapshot.recentMessages.length, 6);
+  assert.deepEqual(result.events, [
+    {
+      type: "context_built",
+      payload: {
+        estimatedTokens: result.tokenBefore,
+        compactTriggered: false,
+        checkpointVersion: 0,
+        memoryIds: [],
+      },
+    },
+  ]);
 });
 
 test("compaction preserves the previous checkpoint when generation or save fails", async () => {
@@ -104,13 +151,15 @@ test("compaction preserves the previous checkpoint when generation or save fails
     model: "deepseek-v4-pro",
   });
 
-  const result = await compactContextIfNeeded({
+  const result = await prepareTurnContext({
     control,
     snapshot: largeSnapshot(),
+    checkpoint: previous,
+    traceIds: ["trace-1", "trace-2", "trace-3", "trace-4"],
     conversationId: "conversation-1",
-    throughTraceId: "trace-2",
     checkpointId: "checkpoint-new",
     workflowState: "answering",
+    memories: [],
     tokenLimit: 1,
     generateCheckpoint: async () => {
       throw new Error("provider unavailable");
@@ -119,6 +168,28 @@ test("compaction preserves the previous checkpoint when generation or save fails
 
   assert.equal(result.failureKind, "generation_or_save_failed");
   assert.deepEqual(control.latestCheckpoint("conversation-1"), previous);
+  assert.deepEqual(
+    (result.snapshot.customerMemory as { checkpoint: unknown }).checkpoint,
+    previous.summary,
+  );
+  assert.deepEqual(result.events, [
+    {
+      type: "compaction_failed",
+      payload: {
+        failureKind: "generation_or_save_failed",
+        checkpointVersion: previous.version,
+      },
+    },
+    {
+      type: "context_built",
+      payload: {
+        estimatedTokens: result.tokenBefore,
+        compactTriggered: true,
+        checkpointVersion: previous.version,
+        memoryIds: [],
+      },
+    },
+  ]);
 });
 
 test("compaction preserves the previous checkpoint when persistence rejects the replacement", async () => {
@@ -140,13 +211,15 @@ test("compaction preserves the previous checkpoint when persistence rejects the 
     },
   };
 
-  const result = await compactContextIfNeeded({
+  const result = await prepareTurnContext({
     control: rejectingControl,
     snapshot: largeSnapshot(),
+    checkpoint: previous,
+    traceIds: ["trace-1", "trace-2", "trace-3", "trace-4"],
     conversationId: "conversation-1",
-    throughTraceId: "trace-2",
     checkpointId: "checkpoint-new",
     workflowState: "answering",
+    memories: [],
     tokenLimit: 1,
     generateCheckpoint: checkpointSummary,
   });
@@ -157,16 +230,38 @@ test("compaction preserves the previous checkpoint when persistence rejects the 
 
 test("compaction refuses to invent a replay boundary before any trace exists", async () => {
   const control = createControlPlaneRepository(openDatabase(":memory:"));
-  const result = await compactContextIfNeeded({
+  const result = await prepareTurnContext({
     control,
     snapshot: largeSnapshot(),
+    checkpoint: undefined,
+    traceIds: [],
     conversationId: "conversation-1",
     checkpointId: "checkpoint-1",
     workflowState: "answering",
+    memories: [],
     tokenLimit: 1,
     generateCheckpoint: checkpointSummary,
   });
 
   assert.equal(result.failureKind, "boundary_unavailable");
   assert.equal(control.latestCheckpoint("conversation-1"), undefined);
+  assert.equal(result.snapshot.recentMessages.length, 6);
+  assert.deepEqual(result.events, [
+    {
+      type: "compaction_failed",
+      payload: {
+        failureKind: "boundary_unavailable",
+        checkpointVersion: 0,
+      },
+    },
+    {
+      type: "context_built",
+      payload: {
+        estimatedTokens: result.tokenBefore,
+        compactTriggered: true,
+        checkpointVersion: 0,
+        memoryIds: [],
+      },
+    },
+  ]);
 });

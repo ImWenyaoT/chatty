@@ -27,14 +27,20 @@ type CheckpointSummary = z.infer<typeof checkpointSchema>;
 export type CheckpointGenerator = (
   snapshot: MemorySnapshot,
 ) => Promise<CheckpointSummary>;
+type ContextControlEvent = {
+  type: "compacted" | "compaction_failed" | "context_built";
+  payload: Record<string, JsonValue>;
+};
+
+const RAW_MESSAGE_REPLAY_LIMIT = 6;
 
 /** Estimates prompt tokens conservatively without provider-specific tokenization. */
-export function estimateContextTokens(value: unknown): number {
+function estimateContextTokens(value: unknown): number {
   return Math.ceil(JSON.stringify(value).length / 2);
 }
 
 /** Projects checkpoint and frequently-used long-term memory into the next bounded turn. */
-export function projectContext(input: {
+function projectContext(input: {
   snapshot: MemorySnapshot;
   checkpoint?: ConversationCheckpoint;
   memories: MemoryCandidate[];
@@ -58,8 +64,100 @@ export function projectContext(input: {
   };
 }
 
+/**
+ * Prepares the complete model-facing context for one Customer Service Turn.
+ * The module owns replay slicing, trace-boundary selection, checkpointing,
+ * reprojection, and the observable events emitted by the caller.
+ */
+export async function prepareTurnContext(input: {
+  control: ControlPlaneRepository;
+  snapshot: MemorySnapshot;
+  checkpoint?: ConversationCheckpoint;
+  traceIds: readonly string[];
+  conversationId: string;
+  checkpointId: string;
+  workflowState: string;
+  memories: MemoryCandidate[];
+  tokenLimit?: number;
+  generateCheckpoint?: CheckpointGenerator;
+}): Promise<{
+  snapshot: MemorySnapshot;
+  checkpoint?: ConversationCheckpoint;
+  tokenBefore: number;
+  triggered: boolean;
+  failureKind?: "boundary_unavailable" | "generation_or_save_failed";
+  events: ContextControlEvent[];
+}> {
+  let snapshot = projectContext({
+    snapshot: input.snapshot,
+    checkpoint: input.checkpoint,
+    memories: input.memories,
+  });
+  const replayTraceCount = Math.ceil(
+    Math.min(input.snapshot.recentMessages.length, RAW_MESSAGE_REPLAY_LIMIT) /
+      2,
+  );
+  const compacted = await compactContextIfNeeded({
+    control: input.control,
+    snapshot,
+    projectionBaseSnapshot: input.snapshot,
+    compactableSnapshot: {
+      ...snapshot,
+      recentMessages: input.snapshot.recentMessages.slice(
+        0,
+        -RAW_MESSAGE_REPLAY_LIMIT,
+      ),
+    },
+    conversationId: input.conversationId,
+    throughTraceId:
+      input.snapshot.recentMessages.length > RAW_MESSAGE_REPLAY_LIMIT
+        ? input.traceIds.at(-(replayTraceCount + 1))
+        : undefined,
+    checkpointId: input.checkpointId,
+    workflowState: input.workflowState,
+    memories: input.memories,
+    tokenLimit: input.tokenLimit,
+    generateCheckpoint: input.generateCheckpoint,
+  });
+  const events: ContextControlEvent[] = [];
+  if (compacted.checkpoint) {
+    snapshot = projectContext({
+      snapshot: input.snapshot,
+      checkpoint: compacted.checkpoint,
+      memories: input.memories,
+    });
+    events.push({
+      type: "compacted",
+      payload: {
+        checkpointId: compacted.checkpoint.id,
+        tokenBefore: compacted.tokenBefore,
+        tokenAfter: compacted.checkpoint.tokenAfter,
+      },
+    });
+  } else if (compacted.failureKind) {
+    events.push({
+      type: "compaction_failed",
+      payload: {
+        failureKind: compacted.failureKind,
+        checkpointVersion: input.checkpoint?.version ?? 0,
+      },
+    });
+  }
+  events.push({
+    type: "context_built",
+    payload: {
+      estimatedTokens: compacted.tokenBefore,
+      compactTriggered: compacted.triggered,
+      checkpointVersion:
+        compacted.checkpoint?.version ?? input.checkpoint?.version ?? 0,
+      memoryIds: input.memories.map((memory) => memory.id),
+    },
+  });
+  return { snapshot, events, ...compacted };
+}
+
 /** Creates a Claude-Code-style context checkpoint before the next model sample crosses the budget. */
-export async function compactContextIfNeeded(input: {
+async function compactContextIfNeeded(input: {
   control: ControlPlaneRepository;
   snapshot: MemorySnapshot;
   projectionBaseSnapshot?: MemorySnapshot;
@@ -71,7 +169,6 @@ export async function compactContextIfNeeded(input: {
   memories?: MemoryCandidate[];
   tokenLimit?: number;
   generateCheckpoint?: CheckpointGenerator;
-  checkpointModel?: string;
 }): Promise<{
   checkpoint?: ConversationCheckpoint;
   tokenBefore: number;
@@ -93,7 +190,7 @@ export async function compactContextIfNeeded(input: {
 
   try {
     const modelName = input.generateCheckpoint
-      ? (input.checkpointModel ?? "injected-checkpoint-generator")
+      ? "injected-checkpoint-generator"
       : readLlmEnv().chatModel;
     const runCompact =
       input.generateCheckpoint ?? createCheckpointGenerator(input, modelName);

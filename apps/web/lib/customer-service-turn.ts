@@ -19,8 +19,7 @@ import { getRepos, newId } from "./db";
 import { createPlaygroundLlmRuntime } from "./llm";
 import { HarnessRunController } from "./harness-run-controller";
 import {
-  compactContextIfNeeded,
-  projectContext,
+  prepareTurnContext,
   type CheckpointGenerator,
 } from "./context-control";
 
@@ -37,8 +36,6 @@ export type CustomerServiceTurnResponse = PlaygroundResponse;
 type CustomerServiceTurnLlmRuntime = ReturnType<
   typeof createPlaygroundLlmRuntime
 >;
-const RAW_MESSAGE_REPLAY_LIMIT = 6;
-
 type CustomerServiceTurnOptions = {
   repos?: CustomerServiceTurnRepos;
   idGenerator?: (prefix: string) => string;
@@ -152,63 +149,25 @@ export async function runCustomerServiceTurn(
     );
     const checkpointBefore = repos.control.latestCheckpoint(conversationId);
     const priorTraces = repos.traces.queryBySession(session.id);
-    const replayTailSize = Math.ceil(
-      projectedSnapshotMessageCount(snapshot) / 2,
-    );
     if (promotedMemories.length) {
       repos.control.markMemoryUsed(promotedMemories.map((memory) => memory.id));
     }
-    let projectedSnapshot = projectContext({
+    const preparedContext = await prepareTurnContext({
+      control: repos.control,
       snapshot,
       checkpoint: checkpointBefore,
-      memories: promotedMemories,
-    });
-    const compacted = await compactContextIfNeeded({
-      control: repos.control,
-      snapshot: projectedSnapshot,
-      projectionBaseSnapshot: snapshot,
-      compactableSnapshot: {
-        ...projectedSnapshot,
-        recentMessages: snapshot.recentMessages.slice(
-          0,
-          -RAW_MESSAGE_REPLAY_LIMIT,
-        ),
-      },
+      traceIds: priorTraces.map((trace) => trace.id),
       conversationId,
-      throughTraceId:
-        snapshot.recentMessages.length > RAW_MESSAGE_REPLAY_LIMIT
-          ? priorTraces.at(-(replayTailSize + 1))?.id
-          : undefined,
       checkpointId: id("cp"),
       workflowState: session.currentStep,
       memories: promotedMemories,
       generateCheckpoint: options.checkpointGenerator,
       tokenLimit: options.compactionTokenLimit,
     });
-    if (compacted.checkpoint) {
-      projectedSnapshot = projectContext({
-        snapshot,
-        checkpoint: compacted.checkpoint,
-        memories: promotedMemories,
-      });
-      runController.event(runId, "compacted", {
-        checkpointId: compacted.checkpoint.id,
-        tokenBefore: compacted.tokenBefore,
-        tokenAfter: compacted.checkpoint.tokenAfter,
-      });
-    } else if (compacted.failureKind) {
-      runController.event(runId, "compaction_failed", {
-        failureKind: compacted.failureKind,
-        checkpointVersion: checkpointBefore?.version ?? 0,
-      });
+    const projectedSnapshot = preparedContext.snapshot;
+    for (const event of preparedContext.events) {
+      runController.event(runId, event.type, event.payload);
     }
-    runController.event(runId, "context_built", {
-      estimatedTokens: compacted.tokenBefore,
-      compactTriggered: compacted.triggered,
-      checkpointVersion:
-        compacted.checkpoint?.version ?? checkpointBefore?.version ?? 0,
-      memoryIds: promotedMemories.map((memory) => memory.id),
-    });
     let llm: CustomerServiceTurnLlmRuntime;
     try {
       llm = options.llmRuntimeFactory
@@ -409,13 +368,6 @@ export async function resumeCustomerServiceHandoff(
     { ...input, question: options.handoffResolution ?? input.question },
     { ...options, repos, resumeHandoffRunId: runId },
   );
-}
-
-/** Converts the fixed latest-six raw-message policy into its turn-sized replay tail. */
-function projectedSnapshotMessageCount(snapshot: {
-  recentMessages: JsonValue[];
-}): number {
-  return Math.min(snapshot.recentMessages.length, RAW_MESSAGE_REPLAY_LIMIT);
 }
 
 /** Normalizes any observed durable or in-process cancellation into the public turn error. */
