@@ -7,7 +7,12 @@ import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { SellerNavigation } from "../components/seller/SellerNavigation";
 import { SELLER_ORDERS } from "../components/seller/orderData";
-import type { HarnessTrace, PlaygroundResponse } from "../components/types";
+import {
+  isApiErrorResponse,
+  isPlaygroundResponse,
+  type HarnessTrace,
+  type PlaygroundResponse,
+} from "@rental/shared/browser";
 import type { ConversationControlApiView } from "@/lib/control-plane-read-model";
 
 type ChatTurn = {
@@ -28,19 +33,22 @@ const PRODUCT_ID_BY_ORDER_ID: Record<string, string> = {
   "ORD-20260703-006": "SUIT-002",
 };
 
-const PLAYGROUND_ERROR_MESSAGES: Record<string, string> = {
+const PLAYGROUND_ERROR_MESSAGES = {
   llm_not_configured: "模型尚未配置，请检查仓库根目录的 .env",
   llm_provider_failed: "模型服务暂时不可用，请稍后重试",
   workflow_conflict: "当前会话仍在处理中，请稍后重试",
   unauthorized: "当前请求未通过访问校验",
   invalid_input: "消息内容不符合要求",
-};
+} as const;
 
 /** Converts API error codes into actionable seller-facing messages. */
-function playgroundErrorMessage(code: unknown) {
-  return typeof code === "string"
-    ? (PLAYGROUND_ERROR_MESSAGES[code] ?? code)
-    : "请求失败";
+function playgroundErrorMessage(payload: unknown) {
+  if (!isApiErrorResponse(payload)) return "请求失败";
+  return (
+    PLAYGROUND_ERROR_MESSAGES[
+      payload.error as keyof typeof PLAYGROUND_ERROR_MESSAGES
+    ] ?? payload.error
+  );
 }
 
 /** Renders the seller-facing customer service workspace. */
@@ -119,9 +127,11 @@ export default function CustomerServicePage() {
         }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(playgroundErrorMessage(data?.error));
+      if (!response.ok) throw new Error(playgroundErrorMessage(data));
+      if (!isPlaygroundResponse(data))
+        throw new Error("服务返回了不完整的会话结果");
 
-      const reply = data as PlaygroundResponse;
+      const reply: PlaygroundResponse = data;
       const controlResponse = await fetch(
         `/api/control-plane?conversationId=${encodeURIComponent(conversationId)}&customerId=${encodeURIComponent(selectedOrder.customer)}&runId=${encodeURIComponent(reply.runId)}`,
       );
@@ -148,9 +158,7 @@ export default function CustomerServicePage() {
           runId: reply.runId,
         },
       ]);
-      setStatus(
-        reply.terminality === "terminal" ? "本轮已完成" : "等待继续跟进",
-      );
+      setStatus(reply.terminality === "close" ? "本轮已完成" : "等待继续跟进");
     } catch (error) {
       const message =
         error instanceof TypeError

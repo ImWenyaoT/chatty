@@ -9,8 +9,12 @@ import {
   createDefaultToolRegistry,
   runCustomerServiceHarnessStep,
 } from "@rental/agent-core";
-import type { JsonValue, LegacyChatInput } from "@rental/shared";
-import type { HarnessTrace } from "../app/components/types";
+import type {
+  HarnessTrace,
+  JsonValue,
+  LegacyChatInput,
+  PlaygroundResponse,
+} from "@rental/shared";
 import { getRepos, newId } from "./db";
 import { createPlaygroundLlmRuntime } from "./llm";
 import { HarnessRunController } from "./harness-run-controller";
@@ -28,15 +32,7 @@ export type CustomerServiceTurnRepos = {
   control: ControlPlaneRepository;
 };
 
-export type CustomerServiceTurnResponse = {
-  reply: string;
-  traceId: string;
-  sessionId: string;
-  status: string;
-  terminality: string;
-  harnessTrace: HarnessTrace;
-  runId: string;
-};
+export type CustomerServiceTurnResponse = PlaygroundResponse;
 
 type CustomerServiceTurnLlmRuntime = ReturnType<
   typeof createPlaygroundLlmRuntime
