@@ -19,6 +19,7 @@
     "lint": "eslint . && prettier . --check",
     "lint:fix": "eslint . --fix && prettier . --write",
     "test:frontend": "pnpm --filter @chatty/web test:frontend",
+    "test:coverage": "pnpm --filter @chatty/web test:coverage",
     "test:control-plane-integration": "pnpm --filter @chatty/web exec node --test --import tsx lib/customer-service-turn.test.ts lib/background-job-worker.test.ts lib/memory-control-plane.test.ts lib/context-control.test.ts lib/control-plane-read-model.test.ts lib/control-plane-api-render.test.ts && pnpm test:worker-integration",
     "build:skeleton": "tsc -b packages/shared packages/db packages/agent-core packages/llm --pretty false",
     "typecheck:skeleton": "pnpm build:skeleton && pnpm --filter @rental/agent-core typecheck && pnpm --filter @rental/llm typecheck",

@@ -25,18 +25,30 @@ try {
   });
   seedDb.close();
 
-  const worker = spawnSync("pnpm", ["worker:once"], {
-    cwd: process.cwd(),
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      CHATTY_DB_PATH: databasePath,
-      CHATTY_WORKER_ID: "integration-worker",
-      CHATTY_WORKER_FIXTURE: "scheduled-followup",
-      DEEPSEEK_API_KEY: "",
-      OPENAI_API_KEY: "",
+  // Invoke the worker runtime directly: an integration test must exercise the
+  // worker, not the package manager that happens to launch it.
+  const worker = spawnSync(
+    process.execPath,
+    [
+      "--env-file-if-exists=.env",
+      "--import",
+      "tsx",
+      "scripts/worker.mts",
+      "--once",
+    ],
+    {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        CHATTY_DB_PATH: databasePath,
+        CHATTY_WORKER_ID: "integration-worker",
+        CHATTY_WORKER_FIXTURE: "scheduled-followup",
+        DEEPSEEK_API_KEY: "",
+        OPENAI_API_KEY: "",
+      },
     },
-  });
+  );
   assert.equal(
     worker.status,
     0,

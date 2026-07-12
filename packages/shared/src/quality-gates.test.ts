@@ -79,6 +79,7 @@ test("required local quality commands are present in package scripts", () => {
     "smoke",
     "test",
     "test:frontend",
+    "test:coverage",
     "typecheck",
     "build",
   ]);
@@ -91,6 +92,8 @@ test("pull request quality checks are wired into CI in the same order as the pol
     "Lint and format",
     "Smoke test (core data path, no network)",
     "Test workspaces",
+    "Control-plane integration",
+    "Web core coverage",
     "Frontend experience contract",
     "Typecheck workspaces",
     "Build workspaces",
@@ -118,6 +121,36 @@ test("pull request quality checks are wired into CI in the same order as the pol
   assert.doesNotMatch(
     REQUIRED_PULL_REQUEST_CHECKS.map((check) => check.purpose).join("\n"),
     /Vercel-first/,
+  );
+});
+
+test("CI runs durable control-plane integration and enforces web-core coverage", () => {
+  assert.equal(
+    rootPackageJson.scripts["test:coverage"],
+    "pnpm --filter @chatty/web test:coverage",
+  );
+  assert.match(
+    ciWorkflow,
+    /name: Control-plane integration[\s\S]*run: pnpm test:control-plane-integration/,
+  );
+  assert.match(
+    ciWorkflow,
+    /name: Web core coverage[\s\S]*run: pnpm test:coverage/,
+  );
+  const webPackageJson = JSON.parse(
+    readFileSync(resolve(repoRoot, "apps/web/package.json"), "utf8"),
+  ) as { scripts: Record<string, string> };
+  assert.match(
+    webPackageJson.scripts["test:coverage"],
+    /--test-coverage-lines=80/,
+  );
+  assert.match(
+    webPackageJson.scripts["test:coverage"],
+    /--test-coverage-branches=60/,
+  );
+  assert.match(
+    webPackageJson.scripts["test:coverage"],
+    /--test-coverage-functions=70/,
   );
 });
 

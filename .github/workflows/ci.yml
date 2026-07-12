@@ -50,6 +50,12 @@ jobs:
       - name: Test workspaces
         run: pnpm test
 
+      - name: Control-plane integration
+        run: pnpm test:control-plane-integration
+
+      - name: Web core coverage
+        run: pnpm test:coverage
+
       - name: Frontend experience contract
         run: pnpm test:frontend
 

@@ -56,6 +56,11 @@ export const REQUIRED_LOCAL_QUALITY_COMMANDS: readonly QualityCommand[] = [
     purpose: "锁住 playground 的视觉、无障碍和交互反馈体验契约",
   },
   {
+    scriptName: "test:coverage",
+    command: "pnpm --filter @chatty/web test:coverage",
+    purpose: "用 Node 原生 coverage 阈值约束 web 核心业务路径的回归",
+  },
+  {
     scriptName: "typecheck",
     command:
       "pnpm -r --if-present typecheck && tsc -p eval/tsconfig.json --noEmit",
@@ -88,6 +93,17 @@ export const REQUIRED_PULL_REQUEST_CHECKS: readonly PullRequestCheck[] = [
     name: "Test workspaces",
     command: "pnpm test",
     purpose: "运行全部自动化单元测试和轻量集成测试",
+  },
+  {
+    name: "Control-plane integration",
+    command: "pnpm test:control-plane-integration",
+    purpose:
+      "验证 durable workflow、worker、memory 与 API read model 的跨模块语义",
+  },
+  {
+    name: "Web core coverage",
+    command: "pnpm test:coverage",
+    purpose: "阻断 web 核心库的行、分支和函数覆盖率回退",
   },
   {
     name: "Frontend experience contract",
