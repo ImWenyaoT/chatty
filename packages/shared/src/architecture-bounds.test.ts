@@ -89,3 +89,37 @@ test("Search Execution, memory, and indexed knowledge remain concrete modules", 
     );
   }
 });
+
+test("the runnable MVP keeps the required TypeScript harness stack", () => {
+  const root = JSON.parse(
+    readFileSync(resolve(repoRoot, "package.json"), "utf8"),
+  ) as {
+    packageManager: string;
+    devDependencies: Record<string, string>;
+  };
+  const llm = JSON.parse(
+    readFileSync(resolve(repoRoot, "packages/llm/package.json"), "utf8"),
+  ) as { dependencies: Record<string, string> };
+  const db = JSON.parse(
+    readFileSync(resolve(repoRoot, "packages/db/package.json"), "utf8"),
+  ) as { dependencies: Record<string, string> };
+  const web = JSON.parse(
+    readFileSync(resolve(repoRoot, "apps/web/package.json"), "utf8"),
+  ) as { dependencies: Record<string, string> };
+  const modelAdapter = readFileSync(
+    resolve(repoRoot, "packages/llm/src/agents-sdk-adapter.ts"),
+    "utf8",
+  );
+  const directEval = readFileSync(resolve(repoRoot, "eval/judge.ts"), "utf8");
+
+  assert.match(root.packageManager, /^pnpm@/);
+  for (const dependency of ["typescript", "eslint", "prettier"]) {
+    assert.ok(root.devDependencies[dependency]);
+  }
+  assert.ok(llm.dependencies["@openai/agents"]);
+  assert.ok(llm.dependencies.openai);
+  assert.ok(db.dependencies["better-sqlite3"]);
+  assert.ok(web.dependencies.next);
+  assert.match(modelAdapter, /OpenAIChatCompletionsModel/);
+  assert.match(directEval, /chat\.completions\.create/);
+});
