@@ -142,15 +142,15 @@ test("CI runs durable control-plane integration and enforces web-core coverage",
   ) as { scripts: Record<string, string> };
   assert.match(
     webPackageJson.scripts["test:coverage"],
-    /--test-coverage-lines=80/,
+    /--test-coverage-lines=87/,
   );
   assert.match(
     webPackageJson.scripts["test:coverage"],
-    /--test-coverage-branches=60/,
+    /--test-coverage-branches=75/,
   );
   assert.match(
     webPackageJson.scripts["test:coverage"],
-    /--test-coverage-functions=70/,
+    /--test-coverage-functions=81/,
   );
 });
 

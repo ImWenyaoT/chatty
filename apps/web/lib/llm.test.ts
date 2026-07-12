@@ -72,6 +72,22 @@ test("createLlmTelemetrySummary warns when one turn exceeds the pro call budget"
   assert.equal(summary.estimatedCostCny, 0.0000361);
 });
 
+test("createLlmTelemetrySummary keeps an empty model turn observable without NaN", () => {
+  assert.deepEqual(createLlmTelemetrySummary("deepseek-v4-pro", []), {
+    model: "deepseek-v4-pro",
+    calls: 0,
+    callBudget: 3,
+    inputCacheHitTokens: 0,
+    inputCacheMissTokens: 0,
+    inputCacheHitRatio: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    estimatedCostCny: 0,
+    operations: [],
+    warnings: [],
+  });
+});
+
 test("createPlaygroundLlmRuntime accepts a custom pro call budget for trace warnings", () => {
   const savedKey = process.env.OPENAI_API_KEY;
   const savedModel = process.env.CHAT_MODEL;

@@ -22,6 +22,49 @@ function executors(
   };
 }
 
+test("idle worker reports no work without invoking an executor", async () => {
+  const control = createControlPlaneRepository(openDatabase(":memory:"));
+  let invoked = false;
+  const processed = await dispatchBackgroundJob({
+    control,
+    workerId: "worker-idle",
+    now: () => new Date(dueAt),
+    executors: executors(async () => {
+      invoked = true;
+      return { followup: { runId: "unexpected", payload: {} } };
+    }),
+  });
+
+  assert.equal(processed, false);
+  assert.equal(invoked, false);
+});
+
+test("follow-up without a delivery result becomes a durable retry", async () => {
+  const control = createControlPlaneRepository(openDatabase(":memory:"));
+  control.enqueueJob({
+    id: "missing-delivery",
+    type: "scheduled_followup",
+    conversationId: "conversation-1",
+    payload: {},
+    dueAt,
+    idempotencyKey: "missing-delivery",
+  });
+  let observed: unknown;
+  await dispatchBackgroundJob({
+    control,
+    workerId: "worker-1",
+    now: () => new Date(dueAt),
+    onError: (error) => {
+      observed = error;
+    },
+    executors: executors(async () => ({})),
+  });
+
+  assert.match(String(observed), /produced no delivery result/);
+  assert.equal(control.getJob("missing-delivery")?.status, "pending");
+  assert.equal(control.listOutbox().length, 0);
+});
+
 test("reclaimed claimant fences stale completion and produces one atomic outbox delivery", async () => {
   const control = createControlPlaneRepository(openDatabase(":memory:"));
   control.enqueueJob({
