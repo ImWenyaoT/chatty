@@ -6,6 +6,7 @@ import {
   tool,
   type FunctionTool,
   type Model,
+  type ToolUseBehavior,
 } from "@openai/agents";
 import OpenAI from "openai";
 import { z } from "zod";
@@ -35,8 +36,7 @@ export type AgentsSdkToolLoopOptions = {
   /** 每次 SDK model 调用回传一条归一化遥测（含 KV cache 命中）。 */
   telemetry?: (record: ChatCompletionTelemetry) => void;
   toolChoice?: "auto" | "required" | "none" | (string & {});
-  toolUseBehavior?:
-    "run_llm_again" | "stop_on_first_tool" | { stopAtToolNames: string[] };
+  toolUseBehavior?: ToolUseBehavior;
   signal?: AbortSignal;
 };
 
@@ -182,10 +182,49 @@ export function createAgentsSdkCustomerServiceRunner(
 export function createAgentsSdkCustomerServiceTextRunner(
   options: AgentsSdkToolLoopOptions,
 ): () => Promise<{ reply: string }> {
-  const runLoop = createAgentsSdkToolLoopFn(options);
   return async () => {
-    const text = await runLoop(options.input ?? options.instructions);
-    return { reply: extractCustomerServiceReply(text) };
+    let toolResult: string | undefined;
+    const stopAfterToolRound: ToolUseBehavior = (_context, results) => {
+      const outputs = results
+        .filter((entry) => entry.type === "function_output")
+        .map((entry, index) => {
+          const output =
+            typeof entry.output === "string"
+              ? entry.output
+              : JSON.stringify(entry.output);
+          return `工具结果 ${index + 1}：\n${output}`;
+        });
+      if (outputs.length === 0) {
+        return { isFinalOutput: false, isInterrupted: undefined };
+      }
+      toolResult = outputs.join("\n\n");
+      return {
+        isFinalOutput: true,
+        isInterrupted: undefined,
+        finalOutput: toolResult,
+      };
+    };
+    const runToolRound = createAgentsSdkToolLoopFn({
+      ...options,
+      toolUseBehavior: stopAfterToolRound,
+    });
+    const input = options.input ?? options.instructions;
+    const firstOutput = await runToolRound(input);
+    if (toolResult === undefined) {
+      return { reply: extractCustomerServiceReply(firstOutput) };
+    }
+    const runFinalReply = createAgentsSdkToolLoopFn({
+      ...options,
+      instructions: `${options.instructions}\n工具阶段已经结束。必须基于已有工具结果直接回复用户；不要再次调用、模拟或输出任何工具调用。`,
+      tools: [],
+      toolChoice: "none",
+      toolUseBehavior: "run_llm_again",
+      maxTurns: 1,
+    });
+    const finalOutput = await runFinalReply(
+      `${input}\n\n## 已获得工具结果\n${toolResult}`,
+    );
+    return { reply: extractCustomerServiceReply(finalOutput) };
   };
 }
 

@@ -1,11 +1,141 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { Usage, type Model, type ModelRequest } from "@openai/agents";
 import {
+  createAgentsSdkCustomerServiceTextRunner,
   createAgentsSdkToolLoopFn,
   createDeepSeekAgentsModelFromEnv,
   createDeepSeekCompatibleFetch,
   toAgentsSdkFunctionTool,
 } from "./agents-sdk-adapter.js";
+
+function repeatedToolCallModel(toolCallCount = 1): {
+  model: Model;
+  requests: ModelRequest[];
+} {
+  const requests: ModelRequest[] = [];
+  const model = {
+    async getResponse(request: ModelRequest) {
+      requests.push(request);
+      if (
+        request.tools.length === 0 ||
+        request.modelSettings.toolChoice === "none"
+      ) {
+        const hasProjectedToolResult = JSON.stringify(request.input).includes(
+          "## 已获得工具结果",
+        );
+        const mustFinish =
+          request.systemInstructions?.includes("工具阶段已经结束");
+        return {
+          usage: new Usage(),
+          output: [
+            {
+              type: "message" as const,
+              role: "assistant" as const,
+              status: "completed" as const,
+              content: [
+                {
+                  type: "output_text" as const,
+                  text:
+                    mustFinish && hasProjectedToolResult
+                      ? "押金以订单页面为准。"
+                      : '<｜｜DSML｜｜tool_calls><｜｜DSML｜｜invoke name="search_knowledge">',
+                },
+              ],
+            },
+          ],
+        };
+      }
+      return {
+        usage: new Usage(),
+        output: Array.from({ length: toolCallCount }, (_, index) => ({
+          type: "function_call" as const,
+          callId: `call-${requests.length}-${index}`,
+          name: "search_knowledge",
+          arguments: '{"query":"押金"}',
+        })),
+      };
+    },
+    async *getStreamedResponse() {},
+  } satisfies Model;
+  return { model, requests };
+}
+
+test("customer-service runner forces a final model reply after one tool round", async () => {
+  const { model, requests } = repeatedToolCallModel();
+  let searches = 0;
+  let telemetryCalls = 0;
+  const runCustomerService = createAgentsSdkCustomerServiceTextRunner({
+    instructions: "先检索事实，再直接回答用户。",
+    input: "押金多少？",
+    model,
+    tools: [
+      {
+        name: "search_knowledge",
+        description: "检索知识",
+        parameters: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"],
+          additionalProperties: false,
+        },
+        execute: () => {
+          searches += 1;
+          return "押金以订单页面为准";
+        },
+      },
+    ],
+    toolChoice: "auto",
+    maxTurns: 4,
+    telemetry: () => {
+      telemetryCalls += 1;
+    },
+  });
+
+  const result = await runCustomerService();
+
+  assert.deepEqual(result, { reply: "押金以订单页面为准。" });
+  assert.equal(searches, 1);
+  assert.equal(requests.length, 2);
+  assert.equal(telemetryCalls, 2);
+  assert.equal(requests[1].tools.length, 0);
+  assert.equal(requests[1].modelSettings.toolChoice, "none");
+  assert.match(JSON.stringify(requests[1].input), /## 已获得工具结果/);
+});
+
+test("customer-service runner preserves every result when a provider emits multiple tool calls", async () => {
+  const { model, requests } = repeatedToolCallModel(2);
+  let searches = 0;
+  const runCustomerService = createAgentsSdkCustomerServiceTextRunner({
+    instructions: "先检索事实，再直接回答用户。",
+    input: "押金多少？",
+    model,
+    tools: [
+      {
+        name: "search_knowledge",
+        description: "检索知识",
+        parameters: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"],
+          additionalProperties: false,
+        },
+        execute: () => `检索结果-${++searches}`,
+      },
+    ],
+    toolChoice: "auto",
+    maxTurns: 4,
+  });
+
+  await runCustomerService();
+
+  assert.equal(searches, 2);
+  const finalInput = JSON.stringify(requests[1].input);
+  assert.match(finalInput, /工具结果 1/);
+  assert.match(finalInput, /检索结果-1/);
+  assert.match(finalInput, /工具结果 2/);
+  assert.match(finalInput, /检索结果-2/);
+});
 
 test("createAgentsSdkToolLoopFn exposes an SDK-backed tool loop adapter boundary", () => {
   assert.equal(typeof createAgentsSdkToolLoopFn, "function");
