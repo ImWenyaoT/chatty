@@ -28,6 +28,7 @@ export interface TraceReviewSummary {
   fail: number;
   flagged: number;
   tags: Record<string, number>;
+  corruptTagRows: number;
 }
 
 export interface TraceReviewRepository {
@@ -116,12 +117,14 @@ export function createTraceReviewRepository(db: Db): TraceReviewRepository {
         (summary, row) => {
           summary.total += 1;
           summary[row.label] += 1;
-          for (const tag of parseTags(row.tags_json)) {
+          const parsedTags = parseTagsWithStatus(row.tags_json);
+          if (parsedTags.corrupt) summary.corruptTagRows += 1;
+          for (const tag of parsedTags.tags) {
             summary.tags[tag] = (summary.tags[tag] ?? 0) + 1;
           }
           return summary;
         },
-        { total: 0, pass: 0, fail: 0, flagged: 0, tags: {} },
+        { total: 0, pass: 0, fail: 0, flagged: 0, tags: {}, corruptTagRows: 0 },
       );
     },
   };
@@ -129,14 +132,25 @@ export function createTraceReviewRepository(db: Db): TraceReviewRepository {
 
 /** Parses persisted review tags defensively so a corrupt row cannot break dashboards. */
 function parseTags(raw: string): string[] {
+  return parseTagsWithStatus(raw).tags;
+}
+
+function parseTagsWithStatus(raw: string): {
+  tags: string[];
+  corrupt: boolean;
+} {
   try {
     const parsed = JSON.parse(raw) as JsonValue;
-    if (!Array.isArray(parsed)) return [];
-    return normalizeTags(
-      parsed.filter((tag): tag is string => typeof tag === "string"),
+    if (!Array.isArray(parsed)) return { tags: [], corrupt: true };
+    const strings = parsed.filter(
+      (tag): tag is string => typeof tag === "string",
     );
+    return {
+      tags: normalizeTags(strings),
+      corrupt: strings.length !== parsed.length,
+    };
   } catch {
-    return [];
+    return { tags: [], corrupt: true };
   }
 }
 

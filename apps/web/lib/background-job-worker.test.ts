@@ -108,6 +108,32 @@ test("running cancellation aborts the shared executor signal without retry or de
   );
 });
 
+test("executor failure is surfaced to the worker while durable retry is scheduled", async () => {
+  const control = createControlPlaneRepository(openDatabase(":memory:"));
+  control.enqueueJob({
+    id: "broken-followup",
+    type: "scheduled_followup",
+    conversationId: "conversation-1",
+    payload: {},
+    dueAt,
+    idempotencyKey: "broken-followup",
+  });
+  let observed: unknown;
+  await dispatchBackgroundJob({
+    control,
+    workerId: "worker-1",
+    now: () => new Date(dueAt),
+    onError: (error) => {
+      observed = error;
+    },
+    executors: executors(async () => {
+      throw new Error("provider down");
+    }),
+  });
+  assert.match(String(observed), /provider down/);
+  assert.equal(control.getJob("broken-followup")?.status, "pending");
+});
+
 test("follow-up executor result, outbox, and completion share a stable idempotency key", async () => {
   const control = createControlPlaneRepository(openDatabase(":memory:"));
   control.enqueueJob({

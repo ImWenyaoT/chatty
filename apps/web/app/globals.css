@@ -34,8 +34,8 @@
   --border-subtle: var(--ds-gray-alpha-100);
   --border-strong: var(--ds-gray-alpha-500);
 
-  --accent: #006bff; /* blue-700 */
-  --accent-hover: #0059ec; /* blue-800 */
+  --accent: #1f5a44;
+  --accent-hover: #174936;
   --accent-foreground: #ffffff;
   --error: #ea001d; /* red-800 */
   --success: #107d32;
@@ -61,7 +61,7 @@
   --border-token: var(--border);
   --input: var(--border);
   --ring: var(--accent);
-  --radius: 0.5rem;
+  --radius: 0.625rem;
 
   /* status pill 色调（tint 背景 / 前景 / 圆点），值取自 Geist 各色阶 */
   --tone-active-bg: #ecfdec; /* green-100 */
@@ -81,7 +81,7 @@
 
   /* 深度与焦点 */
   --shadow-card: 0 2px 2px rgba(0, 0, 0, 0.04);
-  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px #6f9787;
 
   /* 动效：150ms 状态 / 200ms 浮层 */
   --ease-out: cubic-bezier(0.175, 0.885, 0.32, 1.1);
@@ -97,32 +97,180 @@
     monospace;
 }
 
+/* Cross-route alignment (structural overrides are repeated after legacy styles). */
+.dashboard-header,
+.orders-header {
+  min-height: 104px;
+  padding: 28px clamp(20px, 4vw, 56px);
+}
+
+.dashboard-header h1,
+.orders-header h1 {
+  margin-top: 5px;
+  font-size: 26px;
+  line-height: 32px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.dashboard-header p,
+.orders-header p,
+.seller-home-hero p {
+  color: var(--accent);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.dashboard-two-col,
+.dashboard-wide-panel {
+  margin-right: clamp(20px, 4vw, 56px);
+  margin-left: clamp(20px, 4vw, 56px);
+}
+
+.dashboard-two-col:first-of-type {
+  margin-top: 28px;
+}
+
+.dashboard-panel,
+.seller-impact-panel,
+.seller-home-grid,
+.seller-home-routes a,
+.order-sections section,
+.fulfillment-board,
+.order-timeline,
+.order-kpis {
+  border-color: var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-card);
+}
+
+.dashboard-panel-head,
+.seller-impact-head {
+  min-height: 56px;
+  padding: 16px 18px;
+}
+
+.dashboard-panel-head h2,
+.order-sections h3,
+.fulfillment-board h3,
+.order-timeline h3 {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.dashboard-conv-list a:hover,
+.seller-home-routes a:hover,
+.order-row:hover {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  background: color-mix(in srgb, var(--accent) 4%, var(--bg));
+}
+
+.order-row {
+  border-radius: 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.order-row.active {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg));
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.orders-layout {
+  margin: 28px clamp(20px, 4vw, 56px) 40px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  box-shadow: var(--shadow-card);
+}
+
+.orders-list {
+  background: var(--bg-subtle);
+}
+
+.orders-filter input,
+.orders-filter button {
+  height: 38px;
+  border-radius: 8px;
+}
+
+.support-workspace .seller-nav {
+  min-height: 60px;
+  padding: 0 clamp(16px, 3vw, 40px);
+}
+
+.support-workspace .seller-nav strong {
+  font-size: 17px;
+}
+
+.support-workspace .seller-nav span {
+  display: inline;
+}
+
+.support-workspace .seller-nav a {
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.support-workspace .seller-nav a.active {
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg));
+  color: var(--accent);
+}
+
+@media (max-width: 720px) {
+  .seller-nav {
+    min-height: auto;
+    align-items: flex-start;
+    flex-direction: column;
+    padding-top: 12px;
+    padding-bottom: 8px;
+  }
+
+  .seller-nav > div:last-child {
+    width: 100%;
+    padding-bottom: 2px;
+  }
+
+  .seller-nav span,
+  .support-workspace .seller-nav span {
+    display: none;
+  }
+
+  .dashboard-header,
+  .orders-header {
+    min-height: auto;
+    padding: 22px 16px;
+  }
+
+  .dashboard-two-col,
+  .dashboard-wide-panel,
+  .orders-layout {
+    margin-right: 12px;
+    margin-left: 12px;
+  }
+
+  .orders-layout {
+    overflow: visible;
+    border-radius: 8px;
+  }
+}
+
 /* Customer service workspace — conversation first, operations second. */
 .support-workspace {
-  --bg: #ffffff;
-  --bg-subtle: #f5f5f2;
-  --text-primary: #1b1b19;
-  --text-secondary: #73736d;
-  --text-disabled: #a3a39d;
-  --border: #deded8;
-  --border-subtle: #ecece7;
-  --accent: #1f5a44;
-  --accent-hover: #174936;
-  --accent-foreground: #ffffff;
-  --focus-ring: 0 0 0 2px #fff, 0 0 0 4px #527d6d;
   height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--bg-subtle);
+  background: var(--bg);
   color: var(--text-primary);
-  color-scheme: light;
 }
 
 .support-workspace .seller-nav {
   min-height: 58px;
   padding: 0 20px;
-  background: #fff;
+  background: var(--bg);
 }
 
 .support-workspace .seller-nav strong {
@@ -965,8 +1113,9 @@
     --ds-gray-alpha-400: #ffffff24;
     --ds-gray-alpha-500: #ffffff3d;
 
-    --accent: #0090ff; /* blue-600（暗色 accent） */
-    --accent-hover: #006efe; /* blue-700 */
+    --accent: #78a68e;
+    --accent-hover: #8ab79f;
+    --accent-foreground: #0d1712;
     --error: #f32e40; /* red-600 */
     --success: #00ac3a;
     --warning: #ff9300;
@@ -1028,6 +1177,22 @@ body {
   height: 100%;
 }
 
+/* Shared seller workspace language: quiet surfaces, deep-green actions. */
+.seller-home,
+.seller-dashboard,
+.orders-page {
+  min-height: 100dvh;
+  background: var(--bg-subtle);
+}
+
+.seller-home > :not(.seller-nav),
+.seller-dashboard > :not(.seller-nav),
+.orders-page > :not(.seller-nav) {
+  width: min(100%, 1440px);
+  margin-right: auto;
+  margin-left: auto;
+}
+
 body {
   background: var(--bg);
   color: var(--text-primary);
@@ -1072,12 +1237,12 @@ a {
 
 .seller-nav {
   flex: none;
-  min-height: 52px;
+  min-height: 60px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 0 24px;
+  padding: 0 clamp(16px, 3vw, 40px);
   border-bottom: 1px solid var(--border);
   background: var(--bg);
 }
@@ -1090,7 +1255,7 @@ a {
 }
 
 .seller-nav strong {
-  font-size: 14px;
+  font-size: 17px;
   line-height: 20px;
   font-weight: 600;
 }
@@ -1098,7 +1263,9 @@ a {
 .seller-nav span {
   color: var(--text-secondary);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   line-height: 14px;
 }
 
@@ -1112,8 +1279,8 @@ a {
 
 .seller-nav a {
   flex: none;
-  padding: 6px 10px;
-  border-radius: 6px;
+  padding: 8px 12px;
+  border-radius: 8px;
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 16px;
@@ -1121,8 +1288,8 @@ a {
 
 .seller-nav a:hover,
 .seller-nav a.active {
-  background: var(--ds-gray-100);
-  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg));
+  color: var(--accent);
 }
 
 /* ----- Seller home / dashboard ------------------------------------------------ */
@@ -1137,7 +1304,7 @@ a {
   align-items: flex-end;
   justify-content: space-between;
   gap: 24px;
-  padding: 40px 24px 24px;
+  padding: 56px clamp(20px, 4vw, 56px) 36px;
   border-bottom: 1px solid var(--border);
   background: var(--bg);
 }
@@ -1202,7 +1369,7 @@ a {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1px;
-  margin: 24px;
+  margin: 28px clamp(20px, 4vw, 56px);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
   overflow: hidden;
@@ -1245,7 +1412,7 @@ a {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-  margin: 0 24px 24px;
+  margin: 0 clamp(20px, 4vw, 56px) 40px;
 }
 
 .seller-home-routes a {
@@ -1258,7 +1425,7 @@ a {
 }
 
 .seller-impact-panel {
-  margin: 0 24px 24px;
+  margin: 0 clamp(20px, 4vw, 56px) 28px;
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
   overflow: hidden;
@@ -2816,5 +2983,104 @@ textarea:focus-visible {
 
   .legacy-composer-box button {
     min-height: 36px;
+  }
+}
+
+/* Seller shell: route-level structure intentionally wins over legacy selectors. */
+.workspace-header {
+  min-height: 104px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 28px clamp(20px, 4vw, 56px);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.workspace-header p,
+.workspace-header h1 {
+  margin: 0;
+}
+
+.workspace-header p {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.workspace-header h1 {
+  margin-top: 5px;
+  font-size: 26px;
+  line-height: 32px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.workspace-header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.workspace-header-actions a {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 13px;
+}
+
+.workspace-header-actions a:hover {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  color: var(--accent);
+}
+
+.orders-layout {
+  margin: 28px clamp(20px, 4vw, 56px) 40px;
+}
+
+.support-workspace .seller-nav {
+  min-height: 60px;
+  padding: 0 clamp(16px, 3vw, 40px);
+}
+
+.support-workspace .seller-nav strong {
+  font-size: 17px;
+}
+
+.support-workspace .seller-nav span {
+  display: inline;
+}
+
+.support-workspace .seller-nav a {
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+@media (max-width: 720px) {
+  .workspace-header {
+    min-height: auto;
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 22px 16px;
+  }
+
+  .workspace-header-actions {
+    width: 100%;
+  }
+
+  .workspace-header-actions a {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .orders-layout {
+    margin: 16px 12px 28px;
   }
 }

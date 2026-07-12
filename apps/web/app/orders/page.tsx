@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { SellerNavigation } from "../components/seller/SellerNavigation";
+import { WorkspaceHeader } from "../components/seller/WorkspaceHeader";
 import {
   SELLER_ORDERS,
   type SellerOrder,
@@ -54,12 +55,7 @@ export default function OrdersPage() {
   return (
     <main className="orders-page" id="main-content">
       <SellerNavigation active="orders" />
-      <header className="orders-header">
-        <div>
-          <p>ORDER OPS · 演示数据</p>
-          <h1>订单跟进</h1>
-        </div>
-      </header>
+      <WorkspaceHeader eyebrow="Order ops · 演示数据" title="订单跟进" />
 
       <div className="orders-layout">
         <aside className="orders-list">

@@ -5,7 +5,7 @@ import type {
   WorkflowRun,
 } from "@rental/db";
 
-export type WorkflowDisplayState =
+type WorkflowDisplayState =
   | "queued"
   | "running"
   | "cancelled"

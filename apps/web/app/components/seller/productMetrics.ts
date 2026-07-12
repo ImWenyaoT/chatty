@@ -1,6 +1,6 @@
 import type { SellerOrder } from "./orderData";
 
-export type ProductMetric = {
+type ProductMetric = {
   label: string;
   value: string;
   hint: string;

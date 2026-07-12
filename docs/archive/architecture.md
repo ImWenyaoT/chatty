@@ -2,9 +2,9 @@
 
 Last updated: 2026-07-04
 
-> 当前实现入口不是本文档。先读 [current-architecture.md](../current-architecture.md)
+> **历史归档（非当前操作指南）**：当前实现入口不是本文档。先读 [current-architecture.md](../current-architecture.md)
 > 的 90-second Version，再读 [design.md](../design.md)。本文是 RW-1 历史目标架构记录，
-> 只在追溯被放弃的重写方案时使用。
+> 只在追溯被放弃的重写方案时使用。本文的命令和 runtime 描述不保证仍可执行；live compose 当前使用 OpenAI Agents SDK。
 
 Status: **重写设计提案（编号 RW-1，未实施）** — 本文档是 legacy `rag-service` 推倒重写的目标架构设计。
 曾按 §2/§3 平移出 `packages/domain` 代码骨架，但骨架从未接入 playground / 金标评测等生产路径，
@@ -143,8 +143,8 @@ collect_missing_info / check_availability / follow_up / handoff。原 loop-runne
 
 ## 7. 评测方法论
 
-- **两档运行**：`pnpm eval`（离线，stub LLM，跑结构断言，进 CI）；
-  `pnpm eval:full`（真实 LLM + judge minScore，手动/eval.yml workflow）。
+- **两档运行（历史设计）**：`pnpm eval`（离线，stub LLM，跑结构断言，进 CI）；
+  `pnpm eval:full`（该命令现已删除；当前真实 LLM 金标统一使用 `pnpm eval`，由手动 eval workflow 触发）。
 - 结构断言 = action/actionIn/stage/stageIn/profile 字段/contains/notContains/
   notSameAsPrev；判分断言 = minScore（--repeat 聚合抗噪，--baseline 版本对比）。
 - 评测飞轮（trace 自动评分 → failure_case → golden 自动晋升）已于 2026-07 退役：

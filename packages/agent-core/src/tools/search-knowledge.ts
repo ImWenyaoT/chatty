@@ -20,6 +20,8 @@ export type SearchKnowledgeResult = {
   output: string;
   matches: number;
   truncated: boolean;
+  status: "ok" | "degraded";
+  errorCode?: "knowledge_search_unavailable";
 };
 
 /**
@@ -64,6 +66,8 @@ get_product / check_availability，不要靠本工具。`,
             "知识库搜索暂时不可用。请基于已知信息谨慎回答，不确定的内容如实告知用户无法确认。",
           matches: 0,
           truncated: false,
+          status: "degraded",
+          errorCode: "knowledge_search_unavailable",
         };
       }
     },
@@ -80,6 +84,7 @@ function formatSearchResult(
       output: `未找到与"${query}"相关的内容。换更短或不同的关键词再试一次，例如把长短语拆成单个词。`,
       matches: 0,
       truncated: false,
+      status: "ok",
     };
   }
   const top = hits.slice(0, SEARCH_KNOWLEDGE_TOP_K);
@@ -114,5 +119,6 @@ function formatSearchResult(
     output: parts.join("\n\n"),
     matches: hits.length,
     truncated: clipped || hidden > 0,
+    status: "ok",
   };
 }

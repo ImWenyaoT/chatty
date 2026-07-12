@@ -192,6 +192,7 @@ test("trace review repository: upsert review and summarize product feedback labe
     fail: 0,
     flagged: 1,
     tags: { handoff_ok: 1, needs_golden: 1 },
+    corruptTagRows: 0,
   });
 });
 
@@ -213,7 +214,18 @@ test("trace review repository: accepts external trace ids for route-bundle feedb
     fail: 1,
     flagged: 0,
     tags: { missing_trace_context: 1 },
+    corruptTagRows: 0,
   });
+});
+
+test("trace review repository: reports corrupt persisted tag rows", () => {
+  const db = freshDb();
+  const reviews = createTraceReviewRepository(db);
+  reviews.upsert({ traceId: "tr-corrupt", label: "flagged", reviewer: "pm" });
+  db.prepare(
+    "UPDATE agent_trace_reviews SET tags_json = ? WHERE trace_id = ?",
+  ).run("not-json", "tr-corrupt");
+  assert.equal(reviews.summarize().corruptTagRows, 1);
 });
 
 test("memory repository: upsert + snapshot round-trip", () => {

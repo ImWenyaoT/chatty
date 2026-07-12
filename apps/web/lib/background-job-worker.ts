@@ -5,7 +5,7 @@ import type {
 } from "@rental/db";
 import type { JsonValue } from "@rental/shared";
 
-export interface JobExecutionResult {
+interface JobExecutionResult {
   status?: "succeeded" | "succeeded_no_output";
   event?: JsonValue;
   followup?: { runId: string; payload: JsonValue };
@@ -47,6 +47,7 @@ export interface DispatchBackgroundJobOptions {
   leaseMs?: number;
   heartbeatMs?: number;
   retryDelaysMs?: readonly number[];
+  onError?: (error: unknown, job: BackgroundJob) => void;
 }
 
 /** Claims and dispatches at most one background job through its durable fencing boundary. */
@@ -146,6 +147,7 @@ export async function dispatchBackgroundJob(
     }
     return true;
   } catch (error) {
+    options.onError?.(error, job);
     if (!abort.signal.aborted) {
       const delay =
         retryDelays[Math.min(job.attempts - 1, retryDelays.length - 1)] ?? 0;

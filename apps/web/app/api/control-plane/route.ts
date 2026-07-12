@@ -3,6 +3,7 @@ import { isPlaygroundAuthorized } from "@rental/shared";
 import { getRepos } from "@/lib/db";
 import { HarnessRunController } from "@/lib/harness-run-controller";
 import { buildConversationControlView } from "@/lib/control-plane-read-model";
+import { InvalidWorkflowTransitionError } from "@rental/db";
 
 /** Returns workflow, checkpoint, and long-term memory evidence for observability panels. */
 export async function GET(request: Request) {
@@ -53,10 +54,13 @@ export async function POST(request: Request) {
     return NextResponse.json({
       run: new HarnessRunController(control).cancel(body.runId),
     });
-  } catch {
-    return NextResponse.json(
-      { error: "invalid_state_transition" },
-      { status: 409 },
-    );
+  } catch (error) {
+    if (error instanceof InvalidWorkflowTransitionError) {
+      return NextResponse.json(
+        { error: "invalid_state_transition" },
+        { status: 409 },
+      );
+    }
+    throw error;
   }
 }

@@ -66,7 +66,7 @@ const SDK_TOOL_SCHEMAS = {
 } as const;
 
 /** Builds the single production Agents SDK runner; task policy controls each cloned Agent. */
-export function createPlaygroundSdkRunner(
+function createPlaygroundSdkRunner(
   records: ChatCompletionTelemetry[] = [],
 ): CustomerServiceSdkRunner {
   const env = readLlmEnv();

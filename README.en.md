@@ -7,11 +7,11 @@
 
 ---
 
-`agent = model + harness`: the model is pinned to `deepseek-v4-pro`; the harness is the part that evolves. One customer-service message runs through a bounded loop — task scheduling → context assembly → model compose → output parser → policy-aware executor → trace — observable and regression-tested end to end, with the core path running even without an LLM key.
+`agent = model + harness`: the model is pinned to `deepseek-v4-pro`; the harness is the part that evolves. One customer-service message runs through a bounded loop — task scheduling → context assembly → model compose → output parser → policy-aware executor → trace — observable and regression-tested end to end. The live playground compose path requires a DeepSeek API key; tests and smoke checks use explicit stubs for deterministic boundaries.
 
 ## Capabilities
 
-- **Harness loop** — deterministic task scheduling + bounded loop control; falls back to a deterministic composer when no key is set or the model call fails ("runs without a key" is an invariant).
+- **Harness loop** — deterministic task scheduling + bounded loop control; missing configuration and provider/output failures remain explicit errors instead of being disguised as successful replies.
 - **Agentic retrieval** — a bounded tool loop inside compose; the model decides whether to call `search_knowledge` (SQLite FTS5 trigram + a 2-char Chinese LIKE fallback), forced to answer after at most 3 searches.
 - **Policy-aware executor** — every tool call passes an allow / require_approval / deny gate; high-risk tools (e.g. refunds) never auto-execute.
 - **Memory & trace** — SQLite-persisted session / trace / memory; a turn's commit and continuity memory are locked down by tests.
@@ -24,11 +24,11 @@
 pnpm install --frozen-lockfile
 pnpm dev      # Next.js playground (apps/web)
 pnpm test     # workspace unit tests
-pnpm smoke    # no-LLM core data-path smoke
+pnpm smoke    # core data-path smoke with test doubles
 pnpm eval     # golden regression (needs a real LLM key)
 ```
 
-With `OPENAI_API_KEY` set (a DeepSeek OpenAI-format key), the playground's compose step runs DeepSeek pro + the Agents SDK by default.
+Set `OPENAI_API_KEY` (a DeepSeek OpenAI-format key) before running the playground. Its compose step runs DeepSeek pro + the Agents SDK; the message API returns 503 when the key is absent.
 
 ## Layout
 

@@ -23,7 +23,7 @@ const checkpointSchema = z
   })
   .strict();
 
-export type CheckpointSummary = z.infer<typeof checkpointSchema>;
+type CheckpointSummary = z.infer<typeof checkpointSchema>;
 export type CheckpointGenerator = (
   snapshot: MemorySnapshot,
 ) => Promise<CheckpointSummary>;

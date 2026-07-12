@@ -7,11 +7,11 @@
 
 ---
 
-`agent = model + harness`：model 固定 `deepseek-v4-pro`，harness 才是可演进的部分。一条客服消息跑成一个有界闭环——task scheduling → context 拼接 → 模型合成 → output parser → 策略化 executor → trace，全程可观测、可回归，无 LLM key 也能跑主链路。
+`agent = model + harness`：model 固定 `deepseek-v4-pro`，harness 才是可演进的部分。一条客服消息跑成一个有界闭环——task scheduling → context 拼接 → 模型合成 → output parser → 策略化 executor → trace，全程可观测、可回归。playground 的真实 compose 主链路需要 DeepSeek API key；不需要 key 的单测与 smoke 使用显式 stub 验证确定性边界。
 
 ## 能力
 
-- **Harness 闭环** — 确定性任务调度 + 有界 loop 控制；无 key 或模型失败时回退确定性 composer（“无 key 可跑”是不变量）。
+- **Harness 闭环** — 确定性任务调度 + 有界 loop 控制；缺少 key 时返回配置错误，provider 或输出校验失败时返回上游错误，不把模型故障伪装成成功回复。
 - **Agentic 检索** — compose 内的有界工具循环，模型自主决定是否调 `search_knowledge`（SQLite FTS5 trigram + 中文 2 字词 LIKE 回退），最多 3 次搜索后强制作答。
 - **策略化 executor** — 工具执行前过 allow / require_approval / deny；高风险工具（如退款）永不自动执行。
 - **Memory & trace** — SQLite 持久化 session / trace / memory；一次 turn 的落库与续接记忆由测试锁定。
@@ -24,11 +24,11 @@
 pnpm install --frozen-lockfile
 pnpm dev      # Next.js playground（apps/web）
 pnpm test     # 全 workspace 单测
-pnpm smoke    # 无 LLM 的核心数据链路冒烟
+pnpm smoke    # 使用测试替身的核心数据链路冒烟
 pnpm eval     # 金标回归（需真实 LLM key）
 ```
 
-配置 `OPENAI_API_KEY`（DeepSeek 的 OpenAI-format key）后，playground 的 compose 步默认走 DeepSeek pro + Agents SDK。
+运行 playground 前必须配置 `OPENAI_API_KEY`（DeepSeek 的 OpenAI-format key）；compose 步走 DeepSeek pro + Agents SDK。缺少 key 时消息接口返回 503。
 
 ## 结构
 

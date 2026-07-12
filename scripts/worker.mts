@@ -15,6 +15,7 @@ const pollMs = Number(process.env.CHATTY_JOB_POLL_MS || 1_000);
 const leaseMs = Number(process.env.CHATTY_JOB_LEASE_MS || 60_000);
 const heartbeatMs = Number(process.env.CHATTY_JOB_HEARTBEAT_MS || 20_000);
 const once = process.argv.includes("--once");
+let executionFailed = false;
 
 /** Processes one leased background job through the fenced dispatch seam. */
 async function processOne(): Promise<boolean> {
@@ -24,6 +25,10 @@ async function processOne(): Promise<boolean> {
     workerId,
     leaseMs,
     heartbeatMs,
+    onError(error, job) {
+      executionFailed = true;
+      console.error(`background job failed: ${job.id}: ${String(error)}`);
+    },
     executors: {
       /** Executes one extraction claim with the dispatcher's shared cancellation signal. */
       async memoryExtract(job, signal) {
@@ -113,6 +118,7 @@ getRepos().control.releaseInterruptedConversationEvents();
 await recoverCustomerServiceTurns({ repos: getRepos() });
 do {
   const processed = await processOne();
+  if (once && processed && executionFailed) process.exitCode = 1;
   if (once) keepPolling = false;
   if (!processed && keepPolling)
     await new Promise((resolve) => setTimeout(resolve, pollMs));

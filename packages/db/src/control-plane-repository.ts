@@ -138,7 +138,7 @@ export class InvalidWorkflowTransitionError extends Error {
 }
 
 const RUN_TRANSITIONS: Record<WorkflowRunStatus, WorkflowRunStatus[]> = {
-  queued: ["running", "cancelled"],
+  queued: ["running", "failed", "cancelled"],
   running: [
     "waiting_for_user",
     "waiting_for_approval",
@@ -531,6 +531,18 @@ export function createControlPlaneRepository(db: Db) {
         db
           .prepare(
             `UPDATE conversation_event_queue SET status = 'consumed'
+         WHERE id = ? AND status = 'processing'`,
+          )
+          .run(id).changes === 1
+      );
+    },
+
+    /** Quarantines an invalid queued payload instead of acknowledging it as consumed. */
+    failConversationEvent(id: number): boolean {
+      return (
+        db
+          .prepare(
+            `UPDATE conversation_event_queue SET status = 'failed'
          WHERE id = ? AND status = 'processing'`,
           )
           .run(id).changes === 1

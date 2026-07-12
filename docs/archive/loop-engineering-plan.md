@@ -1,5 +1,7 @@
 # Loop Engineering Plan
 
+> **历史归档（非当前操作指南）**：本文保留迁移当时的计划与账本，命令、依赖和 runtime lane 可能已经失效。当前事实以 [`../current-architecture.md`](../current-architecture.md)、[`../tech-stack-decisions.md`](../tech-stack-decisions.md) 和仓库代码为准。Agents SDK 后来已重新进入 live compose lane。
+
 Last updated: 2026-07-04
 
 ## 0. Decision Snapshot
@@ -48,7 +50,7 @@ Legacy behavior notes (why the new loop deliberately diverged):
 
 ## 4. Target MVP Architecture
 
-> 注：图中 Agents SDK lane（AGENTS 节点）已于 2026-07 整体删除（见 §5.2 / §16），保留原图作规划记录。
+> 历史注：图中的 Agents SDK lane 曾于 2026-07 清理，后来已重新进入 live compose lane；图保留当时的规划结构。
 
 ```mermaid
 flowchart TD
@@ -84,8 +86,7 @@ Next.js Route Handlers are the MVP API surface:
 
 ### 5.2 Model Lane: OpenAI Agents SDK TS
 
-> **已删除（2026-07）**：该 lane（适配器、`CHATTY_AGENTS_SDK` 开关与 `@openai/agents` 依赖）
-> 在零生产调用方的状态下整体移除（见 §16）。重新引入的前提是先有具体消费方。以下为原始规划：
+> **历史状态（2026-07）**：该 lane 当时曾因零生产调用方整体移除；之后已由 live compose 重新采用。以下保留原始规划：
 
 Use OpenAI Agents SDK TypeScript when an agent run benefits from tools, handoffs, guardrails, tracing, or built-in loop semantics.
 
@@ -134,7 +135,7 @@ Keep low-level packages generic, such as `packages/agent-core`, so the architect
 
 ### 6.1 SQLite MVP Schema
 
-Table definitions live in [tech-stack-decisions.md §6](tech-stack-decisions.md#6-session-and-memory)
+Table definitions live in [tech-stack-decisions.md §6](../tech-stack-decisions.md#6-session-and-memory)
 (single registry; not duplicated here).
 
 ### 6.2 Current Session Status
@@ -316,11 +317,11 @@ Settled:
 - ~~Legacy 集成走 in-process 而非 HTTP：`apps/web/lib/legacy-adapter.ts` dynamic-import
   rag-service dist~~ 2026-07（R5）更新：整个 rag-service 与 `legacy-adapter.ts` 已删除，
   不再有任何跨 legacy 边界；judge 直接是 `eval/judge.ts`（`@rental/llm`），无 dynamic import。
-- ~~Agents SDK routes only `ask_info` (feature flag `CHATTY_AGENTS_SDK=1`)~~ 2026-07 更新：
-  Agents SDK lane 已整体删除（零生产调用方），全部走 direct Chat Completions。
+- ~~Agents SDK routes only `ask_info` (feature flag `CHATTY_AGENTS_SDK=1`)~~ 2026-07 当时更新：
+  Agents SDK lane 曾整体删除；当前 live compose 已重新采用 Agents SDK，本条只记录迁移历史。
 - Stack-level decisions (Next.js first, SQLite, no Fastify, Temporal deferred,
   Chatwoot as reference, runtime concepts are not called skills): see
-  [tech-stack-decisions.md](tech-stack-decisions.md).
+  [tech-stack-decisions.md](../tech-stack-decisions.md).
 
 ## 13. Implementation Plan
 
@@ -336,13 +337,13 @@ Settled:
 
 ## 14. Acceptance Criteria
 
-- `docs/loop-engineering-plan.md` exists and matches latest decisions.
+- `docs/loop-engineering-plan.md` exists and matches latest decisions.（历史路径；本文现位于 `docs/archive/`。）
 - The root workspace has no effect on existing `rag-service` runtime behavior.
 - `packages/shared` defines minimal loop DTOs.
 - `packages/db` defines SQLite MVP schema.
 - `packages/agent-core` defines loop and legacy adapter boundaries.
-- `packages/llm` defines the Chat Completions adapter boundary（Agents SDK 边界已于 2026-07 删除）.
-- `pnpm build:rag-service` still passes or its existing failures are documented.
+- `packages/llm` defines the Chat Completions adapter boundary（历史状态：Agents SDK 边界当时已删除；当前 live compose 已重新采用）。
+- `pnpm build:rag-service` still passes or its existing failures are documented.（历史验收项：该 package 与命令均已删除，不可执行。）
 
 ## 16. Legacy Migration Ledger
 
@@ -365,7 +366,7 @@ Settled:
 qdrant client、embedding 调用、`ingest.ts`、`chunking.ts`、local-vectors、
 `rag.ts` 内的 `searchKnowledge`/`embedText` 调用点、`@qdrant/js-client-rest` 依赖全部删除。
 同批把过度设计的"评测飞轮"（trace 自动评分 → failure_case → golden 自动晋升）拆回
-朴素金标回归（`pnpm eval --target harness` + 同步 judge）。
+朴素金标回归（当时命令为 `pnpm eval --target harness` + 同步 judge；当前 runner 已无 `--target` 参数，使用 `pnpm eval`）。
 
 **平价状态（如实记录）**：harness lane 金标最好一轮 13/14（`tests/reports/harness-r*.json`），
 未追到设计里写的 11/11（那是 legacy 场景集口径）门槛。用户决策**覆盖**了"平价才准删"的

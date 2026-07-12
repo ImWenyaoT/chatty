@@ -1,6 +1,6 @@
 # Chatty Harness Design Map
 
-Last updated: 2026-07-07
+Last updated: 2026-07-12
 
 本文是 Chatty 的 agent 架构设计主文档。目标不是把参考仓所有能力搬进来，而是把 18 个关键问题逐个定清楚：
 
@@ -37,7 +37,7 @@ flowchart LR
   Upper["上限<br/>OpenClaw / Codex / Claude Code"] --> Chatty
 
   Chatty --> Keep["保留<br/>loop / tool / context / parser / executor / memory / eval / trace"]
-  Chatty --> Cut["不做<br/>terminal / 任意 file I/O / MCP runtime / multi-agent worker / vector DB"]
+  Chatty --> Cut["不做<br/>terminal / 任意 file I/O / MCP runtime / multi-agent agent runtime / vector DB"]
 ```
 
 主链路只看这一张图：
@@ -89,9 +89,9 @@ mindmap
 | # | 问题 | 主参考实现 | Chatty 当前选择 | 代码落点 |
 |---|---|---|---|---|
 | Q01 | task scheduling 拆分 | Codex | 单轮窄任务 scheduler | `scheduleCustomerServiceTask` |
-| Q02 | 如何实现 multi agent | Codex | 当前不做；出现 worker/subagent runtime 先删 | `CustomerServiceTask` |
+| Q02 | 如何实现 multi agent | Codex | 当前不做 subagent / multi-agent runtime；durable background worker 只承载业务 workflow | `CustomerServiceTask` |
 | Q03 | loop 和流程控制 | Codex | 每请求一次 bounded harness step | `runCustomerServiceHarnessStep` |
-| Q04 | 如何更好控制整个 loop 和 workflow | Codex | 常量上限、失败回退、显式 trace，不上 durable workflow | `customer-harness.ts` |
+| Q04 | 如何更好控制整个 loop 和 workflow | Codex | 有界 harness + durable workflow run/event/lease/heartbeat；模型调用失败显式失败 | `customer-harness.ts` / `customer-service-turn.ts` |
 | Q05 | 如何做可视化、可观测性与 terminal UI | Codex | 不做 terminal UI，做 trace inspector | `harnessTrace` / `apps/web` |
 | Q06 | input 拼接 prompt | Codex | 结构化 context fragments | `buildCustomerServiceContext` |
 | Q07 | 如何实现 long-term memory | OpenClaw | SQLite memory + chunk/index/summary + `search_knowledge`，不做 embedding RAG | `memory-repository.ts` |
@@ -103,7 +103,7 @@ mindmap
 | Q13 | 如何做好 eval 和自动化测试 | Codex | unit + smoke + manual golden eval | `quality-gates.ts` / `eval/` |
 | Q14 | terminal 执行 | Codex | 不开放 terminal；出现 shell/exec tool 先删 | 无 |
 | Q15 | 如何控制 sandbox 环境 | Codex | OS sandbox 降维成业务 policy gate | `policies/policy.ts` |
-| Q16 | 如何管理 background tasks | Codex | 默认禁止后台 agent task；出现静默后台 loop 先删 | `pnpm eval` 显式触发 |
+| Q16 | 如何管理 background tasks | Codex | durable worker 执行业务 follow-up 与 memory job；禁止无事件、无 lease 的静默 agent loop | `background-job-worker.ts` / `control-plane-repository.ts` |
 | Q17 | terminal 读 output | Codex | 不读 stdout/stderr，只读 tool result 和 trace | `toolCalls` |
 | Q18 | 基本 file I/O（读、写、搜） | Claude Code | 不开放任意读写，只保留 `search_knowledge` | `search-knowledge.ts` |
 
@@ -123,7 +123,7 @@ pie title 18 questions by primary reference
 | JD 能力项 | 主参考实现 | Chatty 当前状态 | 差距处理 |
 |---|---|---|---|
 | LLM API 与 KV Cache | Codex | model 固定 `deepseek-v4-pro`；`@rental/llm` 走 DeepSeek OpenAI-format Chat Completions；trace 记录 cache hit/miss、hit ratio、cost | 保留 usage telemetry；下一步只优化 prompt 稳定布局，不引入 provider 私有 cache API |
-| Agent Loop 与 Tool Use | Codex | 每轮 bounded tool loop，`search_knowledge` 最多 3 次，失败 deterministic fallback | 保持有界；复杂 workflow 先删 |
+| Agent Loop 与 Tool Use | Codex | 每轮 bounded tool loop，`search_knowledge` 最多 3 次，模型故障显式失败 | 保持有界；复杂 workflow 先删 |
 | Reasoning 与 Planning | Codex | 以 deterministic scheduler 表达窄 planning，不暴露 chain-of-thought | 补 eval 场景验证 task choice；不做自由规划器 |
 | Skills 与 MCP | Claude Code | typed tool registry + risk/policy；无 runtime plugin/MCP | 只保留 tool contract；runtime plugin 先删 |
 | Memory | OpenClaw | SQLite memory snapshot + recent messages + chunk/index/summary + business knowledge search | 继续保持 FTS/LIKE 和 agent search tool；不做 vector RAG |
@@ -155,13 +155,13 @@ flowchart LR
 参考实现：Codex。
 
 Chatty 当前不实现 multi agent。Codex 的 manager/subagent 模式只作为上限参照，不进入当前实现。
-如果代码里出现 worker/subagent runtime，而没有先更新复杂度契约和 eval，处理方式是删除。
+Chatty 不实现 subagent 或 multi-agent runtime。现有 durable worker 是业务 workflow 的执行边界，负责 lease、heartbeat、outbox、follow-up 与 memory job，不代表引入多 agent 编排。
 
 ```mermaid
 flowchart TB
   Main["Chatty main harness"] --> Task["CustomerServiceTask"]
   Task -. "当前不实现" .-> Reviewer["subagent"]
-  Task -. "当前不实现" .-> Evaluator["worker"]
+  Task -. "当前不实现" .-> Evaluator["subagent evaluator"]
   Task --> Now["当前：main harness 自己完成"]
 ```
 
@@ -169,7 +169,7 @@ flowchart TB
 
 参考实现：Codex。
 
-Chatty 的 loop 是一次请求内的有界 harness step。模型最多触发 3 次 `search_knowledge`，失败回退确定性 composer，保证没有 LLM key 也能跑。
+Chatty 的模型 loop 是单次 turn 内的有界 harness step，最多触发 3 次 `search_knowledge`。缺少 key、provider 失败或输出无效都会作为显式错误返回；确定性 composer 只用于测试替身，不是生产故障回退。
 
 ```mermaid
 flowchart LR
@@ -184,13 +184,13 @@ flowchart LR
 
 参考实现：Codex。
 
-控制点只有四个：搜索上限、失败回退、trace 必出、显式 eval。Chatty 不上 LangGraph、Temporal 或长期 workflow，因为 MVP 是每请求一次有界步。
+控制点包括搜索上限、显式失败、trace、eval，以及 durable workflow 的 event、lease、heartbeat 与 cancellation。Chatty 不引入 LangGraph 或 Temporal；模型 loop 仍保持有界，后台 worker 只推进持久化业务 workflow。
 `follow_up`、`handoff` 这类 workflow action 的工具参数由 harness 确定性生成，不让 LLM 猜日期、会话 ID 或审批边界。
 
 ```mermaid
 flowchart TD
   Loop["bounded loop"] --> Cap["search cap"]
-  Loop --> Fallback["deterministic fallback"]
+  Loop --> Failure["explicit failure"]
   Loop --> Trace["trace required"]
   Loop --> Workflow["deterministic workflow args"]
   Loop --> Eval["eval when model behavior changes"]

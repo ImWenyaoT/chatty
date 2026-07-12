@@ -85,6 +85,8 @@ test("DB 异常：返回降级指引而非抛错，文案与空结果不同", as
     "知识库搜索暂时不可用。请基于已知信息谨慎回答，不确定的内容如实告知用户无法确认。",
   );
   assert.equal(result.matches, 0);
+  assert.equal(result.status, "degraded");
+  assert.equal(result.errorCode, "knowledge_search_unavailable");
 });
 
 test("单条正文超 800 字符：截到上限并加已截断后缀", async () => {

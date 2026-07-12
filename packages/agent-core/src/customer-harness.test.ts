@@ -283,19 +283,30 @@ test("compose step passes harness runtime to modelFn for SDK-owned tool orchestr
   assert.equal(result.step.reply, "押金按订单规则确认。");
 });
 
-test("compose step falls back to the deterministic composer when the modelFn fails", async () => {
-  const result = await runCustomerServiceHarnessStep({
-    event: userEvent("这款有 L 吗，5月10到12号穿"),
-    memory: memory(),
-    registry: createDefaultToolRegistry(),
-    modelFn: async () => {
-      throw new Error("provider down");
-    },
-  });
+test("compose step exposes model failures instead of reporting deterministic success", async () => {
+  await assert.rejects(
+    runCustomerServiceHarnessStep({
+      event: userEvent("这款有 L 吗，5月10到12号穿"),
+      memory: memory(),
+      registry: createDefaultToolRegistry(),
+      modelFn: async () => {
+        throw new Error("provider down");
+      },
+    }),
+    /provider down/,
+  );
+});
 
-  // 同一输入下确定性 composer 会给出 check_availability 工具动作
-  assert.equal(result.trace.action.action, "check_availability");
-  assert.equal(result.trace.action.toolName, "check_availability");
+test("compose step rejects an empty model reply", async () => {
+  await assert.rejects(
+    runCustomerServiceHarnessStep({
+      event: userEvent("押金怎么算"),
+      memory: memory(),
+      registry: createDefaultToolRegistry(),
+      modelFn: async () => "   ",
+    }),
+    /empty output/,
+  );
 });
 
 test("unparseable modelFn output falls back to the safe answer action via the parser", async () => {

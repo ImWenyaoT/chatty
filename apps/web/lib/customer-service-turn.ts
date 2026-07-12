@@ -66,7 +66,7 @@ export class CustomerServiceProviderError extends Error {
   }
 }
 
-export class CustomerServiceCancelledError extends Error {
+class CustomerServiceCancelledError extends Error {
   constructor() {
     super("Customer Service Turn cancelled");
     this.name = "CustomerServiceCancelledError";
@@ -290,6 +290,9 @@ export async function runCustomerServiceTurn(
       throw new CustomerServiceProviderError(error);
     }
     const result = harness.step;
+    if (!result.reply?.trim()) {
+      throw new Error("customer-service turn produced an empty reply");
+    }
     const harnessTrace = {
       ...harness.trace,
       llm: llm.summary(),
@@ -455,7 +458,10 @@ async function drainQueuedTurns(
         throw error;
       }
     } else {
-      repos.control.completeConversationEvent(queuedEntry.id);
+      repos.control.failConversationEvent(queuedEntry.id);
+      throw new Error(
+        `queued conversation event has an invalid payload: ${queuedEntry.id}`,
+      );
     }
     if (!options.queuedTurnDispatcher) break;
     queuedEntry = repos.control.claimConversationEvent(conversationId);
@@ -476,7 +482,13 @@ export async function recoverCustomerServiceTurns(
     const input = scheduled
       ? inputFromQueuedEvent(scheduled.payload)
       : undefined;
-    if (!input) continue;
+    if (!input) {
+      repos.control.transitionRun(run.id, "failed", "invalid_recovery_payload");
+      repos.control.appendRunEvent(run.id, "recovery_failed", {
+        failureKind: "invalid_recovery_payload",
+      });
+      continue;
+    }
     await runCustomerServiceTurn(input, {
       ...options,
       repos,

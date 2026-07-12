@@ -521,12 +521,10 @@ export async function composeCustomerServiceModelOutput(
         ? () => modelFn(input.context.prompt, input)
         : undefined;
   if (callModel) {
-    try {
-      const output = await callModel();
-      if (output.trim().length > 0) return output;
-    } catch {
-      // 单发或循环任一步失败（§4.3 层 3）：统一落回下方确定性 composer
-    }
+    const output = await callModel();
+    if (output.trim().length === 0)
+      throw new Error("customer-service model returned empty output");
+    return output;
   }
   return createCustomerServiceModelOutput(input);
 }

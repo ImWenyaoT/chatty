@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SellerNavigation } from "../components/seller/SellerNavigation";
+import { WorkspaceHeader } from "../components/seller/WorkspaceHeader";
 import { SELLER_ORDERS } from "../components/seller/orderData";
 import { summarizeAutomationImpact } from "../components/seller/productMetrics";
 import { getRepos } from "@/lib/db";
@@ -33,16 +34,16 @@ export default function DashboardPage() {
   return (
     <main className="seller-dashboard" id="main-content">
       <SellerNavigation active="dashboard" />
-      <header className="dashboard-header">
-        <div>
-          <p>TRACE REVIEW · AGENT 复盘</p>
-          <h1>复盘视图</h1>
-        </div>
-        <div className="dashboard-actions">
-          <Link href="/playground">客服会话</Link>
-          <Link href="/orders">订单跟进</Link>
-        </div>
-      </header>
+      <WorkspaceHeader
+        eyebrow="Trace review · Agent 复盘"
+        title="复盘视图"
+        actions={
+          <>
+            <Link href="/playground">客服会话</Link>
+            <Link href="/orders">订单跟进</Link>
+          </>
+        }
+      />
 
       <section className="dashboard-two-col">
         <aside className="dashboard-panel">
