@@ -16,6 +16,10 @@ const evalWorkflow = readFileSync(
   resolve(repoRoot, ".github/workflows/eval.yml"),
   "utf8",
 );
+const releaseWorkflow = readFileSync(
+  resolve(repoRoot, ".github/workflows/release.yml"),
+  "utf8",
+);
 const agentInstructions = readFileSync(resolve(repoRoot, "AGENTS.md"), "utf8");
 
 function listCurrentProjectFiles(dir: string): string[] {
@@ -93,6 +97,15 @@ test("coverage and manual golden evaluation stay wired", () => {
   assert.match(evalWorkflow, /workflow_dispatch/);
   assert.match(evalWorkflow, /pnpm eval -- --repeat 3 --save ci-latest/);
   assert.match(evalWorkflow, /OPENAI_API_KEY/);
+});
+
+test("tag delivery packages and smoke-checks a standalone SQLite-capable server", () => {
+  assert.ok(rootPackageJson.scripts["package:release"]);
+  assert.match(releaseWorkflow, /tags:[\s\S]*- "v\*"/);
+  assert.match(releaseWorkflow, /run: pnpm package:release/);
+  assert.match(releaseWorkflow, /CHATTY_DB_PATH/);
+  assert.match(releaseWorkflow, /\/api\/health/);
+  assert.match(releaseWorkflow, /gh release create/);
 });
 
 test("agent instructions retain repository and pull-request hygiene", () => {

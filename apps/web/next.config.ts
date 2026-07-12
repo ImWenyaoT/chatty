@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const appDir = path.dirname(fileURLToPath(import.meta.url));
 
 const config: NextConfig = {
+  output: "standalone",
+  outputFileTracingRoot: path.resolve(appDir, "../.."),
   // Transpile the internal workspace packages so their emitted TS (src/ imports)
   // works under Next's bundler without a pre-build step.
   transpilePackages: [

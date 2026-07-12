@@ -49,4 +49,5 @@ eval/.tmp/
 # Next.js (apps/web)
 .next/
 apps/web/out/
+release/
 next-env.d.ts

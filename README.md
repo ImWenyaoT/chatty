@@ -45,6 +45,8 @@ pnpm eval     # 金标回归（需真实 LLM key）
 
 `pnpm test` / `pnpm test:fullstack` / `pnpm test:coverage` / `pnpm test:coverage:core` / `pnpm smoke` / `pnpm typecheck` / `pnpm lint` 在 PR 与 `main` 上由 [CI](.github/workflows/ci.yml) 跑；full-stack 门禁覆盖 Next API、SQLite 与 worker 的真实联调。真实 LLM 的金标回归是手动 workflow（[`eval.yml`](.github/workflows/eval.yml)）。命令以根 [`package.json`](package.json) 为真相源，CI 测试直接校验 workflow 与这些脚本的连接。
 
+推送 `v*` tag 会触发 [Release workflow](.github/workflows/release.yml)：构建并真实启动 Next.js standalone server，以持久 SQLite 路径检查 `/api/health`，随后发布可运行的 GitHub Release 压缩包。部署环境只需 Node.js 24，并把 `CHATTY_DB_PATH` 指向持久卷。
+
 ## 数据说明
 
 本仓库开源，但业务源自真实店铺：真实客户信息与店铺隐私数据一律不入库，示例统一用占位符（示例租衣店 / 18800000000）。约定见 [AGENTS.md](AGENTS.md)。

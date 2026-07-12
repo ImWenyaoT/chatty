@@ -45,6 +45,8 @@ Set `OPENAI_API_KEY` (a DeepSeek OpenAI-format key) before running the playgroun
 
 `pnpm test` / `pnpm test:fullstack` / `pnpm test:coverage` / `pnpm test:coverage:core` / `pnpm smoke` / `pnpm typecheck` / `pnpm lint` run on PRs and `main` via [CI](.github/workflows/ci.yml). The full-stack gate exercises the real Next API, SQLite, and worker seams. The real-LLM golden regression is a manual workflow ([`eval.yml`](.github/workflows/eval.yml)). Root [`package.json`](package.json) is the command source of truth, and CI tests verify that the workflow remains wired to those scripts.
 
+Pushing a `v*` tag triggers the [Release workflow](.github/workflows/release.yml): it builds and starts the standalone Next.js server, probes `/api/health` with SQLite pointed at a persistent path, then publishes a runnable GitHub Release archive. A deployment target only needs Node.js 24 and `CHATTY_DB_PATH` mounted on durable storage.
+
 ## Data note
 
 This repo is open source, but the business comes from a real shop: real customer information and shop-private data are never committed, and examples use placeholders throughout (a sample rental shop / 18800000000). See [AGENTS.md](AGENTS.md) for the convention.
