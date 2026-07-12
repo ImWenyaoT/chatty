@@ -125,10 +125,8 @@ export function createLlmTelemetrySummary(
 }
 
 /**
- * Builds the playground LLM hooks as one per-request runtime. The live Agents
- * SDK compose modelFn feeds the shared pro-model telemetry collector (per-call
- * KV cache hit/miss + cost); the direct tool-loop lane is retired, so
- * toolLoopFn is always undefined.
+ * Builds the playground LLM hooks as one per-request runtime. The Agents SDK
+ * runner feeds the shared pro-model telemetry collector per model call.
  */
 export function createPlaygroundLlmRuntime(options: LlmRuntimeOptions = {}): {
   mode: LlmRuntimeMode;

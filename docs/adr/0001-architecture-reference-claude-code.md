@@ -91,7 +91,7 @@ Chat Completions。裸调只保留在 `eval/`；生产 DeepSeek 仍由 Agents SD
 
 | # | 候选 | 类型 | 验收 | 状态 |
 |---|---|---|---|---|
-| 1 | **折叠 harness 双 lane、删掉 compose 通路** | 删除（~250-300 行 + 死 lane 纯函数） | sdk-lane 分数 ≥ compose 基线（8/14），前后 `pnpm eval` 对拍 | 1a/1b✅；1c 等金标行为达标 |
+| 1 | **折叠 harness 双 lane、删掉 compose 通路** | 删除（~250-300 行 + 死 lane 纯函数） | sdk-lane 分数 ≥ compose 基线（8/14），前后 `pnpm eval` 对拍 | **✅ 8/14 后删除** |
 | 2 | sdk lane 的 search 归位到 `executeSearchRequest`（去重/精炼/审计单一缝） | 深化 | interface 单测 + 金标 | **✅；金标可完整执行** |
 | 3 | 生产 SDK runner 装配抽可测缝（`buildSdkPrompt`/`actionForTask` 已导出单测） | 深化 | in-process 单测 | **✅ 已做** |
 | 4 | Context Control 收窄接口（三快照与 trace 边界上收成深模块） | 深化 | SQLite interface 单测 | **✅ `prepareTurnContext`** |
@@ -107,8 +107,9 @@ Chat Completions。裸调只保留在 `eval/`；生产 DeepSeek 仍由 Agents SD
 - **1b ✅**：生产 sdk lane 改为一轮有界工具阶段；Agents SDK 的公开 `toolUseBehavior` 在首个工具结果后
   结束该 run，再用无工具 SDK run 生成最终回复。确定性 repro 从 4 轮 `MaxTurnsExceededError` 收敛为
   2 次模型采样；原失败场景不再出现 maxTurns 或 DSML 工具协议泄漏。
-- **1c 待办**：金标已直接执行生产 lane，但客服行为仍未达到删除 compose fallback 的门槛。例如价格事实、
-  缺失信息顺序与下单引导仍会红；这些是行为质量问题，不再是 SDK 运行时不收敛。
+- **1c ✅**：2026-07-12 生产 SDK lane 全量 14 条达到 8/14，与既定 compose 基线持平；随后删除
+  compose instructions、自建 Chat Completions 工具循环、JSON action parser/executor、确定性 fallback
+  及其专属测试。其余金标失败继续作为客服行为质量问题处理，不再保留第二套运行协议兜底。
 
 **端点探针实测（2026-07-12，已排除一个假设）**：直连 DeepSeek 两端点测 `response_format`——
 `json_object` 在标准端点与 `/beta` 都 ✅ 正常返回 `{"reply":"..."}`；`json_schema`（真结构化
@@ -118,14 +119,13 @@ Chat Completions。裸调只保留在 `eval/`；生产 DeepSeek 仍由 Agents SD
 历史 maxTurns 根因是 Agents SDK 默认 `run_llm_again` 会在每轮继续暴露同一工具集，DeepSeek 因而反复
 调用工具或把 DSML 工具调用标记输出成普通文本。当前一轮工具预算已从运行时消除该失败模式。
 
-**下一步**：只围绕现有 14 条金标修客服行为与事实命中，不新增 planner、hook bus 或第二个 agent；
-达到既定 sdk-lane 门槛后才删除 compose fallback。
+**下一步**：只围绕现有 14 条金标修客服行为与事实命中，不新增 planner、hook bus 或第二个 agent。
 
 ## 后果
 
 - 决策登记与文档整体一致（`grep -i codex` 在 src/docs 无残留），`pnpm lint` 0 error、
   core coverage **163 test 全绿**、全 workspace typecheck 通过。
 - 已做 runtime 改动：候选 #2/#3/#4 + **#1a（共享 runner 抽取 + 修 strict 潜伏 bug）** + DeepSeek 兼容补丁分支测试。
-- **关键实测发现**：生产 sdk 客服 lane 的 maxTurns/DSML 泄漏已通过 SDK 公开 seam 修复；金标现在暴露的是
-  价格事实、slot 收集与下单引导等行为差距，这些才是删除 compose fallback 前的剩余工作。
+- **关键实测发现**：生产 sdk 客服 lane 的 maxTurns/DSML 泄漏已通过 SDK 公开 seam 修复；达到既定
+  8/14 门槛后双 lane 已删除，金标现在只暴露价格事实、slot 收集与下单引导等行为差距。
 - 若未来要多 provider，claude_code 不是好范例（它是单 provider 硬编码），需另行设计接口。

@@ -211,7 +211,7 @@ interface HarnessSession {
   db: Db;
   memory: MemoryRepository;
   registry: ToolRegistry;
-  sdkRunner?: CustomerServiceSdkRunner;
+  sdkRunner: CustomerServiceSdkRunner;
   conversationId: string;
   /** 本场景累积的对话（judge 的历史切片来源，口径含当前轮）。 */
   history: Array<{ role: string; content: string }>;
@@ -223,11 +223,11 @@ interface HarnessSession {
  * 构建 harness 生产 lane 注入：eval 与 apps/web 复用同一
  * createCustomerServiceSdkRunner（DeepSeek Agents SDK 工具循环 + 宽容文本回复，
  * 非 outputType——DeepSeek 两端点都不支持 json_schema，结构化输出不收敛）。使金标
- * 直接护航生产路径。无 OPENAI_API_KEY 时返回 undefined，harness 落确定性 composer。
+ * 直接护航生产路径。无 OPENAI_API_KEY 时明确失败，不存在第二条 fallback lane。
  */
-function createHarnessSdkRunner(): CustomerServiceSdkRunner | undefined {
+function createHarnessSdkRunner(): CustomerServiceSdkRunner {
   const env = readLlmEnv();
-  if (!env.apiKey) return undefined;
+  if (!env.apiKey) throw new Error("OPENAI_API_KEY is required for eval");
   const model = createDeepSeekAgentsModelFromEnv();
   return createCustomerServiceSdkRunner(
     (opts) =>
@@ -455,11 +455,20 @@ async function runAllScenarios(
     scenarios,
     Math.max(1, concurrency),
     async (scenario) => {
+      const startedAt = performance.now();
+      console.log(`  → ${scenario.name}`);
       try {
-        return await runScenario(scenario, requestTimeoutMs);
+        const result = await runScenario(scenario, requestTimeoutMs);
+        console.log(
+          `  ${result.passed ? "✓" : "✗"} ${scenario.name} (${Math.round(performance.now() - startedAt)}ms)`,
+        );
+        return result;
       } catch (error) {
         console.error(
           `    ${scenario.name} error: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        console.log(
+          `  ✗ ${scenario.name} (${Math.round(performance.now() - startedAt)}ms)`,
         );
         return {
           name: scenario.name,
