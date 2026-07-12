@@ -1,4 +1,4 @@
-// search_knowledge 工具的行为测试（docs/archive/agentic-search-design.md B2 验收）：
+// search_knowledge 工具的行为测试：
 // §3.2 三段式结果格式（含空结果、截断尾行）、两层截断、失败与空结果可区分、
 // policy 门对 low 放行 / closed session 拒绝。仓储用内存 fake 注入。
 import { test } from "node:test";

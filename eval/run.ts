@@ -1,4 +1,4 @@
-// 朴素金标回归运行器（单 lane，docs/archive/agentic-search-design.md §5）。
+// 朴素金标回归运行器（单 lane）。
 // 用法：
 //   pnpm eval                          # 跑全部金标场景（harness lane，唯一活路径）
 //   pnpm eval -- --filter store-contact # 只跑名字匹配的场景

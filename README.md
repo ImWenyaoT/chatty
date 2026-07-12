@@ -45,13 +45,6 @@ pnpm eval     # 金标回归（需真实 LLM key）
 
 `pnpm test` / `pnpm test:fullstack` / `pnpm test:coverage` / `pnpm test:coverage:core` / `pnpm smoke` / `pnpm typecheck` / `pnpm lint` 在 PR 与 `main` 上由 [CI](.github/workflows/ci.yml) 跑；full-stack 门禁覆盖 Next API、SQLite 与 worker 的真实联调。真实 LLM 的金标回归是手动 workflow（[`eval.yml`](.github/workflows/eval.yml)）。命令与 CI 步骤的契约是可执行文档，见 [`quality-gates.ts`](packages/shared/src/quality-gates.ts)。
 
-## 文档
-
-- 架构设计主文档 — [docs/design.md](docs/design.md)
-- 补充图集 — [docs/current-architecture.md](docs/current-architecture.md)
-- 技术决策 — [docs/tech-stack-decisions.md](docs/tech-stack-decisions.md)
-- 开发方法 — [docs/development-method.md](docs/development-method.md)
-
 ## 数据说明
 
 本仓库开源，但业务源自真实店铺：真实客户信息与店铺隐私数据一律不入库，示例统一用占位符（示例租衣店 / 18800000000）。约定见 [AGENTS.md](AGENTS.md)。

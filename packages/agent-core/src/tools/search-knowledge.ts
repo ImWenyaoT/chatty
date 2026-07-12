@@ -1,6 +1,6 @@
 import type { JsonValue, RuntimeTool } from "@rental/shared";
 
-// search_knowledge（docs/archive/agentic-search-design.md §3）：LLM 主动检索店铺知识库的
+// search_knowledge：LLM 主动检索店铺知识库的
 // 唯一入口。FTS5 语法不暴露给模型（转义在 db 仓储侧归零）、top-k 服务端固定、
 // 结果为纯文本三段式；空结果与失败必须可区分，且都给模型可执行的下一步动作。
 

@@ -1,4 +1,4 @@
-# harness 版（docs/archive/agentic-search-design.md §5.3）。与 legacy 版语义等价性：
+# harness 版。与 legacy 版语义等价性：
 # - actionIn [confirm_review, guide_order, confirm_size] 的意图是"三要素齐了就推进、
 #   不再追问"→ harness 词汇里对应 check_availability / recommend_size / answer_question；
 # - notContains/minScore 是行为断言，原样保留；

@@ -406,7 +406,7 @@ test("compose step keeps workflow tasks on deterministic tool arguments instead 
   assert.equal(result.trace.toolCalls[0].toolName, "schedule_followup");
 });
 
-// ---- B3 有界搜索循环（docs/archive/agentic-search-design.md §4）----
+// ---- B3 有界搜索循环 ----
 
 /** 造一个可数命中次数的知识检索 fake，配合 createDefaultToolRegistry 注册 search_knowledge。 */
 function knowledgeSearcher(hits: Array<{ text: string; section: string }>) {

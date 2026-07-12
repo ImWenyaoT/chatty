@@ -45,13 +45,6 @@ Set `OPENAI_API_KEY` (a DeepSeek OpenAI-format key) before running the playgroun
 
 `pnpm test` / `pnpm test:fullstack` / `pnpm test:coverage` / `pnpm test:coverage:core` / `pnpm smoke` / `pnpm typecheck` / `pnpm lint` run on PRs and `main` via [CI](.github/workflows/ci.yml). The full-stack gate exercises the real Next API, SQLite, and worker seams. The real-LLM golden regression is a manual workflow ([`eval.yml`](.github/workflows/eval.yml)). The command and CI-step contract is executable documentation — see [`quality-gates.ts`](packages/shared/src/quality-gates.ts).
 
-## Docs
-
-- Architecture design (primary) — [docs/design.md](docs/design.md)
-- Supplementary diagrams — [docs/current-architecture.md](docs/current-architecture.md)
-- Tech decisions — [docs/tech-stack-decisions.md](docs/tech-stack-decisions.md)
-- Development method — [docs/development-method.md](docs/development-method.md)
-
 ## Data note
 
 This repo is open source, but the business comes from a real shop: real customer information and shop-private data are never committed, and examples use placeholders throughout (a sample rental shop / 18800000000). See [AGENTS.md](AGENTS.md) for the convention.
