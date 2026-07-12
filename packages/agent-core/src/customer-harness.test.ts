@@ -139,6 +139,24 @@ test("scheduler routes answerable policy questions to answer_question before slo
   assert.equal(task.terminality, "reply_and_wait");
 });
 
+test("scheduler confirms the product already bound to the current link", () => {
+  const task = scheduleCustomerServiceTask({
+    event: userEvent("就是当前链接这款吗"),
+    memory: memory(),
+  });
+
+  assert.equal(task.kind, "answer_question");
+});
+
+test("scheduler keeps collecting body details after a bound product and rental period", () => {
+  const task = scheduleCustomerServiceTask({
+    event: userEvent("5月9号到10号用"),
+    memory: memory(),
+  });
+
+  assert.equal(task.kind, "collect_missing_info");
+});
+
 test("scheduler still collects missing product for product-specific price questions", () => {
   const event = {
     ...userEvent("这款多少钱一天？"),

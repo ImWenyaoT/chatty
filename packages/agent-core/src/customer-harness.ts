@@ -320,6 +320,19 @@ export function scheduleCustomerServiceTask(
       risk: "low",
     };
   }
+  if (
+    input.event.productId &&
+    hasRentalPeriod(question) &&
+    !hasBodyOrSize(question)
+  ) {
+    return {
+      kind: "collect_missing_info",
+      goal: "收集客服履约所需的商品、档期、身高体重或数量信息",
+      terminality: "reply_and_wait",
+      requiredContext: ["productId", "rentalPeriod", "bodyMeasurements"],
+      risk: "low",
+    };
+  }
   if (mentionsAnswerableFactQuestion(question, input.event.productId)) {
     return {
       kind: "answer_question",
@@ -963,7 +976,9 @@ function mentionsAnswerableFactQuestion(
   }
   return (
     Boolean(productId) &&
-    /价格|多少钱|租金|一天|费用|尺码|材质|颜色|款式/.test(question)
+    /价格|多少钱|租金|一天|费用|尺码|材质|颜色|款式|当前链接|这款吗/.test(
+      question,
+    )
   );
 }
 
