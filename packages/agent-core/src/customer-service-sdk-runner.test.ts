@@ -105,6 +105,38 @@ function checkAvailabilityRuntime(): Parameters<CustomerServiceSdkRunner>[0] {
   };
 }
 
+function answerQuestionRuntime(): Parameters<CustomerServiceSdkRunner>[0] {
+  const task: CustomerServiceTask = {
+    kind: "answer_question",
+    goal: "回答尺码问题",
+    terminality: "reply_and_wait",
+    requiredContext: [],
+    risk: "low",
+  };
+  const knowledge = {
+    search: (query: string) => [
+      { section: `${query} 参考`, text: "身高 175-181、体重 66-80 建议 L" },
+    ],
+  };
+  return {
+    ...checkAvailabilityRuntime(),
+    task,
+    runPolicy: createCustomerServiceRunPolicy(task),
+    context: {
+      fragments: [
+        { kind: "task", label: "当前客服任务", content: "answer_question" },
+        {
+          kind: "user_message",
+          label: "用户本轮消息",
+          content: "我 178cm 72kg，这套建议什么码？",
+        },
+      ],
+      prompt: "",
+    },
+    registry: createDefaultToolRegistry(knowledge),
+  };
+}
+
 test("createCustomerServiceSdkRunner assembles tools, injects ids, and maps the audit action", async () => {
   // 假注入：模拟模型调用唯一工具后给出回复；不触网络、不启 SDK。
   const fakeRun: SdkStructuredRunFactory = (opts) => async () => {
@@ -128,6 +160,89 @@ test("createCustomerServiceSdkRunner assembles tools, injects ids, and maps the 
   // productId 由 harness 从 event 注入，不信任模型自带。
   assert.equal(result.toolCalls[0].arguments.productId, "SUIT-001");
   assert.equal(result.toolResults.length, 1);
+});
+
+test("createCustomerServiceSdkRunner routes knowledge search through the shared execution seam", async () => {
+  const runtime = answerQuestionRuntime();
+  const events: Array<{ type: string; payload: unknown }> = [];
+  runtime.emitEvent = (type, payload) => events.push({ type, payload });
+  const fakeRun: SdkStructuredRunFactory = (opts) => async () => {
+    const search = opts.tools.find((tool) => tool.name === "search_knowledge");
+    assert.ok(search);
+    const first = await search.execute({ query: "尺码推荐" });
+    const duplicate = await search.execute({ query: "尺码表" });
+    assert.match(JSON.stringify(first), /建议 L/);
+    assert.equal(duplicate, "已搜索过 SUIT-001 尺码。请基于已有结果直接回答。");
+    return { reply: "建议选 L 码。" };
+  };
+
+  const result = await createCustomerServiceSdkRunner(fakeRun)(runtime);
+
+  assert.deepEqual(
+    result.toolCalls.map((call) => call.arguments),
+    [{ query: "SUIT-001 尺码" }],
+  );
+  assert.equal(result.toolResults.length, 1);
+  const knowledge = runtime.context.fragments.filter(
+    (fragment) => fragment.kind === "knowledge",
+  );
+  assert.equal(knowledge.length, 1);
+  assert.equal(knowledge[0].label, "知识库检索：SUIT-001 尺码");
+  assert.match(knowledge[0].content, /建议 L/);
+  assert.deepEqual(
+    events.map((event) => event.type),
+    ["model_called", "tool_attempted", "tool_completed"],
+  );
+});
+
+test("createCustomerServiceSdkRunner audits a knowledge search before cancellation", async () => {
+  const runtime = answerQuestionRuntime();
+  runtime.signal = AbortSignal.abort(new Error("search cancelled"));
+  const events: Array<{ type: string; payload: unknown }> = [];
+  runtime.emitEvent = (type, payload) => events.push({ type, payload });
+  const fakeRun: SdkStructuredRunFactory = (opts) => async () => {
+    const search = opts.tools.find((tool) => tool.name === "search_knowledge");
+    assert.ok(search);
+    await search.execute({ query: "尺码推荐" });
+    return { reply: "unreachable" };
+  };
+
+  await assert.rejects(
+    createCustomerServiceSdkRunner(fakeRun)(runtime),
+    /search cancelled/,
+  );
+  assert.deepEqual(
+    events.map((event) => event.type),
+    ["model_called", "tool_attempted"],
+  );
+  assert.deepEqual((events[1].payload as { arguments: unknown }).arguments, {
+    query: "SUIT-001 尺码",
+  });
+});
+
+test("createCustomerServiceSdkRunner records a denied knowledge search as a tool result", async () => {
+  const runtime = answerQuestionRuntime();
+  runtime.sessionStatus = "closed";
+  const fakeRun: SdkStructuredRunFactory = (opts) => async () => {
+    const search = opts.tools.find((tool) => tool.name === "search_knowledge");
+    assert.ok(search);
+    const denied = await search.execute({ query: "押金" });
+    assert.deepEqual(denied, {
+      error: "PolicyDenyError",
+      message: "policy denied tool search_knowledge: session closed",
+    });
+    return { reply: "当前会话已关闭，无法继续查询。" };
+  };
+
+  const result = await createCustomerServiceSdkRunner(fakeRun)(runtime);
+
+  assert.equal(result.toolCalls.length, 1);
+  assert.deepEqual(result.toolResults, [
+    {
+      error: "PolicyDenyError",
+      message: "policy denied tool search_knowledge: session closed",
+    },
+  ]);
 });
 
 test("createCustomerServiceSdkRunner throws when a policy tool is not registered", async () => {

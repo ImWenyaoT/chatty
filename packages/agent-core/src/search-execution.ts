@@ -32,6 +32,8 @@ export type SearchExecutionInput = {
   searchedQueries: readonly string[];
   sessionStatus?: AgentSessionStatus;
   policy?: Policy;
+  signal?: AbortSignal;
+  onAttempt?: (call: RuntimeToolCall) => void;
 };
 
 /**
@@ -61,11 +63,19 @@ export async function executeSearchRequest(
 
   const tool = input.registry.get(input.toolName);
   if (!tool) throw new Error(`tool not found: ${input.toolName}`);
+  const toolCall: RuntimeToolCall = {
+    toolName: input.toolName,
+    arguments: { query: refinedQuery },
+    risk: tool.risk,
+    approvalRequired: tool.approvalRequired,
+  };
+  input.onAttempt?.(toolCall);
   const toolResult = await input.registry.invokeWithPolicy(
     input.toolName,
     { query: refinedQuery },
     input.policy ?? createDefaultPolicy(),
     { sessionStatus: input.sessionStatus ?? "active" },
+    { signal: input.signal },
   );
   const output =
     isPlainJsonObject(toolResult) && typeof toolResult.output === "string"
@@ -80,12 +90,7 @@ export async function executeSearchRequest(
       label: `知识库检索：${refinedQuery}`,
       content: output,
     },
-    toolCall: {
-      toolName: input.toolName,
-      arguments: { query: refinedQuery },
-      risk: tool.risk,
-      approvalRequired: tool.approvalRequired,
-    },
+    toolCall,
     toolResult,
   };
 }

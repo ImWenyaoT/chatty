@@ -1,4 +1,8 @@
-import type { JsonValue, RuntimeToolCall } from "@rental/shared";
+import {
+  readQuestionFromEvent,
+  type JsonValue,
+  type RuntimeToolCall,
+} from "@rental/shared";
 import { z } from "zod";
 import {
   CUSTOMER_SERVICE_SDK_INSTRUCTIONS,
@@ -7,6 +11,7 @@ import {
   type CustomerServiceTaskKind,
   type CustomerServiceToolChoice,
 } from "./customer-harness.js";
+import { executeSearchRequest } from "./search-execution.js";
 import { ApprovalRequiredError, PolicyDenyError } from "./tools/registry.js";
 
 /**
@@ -78,6 +83,13 @@ export function actionForTask(
   return "schedule_followup";
 }
 
+function policyErrorResult(error: unknown): JsonValue | undefined {
+  return error instanceof ApprovalRequiredError ||
+    error instanceof PolicyDenyError
+    ? { error: error.name, message: error.message }
+    : undefined;
+}
+
 /**
  * Builds the single production customer-service SDK runner. The harness owns task
  * scheduling, tool policy, prompt context, registry/policy gating, and trace; the
@@ -92,6 +104,7 @@ export function createCustomerServiceSdkRunner(
   return async (runtime) => {
     const toolCalls: RuntimeToolCall[] = [];
     const toolResults: JsonValue[] = [];
+    const searchedQueries: string[] = [];
     const tools: CustomerServiceSdkTool[] = runtime.runPolicy.toolNames.map(
       (name) => {
         const capability = runtime.registry.get(name);
@@ -108,6 +121,48 @@ export function createCustomerServiceSdkRunner(
           >,
           needsApproval: capability.approvalRequired,
           execute: async (raw: unknown): Promise<JsonValue> => {
+            if (name === "search_knowledge") {
+              let result;
+              try {
+                result = await executeSearchRequest({
+                  toolName: name,
+                  input: raw,
+                  registry: runtime.registry,
+                  question: readQuestionFromEvent(runtime.event),
+                  productId:
+                    runtime.event.productId ?? runtime.memory.productId,
+                  searchedQueries,
+                  sessionStatus: runtime.sessionStatus,
+                  policy: runtime.policy,
+                  signal: runtime.signal,
+                  onAttempt: (call) => {
+                    toolCalls.push(call);
+                    runtime.emitEvent?.(
+                      "tool_attempted",
+                      call as unknown as JsonValue,
+                    );
+                  },
+                });
+              } catch (error) {
+                const denied = policyErrorResult(error);
+                if (!denied) throw error;
+                toolResults.push(denied);
+                runtime.emitEvent?.("tool_completed", {
+                  toolName: name,
+                  result: denied,
+                });
+                return denied;
+              }
+              if (result.kind === "retry") return result.output;
+              searchedQueries.push(String(result.toolCall.arguments.query));
+              toolResults.push(result.toolResult);
+              runtime.context.fragments.push(result.fragment);
+              runtime.emitEvent?.("tool_completed", {
+                toolName: name,
+                result: result.toolResult,
+              });
+              return result.output;
+            }
             const parsed = SDK_TOOL_SCHEMAS[name].parse(
               raw,
             ) as unknown as Record<string, JsonValue>;
@@ -141,30 +196,12 @@ export function createCustomerServiceSdkRunner(
                 { signal: runtime.signal },
               );
             } catch (error) {
-              if (
-                !(error instanceof ApprovalRequiredError) &&
-                !(error instanceof PolicyDenyError)
-              ) {
-                throw error;
-              }
-              result = { error: error.name, message: error.message };
+              const denied = policyErrorResult(error);
+              if (!denied) throw error;
+              result = denied;
             }
             toolResults.push(result);
             runtime.emitEvent?.("tool_completed", { toolName: name, result });
-            if (
-              name === "search_knowledge" &&
-              result &&
-              typeof result === "object"
-            ) {
-              const output = (result as { output?: unknown }).output;
-              if (typeof output === "string") {
-                runtime.context.fragments.push({
-                  kind: "knowledge",
-                  label: "知识库工具结果",
-                  content: output,
-                });
-              }
-            }
             return result;
           },
         };
