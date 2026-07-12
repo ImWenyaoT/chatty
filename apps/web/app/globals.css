@@ -3083,4 +3083,26 @@ textarea:focus-visible {
   .orders-layout {
     margin: 16px 12px 28px;
   }
+
+  /* Mobile is a first-class operating surface: keep every primary action at
+     least 44px tall so dense desktop controls remain reliably touchable. */
+  .seller-nav a,
+  .workspace-header-actions a,
+  .seller-home-actions a,
+  .dashboard-conv-list a,
+  .support-search,
+  .support-search input,
+  .support-inbox-tabs button,
+  .support-conversation-list > button,
+  .support-attachment-details summary,
+  .support-send-button,
+  .support-image-url input,
+  .orders-filter input,
+  .orders-filter button {
+    min-height: 44px;
+  }
+
+  .support-search input {
+    height: 100%;
+  }
 }
