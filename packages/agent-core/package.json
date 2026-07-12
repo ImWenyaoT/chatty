@@ -14,6 +14,6 @@
     "@rental/shared": "workspace:*"
   },
   "devDependencies": {
-    "tsx": "^4.19.0"
+    "tsx": "^4.23.0"
   }
 }
