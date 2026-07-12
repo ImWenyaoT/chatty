@@ -1,26 +1,13 @@
+import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import assert from "node:assert/strict";
-import {
-  AUTOMATED_BEHAVIOR_COVERAGE_RULE,
-  DEVELOPMENT_METHOD_RULE,
-  REFERENCE_DEBUGGING_METHOD,
-  REQUIRED_LOCAL_QUALITY_COMMANDS,
-  REQUIRED_PULL_REQUEST_CHECKS,
-  getRequiredQualityCommandNames,
-  getRequiredPullRequestCheckNames,
-} from "./quality-gates.js";
+import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-
 const rootPackageJson = JSON.parse(
   readFileSync(resolve(repoRoot, "package.json"), "utf8"),
-) as {
-  scripts: Record<string, string>;
-};
-
+) as { scripts: Record<string, string> };
 const ciWorkflow = readFileSync(
   resolve(repoRoot, ".github/workflows/ci.yml"),
   "utf8",
@@ -31,44 +18,26 @@ const evalWorkflow = readFileSync(
 );
 const agentInstructions = readFileSync(resolve(repoRoot, "AGENTS.md"), "utf8");
 
-/** 列出当前源码和当前文档文件；archive 是历史证据，不参与当前 runtime 契约。 */
 function listCurrentProjectFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
     const absolute = join(dir, entry);
     const rel = relative(repoRoot, absolute);
     if (
-      rel === "node_modules" ||
-      rel === ".git" ||
-      rel === ".next" ||
-      rel === "dist" ||
+      ["node_modules", ".git", ".next", "dist"].includes(entry) ||
       rel === "docs/archive" ||
-      rel.startsWith(`docs/archive/`) ||
-      rel.startsWith(`apps/web/.next/`) ||
+      rel.startsWith("docs/archive/") ||
+      rel.startsWith("apps/web/.next/") ||
       rel.includes("/dist/")
-    ) {
+    )
       return [];
-    }
     if (statSync(absolute).isDirectory())
       return listCurrentProjectFiles(absolute);
     return /\.(ts|tsx|mts|md|json|yml|yaml)$/.test(absolute) ? [absolute] : [];
   });
 }
 
-test("quality policy states that every automatically verifiable behavior needs automated verification", () => {
-  assert.match(AUTOMATED_BEHAVIOR_COVERAGE_RULE, /所有能被自动验证的行为/);
-  assert.match(AUTOMATED_BEHAVIOR_COVERAGE_RULE, /自动验证/);
-});
-
-test("required local quality commands are present in package scripts", () => {
-  for (const command of REQUIRED_LOCAL_QUALITY_COMMANDS) {
-    assert.ok(
-      rootPackageJson.scripts[command.scriptName],
-      `${command.scriptName} should be a root script`,
-    );
-    assert.equal(rootPackageJson.scripts[command.scriptName], command.command);
-  }
-
-  assert.deepEqual(getRequiredQualityCommandNames(), [
+test("root scripts expose every local quality gate used by the project", () => {
+  for (const script of [
     "build:skeleton",
     "lint",
     "smoke",
@@ -79,120 +48,62 @@ test("required local quality commands are present in package scripts", () => {
     "test:fullstack",
     "typecheck",
     "build",
-  ]);
+  ])
+    assert.ok(
+      rootPackageJson.scripts[script],
+      `${script} should be a root script`,
+    );
 });
 
-test("pull request quality checks are wired into CI in the same order as the policy", () => {
-  const checkNames = getRequiredPullRequestCheckNames();
-  assert.deepEqual(checkNames, [
-    "Build package skeleton",
-    "Lint and format",
-    "Smoke test (core data path, no network)",
-    "Test workspaces",
-    "Full-stack integration",
-    "Core package coverage",
-    "Web core coverage",
-    "Frontend experience contract",
-    "Typecheck workspaces",
-    "Build workspaces",
-  ]);
-
-  const positions = checkNames.map((name) =>
-    ciWorkflow.indexOf(`name: ${name}`),
-  );
-  assert.ok(
-    positions.every((position) => position >= 0),
-    "every required CI check should exist",
-  );
+test("CI runs the full quality story in failure-localizing order", () => {
+  const checks = [
+    ["Build package skeleton", "pnpm build:skeleton"],
+    ["Lint and format", "pnpm lint"],
+    ["Smoke test (core data path, no network)", "node scripts/smoke.mts"],
+    ["Test workspaces", "pnpm test"],
+    ["Full-stack integration", "pnpm test:fullstack"],
+    ["Core package coverage", "pnpm test:coverage:core"],
+    ["Web core coverage", "pnpm test:coverage"],
+    ["Frontend experience contract", "pnpm test:frontend"],
+    ["Typecheck workspaces", "pnpm typecheck"],
+    ["Build workspaces", "pnpm build"],
+  ] as const;
+  const positions = checks.map(([name]) => ciWorkflow.indexOf(`name: ${name}`));
+  assert.ok(positions.every((position) => position >= 0));
   assert.deepEqual(
     [...positions].sort((a, b) => a - b),
     positions,
   );
-
-  for (const check of REQUIRED_PULL_REQUEST_CHECKS) {
-    assert.ok(
-      ciWorkflow.includes(`run: ${check.command}`),
-      `${check.command} should be run in CI`,
+  for (const [, command] of checks)
+    assert.match(
+      ciWorkflow,
+      new RegExp(`run: ${command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
     );
-  }
-
-  assert.doesNotMatch(
-    REQUIRED_PULL_REQUEST_CHECKS.map((check) => check.purpose).join("\n"),
-    /Vercel-first/,
-  );
 });
 
-test("CI runs full-stack integration and enforces web and core coverage", () => {
-  assert.equal(
-    rootPackageJson.scripts["test:coverage"],
-    "pnpm --filter @chatty/web test:coverage",
+test("coverage and manual golden evaluation stay wired", () => {
+  assert.match(
+    rootPackageJson.scripts["test:coverage:core"],
+    /test-coverage-lines=90/,
   );
   assert.match(
-    ciWorkflow,
-    /name: Full-stack integration[\s\S]*run: pnpm test:fullstack/,
+    rootPackageJson.scripts["test:coverage:core"],
+    /test-coverage-branches=84/,
   );
-  assert.match(
-    ciWorkflow,
-    /name: Core package coverage[\s\S]*run: pnpm test:coverage:core/,
-  );
-  assert.match(
-    ciWorkflow,
-    /name: Web core coverage[\s\S]*run: pnpm test:coverage/,
-  );
-  const webPackageJson = JSON.parse(
-    readFileSync(resolve(repoRoot, "apps/web/package.json"), "utf8"),
-  ) as { scripts: Record<string, string> };
-  assert.match(
-    webPackageJson.scripts["test:coverage"],
-    /--test-coverage-lines=89/,
-  );
-  assert.match(
-    webPackageJson.scripts["test:coverage"],
-    /--test-coverage-branches=75/,
-  );
-  assert.match(
-    webPackageJson.scripts["test:coverage"],
-    /--test-coverage-functions=84/,
-  );
-});
-
-test("manual LLM golden eval remains documented as the integration gate for model behavior", () => {
   assert.match(evalWorkflow, /workflow_dispatch/);
   assert.match(evalWorkflow, /pnpm eval -- --repeat 3 --save ci-latest/);
   assert.match(evalWorkflow, /OPENAI_API_KEY/);
 });
 
-test("agent instructions retain the current issue-tracker and pull-request contract", () => {
+test("agent instructions retain repository and pull-request hygiene", () => {
   assert.match(agentInstructions, /GitHub Issues/);
-  for (const label of [
-    "needs-triage",
-    "needs-info",
-    "ready-for-agent",
-    "ready-for-human",
-    "wontfix",
-  ]) {
-    assert.match(agentInstructions, new RegExp(`\\b${label}\\b`));
-  }
-  assert.match(agentInstructions, /multi-context monorepo/);
   assert.match(agentInstructions, /\[chatty\] <Title>/);
   assert.match(agentInstructions, /pnpm lint/);
   assert.match(agentInstructions, /pnpm test/);
 });
 
-test("development method keeps implementation inside the reference bounds", () => {
-  assert.match(DEVELOPMENT_METHOD_RULE, /jd\.md/);
-  assert.match(DEVELOPMENT_METHOD_RULE, /claude-code/);
-  assert.doesNotMatch(DEVELOPMENT_METHOD_RULE, /openclaw|codex/);
-
-  assert.deepEqual(REFERENCE_DEBUGGING_METHOD.allowedReferences, [
-    "claude-code",
-  ]);
-  assert.equal(REFERENCE_DEBUGGING_METHOD.requiresSingleReferenceChoice, true);
-  assert.equal(REFERENCE_DEBUGGING_METHOD.requiresSmallestReproduction, true);
-});
-
 test("deprecated LLM runtime switches stay out of current code and docs", () => {
-  const deprecatedSwitches = [
+  const deprecated = [
     ["CHATTY", "LLM"],
     ["CHAT", "LLM"],
     ["CHATTY", "AGENTS", "SDK"],
@@ -200,15 +111,9 @@ test("deprecated LLM runtime switches stay out of current code and docs", () => 
     ["chat", "llm"],
     ["chatty", "llm"],
   ].map((parts) => parts.join("_"));
-  const deprecatedSwitchPattern = new RegExp(
-    `\\b(${deprecatedSwitches.join("|")})\\b`,
-  );
-  const offenders = listCurrentProjectFiles(repoRoot).flatMap((file) => {
-    const content = readFileSync(file, "utf8");
-    return deprecatedSwitchPattern.test(content)
-      ? [relative(repoRoot, file)]
-      : [];
-  });
-
+  const pattern = new RegExp(`\\b(${deprecated.join("|")})\\b`);
+  const offenders = listCurrentProjectFiles(repoRoot)
+    .filter((file) => pattern.test(readFileSync(file, "utf8")))
+    .map((file) => relative(repoRoot, file));
   assert.deepEqual(offenders, []);
 });

@@ -16,7 +16,7 @@ Chatty is a pnpm monorepo. Its ubiquitous language spans several bounded context
 | Shared contracts | `packages/shared` (`@rental/shared`) | Browser-safe API contracts and shared types | lazy |
 | Seller workspace | `apps/web` (`@chatty/web`) | Web demo surfaces, Frontend Experience Contract | lazy |
 | Evaluation | `eval` | Chat-completions eval lane, golden evals, harness validation | lazy |
-| Search / retrieval | `rag-service` + `knowledge` | Search Execution, agentic search over indexed and summarized content | lazy |
+| Search / retrieval | `packages/agent-core/src/search-execution.ts` + `packages/db/src/knowledge-index.ts` + `knowledge` | Search Execution, agentic search over indexed and summarized content | lazy |
 
 Per-context `CONTEXT.md` files are marked **lazy**: they do not exist yet and are created by `/domain-modeling` when a context-specific term or decision actually gets resolved. Absence is not an error — treat it as "not resolved yet".
 

@@ -36,6 +36,17 @@ test("get_product returns the seeded catalog entry", async () => {
   assert.equal(r.dailyPrice, 199);
 });
 
+test("get_product reports an unknown catalog id without inventing product facts", async () => {
+  const out = await registry().invoke("get_product", {
+    productId: "missing-product",
+  });
+
+  assert.deepEqual(out, {
+    found: false,
+    productId: "missing-product",
+  });
+});
+
 test("check_availability answers for a known product", async () => {
   const out = await registry().invoke("check_availability", {
     productId: "SUIT-001",

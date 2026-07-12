@@ -29,7 +29,7 @@ Multi-context monorepo (this repo):
 ├── apps/
 │   └── web/         (@chatty/web)           <- seller workspace / web demo
 ├── eval/                                    <- evaluation lane
-└── rag-service/ + knowledge/               <- search / retrieval
+└── packages/agent-core/search-execution + packages/db/knowledge-index + knowledge/ <- search / retrieval
 ```
 
 Per-context `CONTEXT.md` and `docs/adr/` are created lazily by `/domain-modeling`; treat their absence as "not resolved yet", not an error.
