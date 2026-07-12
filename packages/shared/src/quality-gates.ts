@@ -2,7 +2,7 @@ export const AUTOMATED_BEHAVIOR_COVERAGE_RULE =
   "在 agentic coding 时代，所有能被自动验证的行为都应该被自动验证；单元测试、集成测试、smoke、typecheck、lint、build 与金标 eval 共同构成质量门禁。";
 
 export const DEVELOPMENT_METHOD_RULE =
-  "功能实现必须先贴近 docs/jd.md 下限，再从 openclaw、codex、claude-code 中为该能力单选一个主参考；调试必须用搭积木复现法收敛到最小可失败块，再把修复沉淀为自动化回归。";
+  "功能实现必须先贴近 docs/jd.md 下限，再以 codex 作为该能力的唯一主参考；调试必须用搭积木复现法收敛到最小可失败块，再把修复沉淀为自动化回归。";
 
 export type QualityCommand = {
   readonly scriptName: string;
@@ -11,7 +11,7 @@ export type QualityCommand = {
 };
 
 export type ReferenceDebuggingMethod = {
-  readonly allowedReferences: readonly ["openclaw", "codex", "claude-code"];
+  readonly allowedReferences: readonly ["codex"];
   readonly requiresSingleReferenceChoice: boolean;
   readonly requiresSmallestReproduction: boolean;
 };
@@ -23,7 +23,7 @@ export type PullRequestCheck = {
 };
 
 export const REFERENCE_DEBUGGING_METHOD: ReferenceDebuggingMethod = {
-  allowedReferences: ["openclaw", "codex", "claude-code"],
+  allowedReferences: ["codex"],
   requiresSingleReferenceChoice: true,
   requiresSmallestReproduction: true,
 };

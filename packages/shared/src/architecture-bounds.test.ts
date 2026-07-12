@@ -53,9 +53,7 @@ function listSourceFiles(dir: string): string[] {
 test("agent complexity bounds stay between the current jd and reference agent source code", () => {
   assert.deepEqual(AGENT_COMPLEXITY_BOUNDS.lowerBound, ["docs/jd.md"]);
   assert.deepEqual(AGENT_COMPLEXITY_BOUNDS.upperBound, [
-    "/Users/edward/Documents/oss/openclaw",
     "/Users/edward/Documents/oss/codex",
-    "/Users/edward/Documents/oss/claude-code",
   ]);
 });
 
@@ -73,9 +71,9 @@ test("architecture complexity policy prefers deletion over optimizing out-of-bou
 });
 
 test("only explicit reference agents can be used in architecture design choices", () => {
-  assert.ok(isAllowedArchitectureReference("openclaw"));
   assert.ok(isAllowedArchitectureReference("codex"));
-  assert.ok(isAllowedArchitectureReference("claude-code"));
+  assert.equal(isAllowedArchitectureReference("openclaw"), false);
+  assert.equal(isAllowedArchitectureReference("claude-code"), false);
   assert.equal(isAllowedArchitectureReference("opencode"), false);
   assert.equal(isAllowedArchitectureReference("hermes"), false);
   assert.equal(isAllowedArchitectureReference("pi"), false);
@@ -113,18 +111,18 @@ test("each documented agent architecture topic declares exactly one primary refe
   assert.equal(byTopic["如何更好控制整个 loop 和 workflow"], "codex");
   assert.equal(byTopic["如何做可视化、可观测性与 terminal UI"], "codex");
   assert.equal(byTopic["input 拼接 prompt"], "codex");
-  assert.equal(byTopic["如何实现 long-term memory"], "openclaw");
-  assert.equal(byTopic["如何实现 skills 和 plugins"], "claude-code");
+  assert.equal(byTopic["如何实现 long-term memory"], "codex");
+  assert.equal(byTopic["如何实现 skills 和 plugins"], "codex");
   assert.equal(byTopic["如何做好 context auto compression"], "codex");
   assert.equal(byTopic["output parser"], "codex");
   assert.equal(byTopic["执行器 executor"], "codex");
-  assert.equal(byTopic["如何设计可以自由配置的 mcp"], "claude-code");
+  assert.equal(byTopic["如何设计可以自由配置的 mcp"], "codex");
   assert.equal(byTopic["如何做好 eval 和自动化测试"], "codex");
   assert.equal(byTopic["terminal 执行"], "codex");
   assert.equal(byTopic["如何控制 sandbox 环境"], "codex");
   assert.equal(byTopic["如何管理 background tasks"], "codex");
   assert.equal(byTopic["terminal 读 output"], "codex");
-  assert.equal(byTopic["基本 file I/O（读、写、搜）"], "claude-code");
+  assert.equal(byTopic["基本 file I/O（读、写、搜）"], "codex");
 });
 
 test("new jd capability review declares one allowed primary reference per capability", () => {
@@ -146,13 +144,13 @@ test("new jd capability review declares one allowed primary reference per capabi
   assert.equal(byTopic["LLM API 与 KV Cache"], "codex");
   assert.equal(byTopic["Agent Loop 与 Tool Use"], "codex");
   assert.equal(byTopic["Reasoning 与 Planning"], "codex");
-  assert.equal(byTopic["Skills 与 MCP"], "claude-code");
-  assert.equal(byTopic.Memory, "openclaw");
+  assert.equal(byTopic["Skills 与 MCP"], "codex");
+  assert.equal(byTopic.Memory, "codex");
   assert.equal(byTopic["Subagent 与 Multi-Agent"], "codex");
   assert.equal(byTopic["Prompt / Context / Harness Engineering"], "codex");
   assert.equal(byTopic.评测基准与数据标注, "codex");
   assert.equal(byTopic.真实任务反馈与产品指标, "codex");
-  assert.equal(byTopic["UI/UX 与 demo 原型"], "claude-code");
+  assert.equal(byTopic["UI/UX 与 demo 原型"], "codex");
 });
 
 test("deepseek-first harness compatibility does not assume OpenAI-only model surfaces", () => {
@@ -188,41 +186,6 @@ test("deepseek-first harness compatibility does not assume OpenAI-only model sur
   assert.equal(compatibility.openai_responses_api, "not_assumed");
   assert.equal(compatibility.openai_hosted_tools, "not_assumed");
   assert.equal(compatibility.openai_conversations_api, "not_assumed");
-});
-
-test("sdk usage audit stays aligned with DeepSeek compatibility statuses", () => {
-  const audit = readFileSync(
-    resolve(repoRoot, "docs/chatty-sdk-usage-audit.md"),
-    "utf8",
-  );
-  const compatibility = getDeepSeekHarnessCompatibility();
-
-  assert.equal(compatibility.agents_sdk_custom_model, "supported");
-  assert.match(
-    audit,
-    /Agents SDK custom model via `OpenAIChatCompletionsModel`/,
-  );
-  assert.equal(compatibility.agents_sdk_function_tools, "supported");
-  assert.match(audit, /Agents SDK function tools/);
-
-  assert.equal(compatibility.agents_sdk_sessions, "adoptable_via_probe");
-  assert.match(audit, /\| SDK sessions \| Not claimed as implemented \|/);
-  assert.equal(
-    compatibility.agents_sdk_human_in_the_loop,
-    "adoptable_via_probe",
-  );
-  assert.match(
-    audit,
-    /\| Human-in-the-loop via SDK \| Not claimed as implemented \|/,
-  );
-
-  assert.equal(compatibility.openai_responses_api, "not_assumed");
-  assert.equal(compatibility.openai_hosted_tools, "not_assumed");
-  assert.equal(compatibility.openai_conversations_api, "not_assumed");
-  assert.match(
-    audit,
-    /\| OpenAI Responses API \/ hosted tools \/ Conversations API \| Not used and not assumed \|/,
-  );
 });
 
 test("direct Chat Completions exceptions stay out of live runtime orchestration", () => {

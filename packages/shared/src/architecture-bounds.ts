@@ -1,4 +1,4 @@
-export type ArchitectureReference = "openclaw" | "codex" | "claude-code";
+export type ArchitectureReference = "codex";
 
 export type AgentArchitectureTopic =
   | "task scheduling 拆分"
@@ -103,11 +103,7 @@ export const ARCHITECTURE_COMPLEXITY_POLICY = {
 
 export const AGENT_COMPLEXITY_BOUNDS = {
   lowerBound: ["docs/jd.md"],
-  upperBound: [
-    "/Users/edward/Documents/oss/openclaw",
-    "/Users/edward/Documents/oss/codex",
-    "/Users/edward/Documents/oss/claude-code",
-  ],
+  upperBound: ["/Users/edward/Documents/oss/codex"],
 } as const;
 
 export const RETRIEVAL_HARNESS_STRATEGY: RetrievalHarnessStrategy = {
@@ -177,15 +173,15 @@ export const AGENT_ARCHITECTURE_REFERENCE_CHOICES: readonly AgentArchitectureRef
     },
     {
       topic: "如何实现 long-term memory",
-      primaryReference: "openclaw",
+      primaryReference: "codex",
       rationale:
-        "OpenClaw 的 memory_search、embedding/FTS hybrid recall 是长期记忆主参考。",
+        "Codex 的会话 rollout/checkpoint 持久化与状态恢复作为长期记忆主参考；Chatty 落到 SQLite transaction-scoped memory。",
     },
     {
       topic: "如何实现 skills 和 plugins",
-      primaryReference: "claude-code",
+      primaryReference: "codex",
       rationale:
-        "Claude Code 的 agent definition、tools、MCP、hooks、skills、memory 配置是主参考。",
+        "Codex 的 tool/MCP 配置与能力暴露方式作为 skills/plugins 主参考；Chatty 收敛为客服工具注册表。",
     },
     {
       topic: "如何做好 context auto compression",
@@ -206,9 +202,9 @@ export const AGENT_ARCHITECTURE_REFERENCE_CHOICES: readonly AgentArchitectureRef
     },
     {
       topic: "如何设计可以自由配置的 mcp",
-      primaryReference: "claude-code",
+      primaryReference: "codex",
       rationale:
-        "Claude Code 的 MCP/tool catalog/permission mode 更接近可配置工具面。",
+        "Codex 的 MCP server 配置、工具目录与审批分层作为可配置工具面主参考。",
     },
     {
       topic: "如何做好 eval 和自动化测试",
@@ -240,9 +236,9 @@ export const AGENT_ARCHITECTURE_REFERENCE_CHOICES: readonly AgentArchitectureRef
     },
     {
       topic: "基本 file I/O（读、写、搜）",
-      primaryReference: "claude-code",
+      primaryReference: "codex",
       rationale:
-        "Claude Code 的 FileRead/FileWrite/Grep/Glob 工具目录最适合作为 file I/O 主参考。",
+        "Codex 的文件读写/patch 工具与检索能力作为 file I/O 主参考。",
     },
   ];
 
@@ -268,14 +264,15 @@ export const JD_CAPABILITY_REFERENCE_CHOICES: readonly JdCapabilityReferenceChoi
     },
     {
       topic: "Skills 与 MCP",
-      primaryReference: "claude-code",
+      primaryReference: "codex",
       rationale:
-        "Claude Code 的 skills、MCP、hooks 和 tool catalog 是能力目录化主参考。",
+        "Codex 的 tool/MCP 配置与工具目录作为能力目录化主参考。",
     },
     {
       topic: "Memory",
-      primaryReference: "openclaw",
-      rationale: "OpenClaw 的 memory_search 和长期记忆检索是主参考。",
+      primaryReference: "codex",
+      rationale:
+        "Codex 的会话状态/rollout 持久化作为 memory 主参考；Chatty 落 SQLite memory。",
     },
     {
       topic: "Subagent 与 Multi-Agent",
@@ -302,9 +299,9 @@ export const JD_CAPABILITY_REFERENCE_CHOICES: readonly JdCapabilityReferenceChoi
     },
     {
       topic: "UI/UX 与 demo 原型",
-      primaryReference: "claude-code",
+      primaryReference: "codex",
       rationale:
-        "Claude Code 的终端产品体验、状态可视化和权限交互适合作为 demo/UX 主参考。",
+        "Codex 的 typed event stream、TUI 渲染与审批交互作为 demo/UX 可视化主参考。",
     },
   ];
 
@@ -350,7 +347,7 @@ export const DEEPSEEK_HARNESS_COMPATIBILITY: readonly DeepSeekHarnessCompatibili
       feature: "agents_sdk_function_tools",
       status: "supported",
       decision:
-        "所有在线客服工具均由 task policy 暴露为 SDK strict function tools；执行映射回 Chatty registry、policy 和 trace。",
+        "所有在线客服工具均由 task policy 暴露为 SDK function tools（标准端点，未启用 DeepSeek beta 的 strict function calling）；执行映射回 Chatty registry、policy 和 trace。",
     },
     {
       feature: "agents_sdk_sessions",
@@ -388,7 +385,7 @@ export const DEEPSEEK_HARNESS_COMPATIBILITY: readonly DeepSeekHarnessCompatibili
 export function isAllowedArchitectureReference(
   value: string,
 ): value is ArchitectureReference {
-  return value === "openclaw" || value === "codex" || value === "claude-code";
+  return value === "codex";
 }
 
 /** 将参考选择转成按主题索引的对象，方便文档生成或测试做精确断言。 */

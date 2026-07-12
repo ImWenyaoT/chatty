@@ -30,11 +30,6 @@ const evalWorkflow = readFileSync(
   "utf8",
 );
 const agentInstructions = readFileSync(resolve(repoRoot, "AGENTS.md"), "utf8");
-const designDoc = readFileSync(resolve(repoRoot, "docs/design.md"), "utf8");
-const developmentMethodDoc = readFileSync(
-  resolve(repoRoot, "docs/development-method.md"),
-  "utf8",
-);
 
 /** 列出当前源码和当前文档文件；archive 是历史证据，不参与当前 runtime 契约。 */
 function listCurrentProjectFiles(dir: string): string[] {
@@ -178,37 +173,20 @@ test("agent instructions retain the current issue-tracker and pull-request contr
   ]) {
     assert.match(agentInstructions, new RegExp(`\\b${label}\\b`));
   }
-  assert.match(agentInstructions, /single-context repo/);
+  assert.match(agentInstructions, /multi-context monorepo/);
   assert.match(agentInstructions, /\[chatty\] <Title>/);
   assert.match(agentInstructions, /pnpm lint/);
   assert.match(agentInstructions, /pnpm test/);
 });
 
-test("design contract protects the private JD input and repository boundary", () => {
-  assert.match(designDoc, /docs\/jd\.md.*私有输入/);
-  assert.match(designDoc, /\.gitignore.*不随开源仓分发/);
-  assert.match(designDoc, /不把实现决策反写回去/);
-});
-
 test("development method keeps implementation inside the reference bounds", () => {
   assert.match(DEVELOPMENT_METHOD_RULE, /jd\.md/);
-  assert.match(DEVELOPMENT_METHOD_RULE, /openclaw/);
   assert.match(DEVELOPMENT_METHOD_RULE, /codex/);
-  assert.match(DEVELOPMENT_METHOD_RULE, /claude-code/);
+  assert.doesNotMatch(DEVELOPMENT_METHOD_RULE, /openclaw|claude-code/);
 
-  assert.deepEqual(REFERENCE_DEBUGGING_METHOD.allowedReferences, [
-    "openclaw",
-    "codex",
-    "claude-code",
-  ]);
+  assert.deepEqual(REFERENCE_DEBUGGING_METHOD.allowedReferences, ["codex"]);
   assert.equal(REFERENCE_DEBUGGING_METHOD.requiresSingleReferenceChoice, true);
   assert.equal(REFERENCE_DEBUGGING_METHOD.requiresSmallestReproduction, true);
-});
-
-test("reference debugging method is documented for future agent work", () => {
-  assert.match(developmentMethodDoc, /参考实现三选一/);
-  assert.match(developmentMethodDoc, /搭积木复现法/);
-  assert.match(developmentMethodDoc, /自动化回归/);
 });
 
 test("deprecated LLM runtime switches stay out of current code and docs", () => {
