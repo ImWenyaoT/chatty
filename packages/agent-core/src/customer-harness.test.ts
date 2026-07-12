@@ -225,6 +225,27 @@ test("scheduler admits when body measurements are absent from memory", () => {
   assert.doesNotMatch(task.goal, /商品编号/);
 });
 
+test("scheduler recalls recorded body measurements instead of denying memory", () => {
+  const event = {
+    ...userEvent("我身高体重多少来着？"),
+    productId: undefined,
+  };
+  const task = scheduleCustomerServiceTask({
+    event,
+    memory: memory({
+      productId: undefined,
+      customerMemory: {
+        bodyProfiles: [{ profileId: "default", heightCm: 178, weightKg: 70 }],
+      },
+    }),
+  });
+
+  assert.equal(task.kind, "answer_question");
+  assert.match(task.goal, /178/);
+  assert.match(task.goal, /70/);
+  assert.doesNotMatch(task.goal, /没有记录|重新提供/);
+});
+
 test("scheduler repairs misunderstanding without exposing a knowledge tool", () => {
   const task = scheduleCustomerServiceTask({
     event: userEvent("没听懂"),
@@ -236,9 +257,23 @@ test("scheduler repairs misunderstanding without exposing a knowledge tool", () 
   assert.equal(task.kind, "collect_missing_info");
   assert.match(task.goal, /先道歉/);
   assert.match(task.goal, /换一种更简单的说法/);
-  assert.match(task.goal, /一句话只问一个/);
+  assert.match(task.goal, /重述上一轮问题/);
   assert.match(task.goal, /解释为什么需要/);
   assert.deepEqual(createCustomerServiceRunPolicy(task).toolNames, []);
+});
+
+test("scheduler keeps factual meaning questions on the knowledge-answer path", () => {
+  const task = scheduleCustomerServiceTask({
+    event: userEvent("押金是什么意思？"),
+    memory: memory(),
+  });
+
+  assert.equal(task.kind, "answer_question");
+  assert.equal(
+    createCustomerServiceRunPolicy(task, { requireKnowledgeSearch: true })
+      .toolChoice,
+    "search_knowledge",
+  );
 });
 
 test("context builder keeps ordered fragments for prompt assembly and inspection", () => {

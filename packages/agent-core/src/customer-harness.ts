@@ -315,9 +315,9 @@ export function scheduleCustomerServiceTask(
       risk: "low",
     };
   }
-  if (mentionsRepair(question)) {
+  if (mentionsClarificationRequest(question)) {
     return createCollectMissingInfoTask(
-      "先道歉并承认刚才没说清楚，再换一种更简单的说法；用一句话只问一个最先缺失的信息，并解释为什么需要它；不要罗列多个问题或推进流程",
+      "先道歉并承认刚才没说清楚，再换一种更简单的说法重述上一轮问题，并解释为什么需要该信息；不要采集新的槽位、罗列多个问题或推进流程",
     );
   }
   if (
@@ -349,6 +349,12 @@ export function scheduleCustomerServiceTask(
     return createAnswerQuestionTask();
   }
   if (/我.*身高.*体重|身高体重.*来着/.test(question)) {
+    const body = readRememberedBodyMeasurements(input.memory);
+    if (body) {
+      return createAnswerQuestionTask(
+        `根据当前记忆直接回答：身高 ${body.heightCm} cm，体重 ${body.weightKg} kg；不要否认记录或追问商品`,
+      );
+    }
     return createCollectMissingInfoTask(
       "当前记忆里还没有记录身高体重；如实说明没有记录，并请用户重新提供",
     );
@@ -988,8 +994,26 @@ function mentionsFollowUp(question: string): boolean {
   return /提醒|跟进|到期|明天|后天|稍后/.test(question);
 }
 
-function mentionsRepair(question: string): boolean {
-  return /^\s*[？?]\s*$|没听懂|不明白|没明白|什么意思/.test(question);
+function mentionsClarificationRequest(question: string): boolean {
+  return /^\s*(?:[？?]|没听懂|不明白|没明白|什么意思)\s*$/.test(question);
+}
+
+function readRememberedBodyMeasurements(
+  memory: MemorySnapshot,
+): { heightCm: number; weightKg: number } | undefined {
+  const customer = memory.customerMemory;
+  if (!isPlainJsonObject(customer) || !Array.isArray(customer.bodyProfiles))
+    return undefined;
+  for (const profile of customer.bodyProfiles) {
+    if (
+      isPlainJsonObject(profile) &&
+      typeof profile.heightCm === "number" &&
+      typeof profile.weightKg === "number"
+    ) {
+      return { heightCm: profile.heightCm, weightKg: profile.weightKg };
+    }
+  }
+  return undefined;
 }
 
 function mentionsAnswerableFactQuestion(
