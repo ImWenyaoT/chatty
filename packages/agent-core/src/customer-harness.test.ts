@@ -205,6 +205,40 @@ test("scheduler still collects missing product for product-specific price questi
   });
 
   assert.equal(task.kind, "collect_missing_info");
+  assert.match(task.goal, /只询问款式或商品编号/);
+  assert.match(task.goal, /不询问日期、身高或体重/);
+});
+
+test("scheduler admits when body measurements are absent from memory", () => {
+  const event = {
+    ...userEvent("我身高体重多少来着？"),
+    productId: undefined,
+  };
+  const task = scheduleCustomerServiceTask({
+    event,
+    memory: memory({ productId: undefined }),
+  });
+
+  assert.equal(task.kind, "collect_missing_info");
+  assert.match(task.goal, /还没有记录身高体重/);
+  assert.match(task.goal, /请用户重新提供/);
+  assert.doesNotMatch(task.goal, /商品编号/);
+});
+
+test("scheduler repairs misunderstanding without exposing a knowledge tool", () => {
+  const task = scheduleCustomerServiceTask({
+    event: userEvent("没听懂"),
+    memory: memory({
+      recentMessages: [{ role: "assistant", content: "请提供身高体重" }],
+    }),
+  });
+
+  assert.equal(task.kind, "collect_missing_info");
+  assert.match(task.goal, /先道歉/);
+  assert.match(task.goal, /换一种更简单的说法/);
+  assert.match(task.goal, /一句话只问一个/);
+  assert.match(task.goal, /解释为什么需要/);
+  assert.deepEqual(createCustomerServiceRunPolicy(task).toolNames, []);
 });
 
 test("context builder keeps ordered fragments for prompt assembly and inspection", () => {

@@ -315,6 +315,11 @@ export function scheduleCustomerServiceTask(
       risk: "low",
     };
   }
+  if (mentionsRepair(question)) {
+    return createCollectMissingInfoTask(
+      "先道歉并承认刚才没说清楚，再换一种更简单的说法；用一句话只问一个最先缺失的信息，并解释为什么需要它；不要罗列多个问题或推进流程",
+    );
+  }
   if (
     hasRentalPeriod(question) &&
     hasBodyOrSize(question) &&
@@ -343,10 +348,17 @@ export function scheduleCustomerServiceTask(
   if (mentionsAnswerableFactQuestion(question, input.event.productId)) {
     return createAnswerQuestionTask();
   }
-  if (
-    !input.event.productId ||
-    !hasEnoughRentalContext(question, input.memory)
-  ) {
+  if (/我.*身高.*体重|身高体重.*来着/.test(question)) {
+    return createCollectMissingInfoTask(
+      "当前记忆里还没有记录身高体重；如实说明没有记录，并请用户重新提供",
+    );
+  }
+  if (!input.event.productId) {
+    return createCollectMissingInfoTask(
+      "当前商品尚未确定；只询问款式或商品编号，不询问日期、身高或体重",
+    );
+  }
+  if (!hasEnoughRentalContext(question, input.memory)) {
     return createCollectMissingInfoTask();
   }
   return createAnswerQuestionTask();
@@ -974,6 +986,10 @@ function mentionsHandoff(question: string): boolean {
 
 function mentionsFollowUp(question: string): boolean {
   return /提醒|跟进|到期|明天|后天|稍后/.test(question);
+}
+
+function mentionsRepair(question: string): boolean {
+  return /^\s*[？?]\s*$|没听懂|不明白|没明白|什么意思/.test(question);
 }
 
 function mentionsAnswerableFactQuestion(
