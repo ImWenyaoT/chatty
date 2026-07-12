@@ -118,6 +118,7 @@ function refineKnowledgeQuery(
   productId?: string,
 ): string {
   const cleanQuery = query.trim();
+  if (/不合身|换码|换货|换吗/.test(question)) return "换码";
   if (!productId) return cleanQuery;
   if (cleanQuery.includes(productId)) return cleanQuery;
   if (

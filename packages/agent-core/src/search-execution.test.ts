@@ -89,3 +89,25 @@ test("executeSearchRequest deduplicates by refined query", async () => {
   });
   assert.equal(searcher.state.calls, 0);
 });
+
+test("executeSearchRequest normalizes exchange questions to the indexed policy term", async () => {
+  const searcher = knowledgeSearcher([
+    {
+      text: "发错尺码或款式可免费补发；按推荐尺码不合身可协助更换一次。",
+      section: "租赁规则 › 换码",
+    },
+  ]);
+  const result = await executeSearchRequest({
+    toolName: "search_knowledge",
+    input: '{"query":"不合身换货"}',
+    registry: createDefaultToolRegistry(searcher),
+    question: "衣服收到不合身能换吗？",
+    searchedQueries: [],
+  });
+
+  assert.equal(result.kind, "executed");
+  if (result.kind !== "executed") return;
+  assert.deepEqual(result.toolCall.arguments, { query: "换码" });
+  assert.deepEqual(searcher.state.queries, ["换码"]);
+  assert.match(result.output, /免费补发/);
+});

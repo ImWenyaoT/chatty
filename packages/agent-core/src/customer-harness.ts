@@ -275,6 +275,8 @@ export const CUSTOMER_SERVICE_SDK_INSTRUCTIONS = [
   "你是 Chatty 的单一租赁电商客服 Agent。Chatty harness 已经确定当前任务和可用工具。",
   "只处理当前任务，不得尝试调用未暴露的工具，也不得自行改变任务类型。",
   "需要工具时必须使用当前提供的 function tool；工具结果回填后，以结果为事实依据。",
+  "事实任务中，工具结果是唯一可引用的证据：价格、次数、时限、费用和政策口径必须来自其中；没有明确证据时如实说明需要确认，不能补全或猜测。",
+  "当工具选择是 search_knowledge 时，先调用一次精准关键词搜索；收到结果后直接根据结果回答，不要再次搜索。",
   "不要编造商品、库存、政策、工单、提醒时间或系统执行结果。",
   "直接输出发给用户的简短中文回复本身，不要包成 JSON、不要写字段名、任务名或工具名。",
   "回复保持口语化、清晰、务实，不使用 Markdown、编号、内部任务名或工具名。",
@@ -320,45 +322,50 @@ export function scheduleCustomerServiceTask(
       risk: "low",
     };
   }
+  if (input.event.productId && /当前链接|这款吗/.test(question)) {
+    return createAnswerQuestionTask("确认当前已绑定商品，并引导下一步租赁信息");
+  }
   if (
     input.event.productId &&
     hasRentalPeriod(question) &&
     !hasBodyOrSize(question)
   ) {
-    return {
-      kind: "collect_missing_info",
-      goal: "收集客服履约所需的商品、档期、身高体重或数量信息",
-      terminality: "reply_and_wait",
-      requiredContext: ["productId", "rentalPeriod", "bodyMeasurements"],
-      risk: "low",
-    };
+    return createCollectMissingInfoTask(
+      "已确认当前商品和档期；只收集用户身高与体重，不重复询问款式或日期",
+    );
   }
   if (mentionsAnswerableFactQuestion(question, input.event.productId)) {
-    return {
-      kind: "answer_question",
-      goal: "回答当前客服问题，并保持下一步流程清晰",
-      terminality: "reply_and_wait",
-      requiredContext: ["userMessage", "recentMessages"],
-      risk: "low",
-    };
+    return createAnswerQuestionTask();
   }
   if (
     !input.event.productId ||
     !hasEnoughRentalContext(question, input.memory)
   ) {
-    return {
-      kind: "collect_missing_info",
-      goal: "收集客服履约所需的商品、档期、身高体重或数量信息",
-      terminality: "reply_and_wait",
-      requiredContext: ["productId", "rentalPeriod", "bodyMeasurements"],
-      risk: "low",
-    };
+    return createCollectMissingInfoTask();
   }
+  return createAnswerQuestionTask();
+}
+
+function createAnswerQuestionTask(
+  goal = "回答当前客服问题，并保持下一步流程清晰",
+): CustomerServiceTask {
   return {
     kind: "answer_question",
-    goal: "回答当前客服问题，并保持下一步流程清晰",
+    goal,
     terminality: "reply_and_wait",
     requiredContext: ["userMessage", "recentMessages"],
+    risk: "low",
+  };
+}
+
+function createCollectMissingInfoTask(
+  goal = "收集客服履约所需的商品、档期、身高体重或数量信息",
+): CustomerServiceTask {
+  return {
+    kind: "collect_missing_info",
+    goal,
+    terminality: "reply_and_wait",
+    requiredContext: ["productId", "rentalPeriod", "bodyMeasurements"],
     risk: "low",
   };
 }
@@ -797,7 +804,7 @@ export async function runCustomerServiceHarnessStep(
 
 /** Requires grounded retrieval only for policy/store facts, leaving catalog questions on auto. */
 function requiresKnowledgeSearch(question: string): boolean {
-  return /押金|规则|租期|计费|续租|售后|换码|换货|店名|电话|地址|营业|清洗|包邮/.test(
+  return /价格|多少钱|租金|一天|费用|怎么租|如何租|流程|押金|规则|租期|计费|续租|售后|换码|换货|不合身|换吗|店名|电话|地址|营业|清洗|包邮/.test(
     question,
   );
 }
@@ -968,7 +975,7 @@ function mentionsAnswerableFactQuestion(
   productId?: string,
 ): boolean {
   if (
-    /押金|规则|怎么租|如何租|流程|租期|计费|续租|售后|换码|换货|店名|电话|地址|营业/.test(
+    /押金|规则|怎么租|如何租|流程|租期|计费|续租|售后|换码|换货|不合身|换吗|店名|电话|地址|营业/.test(
       question,
     )
   ) {
@@ -983,7 +990,12 @@ function mentionsAnswerableFactQuestion(
 }
 
 function hasRentalPeriod(question: string): boolean {
-  return /\d+\s*月|\d+[/-]\d+|到|至|号|日/.test(question);
+  return (
+    /\d{4}[/-]\d{1,2}[/-]\d{1,2}/.test(question) ||
+    /\d{1,2}\s*月\s*\d{1,2}\s*(?:日|号)?(?:\s*(?:到|至|-|~)\s*(?:(?:\d{1,2}\s*月)?\s*)?\d{1,2}\s*(?:日|号)?)?/.test(
+      question,
+    )
+  );
 }
 
 function hasBodyOrSize(question: string): boolean {

@@ -146,6 +146,7 @@ test("scheduler confirms the product already bound to the current link", () => {
   });
 
   assert.equal(task.kind, "answer_question");
+  assert.match(task.goal, /确认当前已绑定商品/);
 });
 
 test("scheduler keeps collecting body details after a bound product and rental period", () => {
@@ -155,6 +156,42 @@ test("scheduler keeps collecting body details after a bound product and rental p
   });
 
   assert.equal(task.kind, "collect_missing_info");
+  assert.match(task.goal, /只收集用户身高与体重/);
+});
+
+test("scheduler does not mistake store opening hours for a rental period", () => {
+  const task = scheduleCustomerServiceTask({
+    event: userEvent("门店营业到几点？"),
+    memory: memory(),
+  });
+
+  assert.equal(task.kind, "answer_question");
+});
+
+test("SDK lane requires SQLite evidence for price, rental and exchange facts", async () => {
+  for (const question of [
+    "这款多少钱一天？",
+    "你们家衣服怎么租？",
+    "衣服收到不合身能换吗？",
+  ]) {
+    let toolChoice: string | undefined;
+    await runCustomerServiceHarnessStep({
+      event: userEvent(question),
+      memory: memory(),
+      registry: createDefaultToolRegistry(),
+      sdkRunner: async (runtime) => {
+        toolChoice = runtime.runPolicy.toolChoice;
+        return {
+          reply: "已根据当前任务回复。",
+          action: { action: "answer_question", reply: "已根据当前任务回复。" },
+          toolCalls: [],
+          toolResults: [],
+          outputValidated: true,
+        };
+      },
+    });
+    assert.equal(toolChoice, "search_knowledge", question);
+  }
 });
 
 test("scheduler still collects missing product for product-specific price questions", () => {
