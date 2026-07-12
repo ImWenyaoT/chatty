@@ -111,3 +111,48 @@ test("executeSearchRequest normalizes exchange questions to the indexed policy t
   assert.deepEqual(searcher.state.queries, ["换码"]);
   assert.match(result.output, /免费补发/);
 });
+
+test("executeSearchRequest normalizes rental how-to questions to the indexed phrase", async () => {
+  const searcher = knowledgeSearcher([
+    {
+      text: "第一天全价，续租半价，在途不算租期，偏远地区除外。",
+      section: "租赁规则 › 怎么租",
+    },
+  ]);
+  const result = await executeSearchRequest({
+    toolName: "search_knowledge",
+    input: '{"query":"租赁流程"}',
+    registry: createDefaultToolRegistry(searcher),
+    question: "你们家衣服怎么租？",
+    searchedQueries: [],
+  });
+
+  assert.equal(result.kind, "executed");
+  if (result.kind !== "executed") return;
+  assert.deepEqual(result.toolCall.arguments, { query: "怎么租" });
+  assert.deepEqual(searcher.state.queries, ["怎么租"]);
+  assert.match(result.output, /租期/);
+  assert.match(result.output, /偏远地区/);
+});
+
+test("executeSearchRequest normalizes clothing-care questions to the indexed term", async () => {
+  const searcher = knowledgeSearcher([
+    {
+      text: "衣服穿完无需自行清洗，直接寄回即可。",
+      section: "租赁规则 › 清洗",
+    },
+  ]);
+  const result = await executeSearchRequest({
+    toolName: "search_knowledge",
+    input: '{"query":"穿完怎么处理"}',
+    registry: createDefaultToolRegistry(searcher),
+    question: "衣服穿完还需要我自己洗吗？",
+    searchedQueries: [],
+  });
+
+  assert.equal(result.kind, "executed");
+  if (result.kind !== "executed") return;
+  assert.deepEqual(result.toolCall.arguments, { query: "清洗" });
+  assert.deepEqual(searcher.state.queries, ["清洗"]);
+  assert.match(result.output, /无需自行清洗/);
+});

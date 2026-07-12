@@ -9,7 +9,8 @@ conversationId: golden-deposit-cleaning-v1
 steps:
   - user: 租衣服需要押金吗？
     expect:
-      containsAny: ["具体商品和订单规则", "订单规则确认", "根据具体商品"]
+      contains: ["订单规则"]
+      containsAny: ["具体商品", "具体的商品", "根据具体商品"]
       notContains: ["100", "200", "300", "500"]
   - user: 那衣服穿完还需要我自己洗吗？
     expect:

@@ -301,6 +301,20 @@ test("scheduler keeps factual meaning questions on the knowledge-answer path", (
   );
 });
 
+test("scheduler treats clothing-care questions as grounded facts", () => {
+  const task = scheduleCustomerServiceTask({
+    event: userEvent("衣服穿完还需要我自己洗吗？"),
+    memory: memory(),
+  });
+
+  assert.equal(task.kind, "answer_question");
+  assert.equal(
+    createCustomerServiceRunPolicy(task, { requireKnowledgeSearch: true })
+      .toolChoice,
+    "search_knowledge",
+  );
+});
+
 test("context builder keeps ordered fragments for prompt assembly and inspection", () => {
   const task = scheduleCustomerServiceTask({
     event: userEvent("这款多少钱"),

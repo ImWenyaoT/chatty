@@ -119,6 +119,8 @@ function refineKnowledgeQuery(
 ): string {
   const cleanQuery = query.trim();
   if (/不合身|换码|换货|换吗/.test(question)) return "换码";
+  if (/怎么租|如何租/.test(question)) return "怎么租";
+  if (/清洗|自己洗|洗吗|洗护/.test(question)) return "清洗";
   if (!productId) return cleanQuery;
   if (cleanQuery.includes(productId)) return cleanQuery;
   if (

@@ -16,7 +16,7 @@ import { ApprovalRequiredError, PolicyDenyError } from "./tools/registry.js";
 import { executeSearchRequest } from "./search-execution.js";
 
 const POLICY_FACT_PATTERN =
-  /怎么租|如何租|流程|押金|规则|租期|计费|续租|售后|换码|换货|不合身|换吗|店名|电话|地址|营业|清洗|包邮/;
+  /怎么租|如何租|流程|押金|规则|租期|计费|续租|售后|换码|换货|不合身|换吗|店名|电话|地址|营业|清洗|自己洗|洗吗|洗护|包邮/;
 const PRODUCT_FACT_PATTERN =
   /价格|多少钱|租金|一天|费用|尺码|材质|颜色|款式|当前链接|这款吗/;
 const PRICE_FACT_PATTERN = /价格|多少钱|租金|一天|费用/;
