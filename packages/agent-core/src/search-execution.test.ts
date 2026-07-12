@@ -174,3 +174,21 @@ test("executeSearchRequest preserves an explicit query for another fact in a com
   assert.deepEqual(result.toolCall.arguments, { query: "押金" });
   assert.deepEqual(searcher.state.queries, ["押金"]);
 });
+
+test("executeSearchRequest preserves a specific fact query that contains a generic suffix", async () => {
+  const searcher = knowledgeSearcher([
+    { text: "押金按具体商品和订单规则确认。", section: "租赁规则 › 押金" },
+  ]);
+  const result = await executeSearchRequest({
+    toolName: "search_knowledge",
+    input: '{"query":"押金规则"}',
+    registry: createDefaultToolRegistry(searcher),
+    question: "你们家怎么租，押金怎么算？",
+    searchedQueries: [],
+  });
+
+  assert.equal(result.kind, "executed");
+  if (result.kind !== "executed") return;
+  assert.deepEqual(result.toolCall.arguments, { query: "押金规则" });
+  assert.deepEqual(searcher.state.queries, ["押金规则"]);
+});
