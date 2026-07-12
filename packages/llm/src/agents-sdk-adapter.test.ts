@@ -34,7 +34,8 @@ test("toAgentsSdkFunctionTool converts a Chatty tool into an SDK function tool",
     required: ["query"],
     additionalProperties: false,
   });
-  assert.equal(sdkTool.strict, true);
+  // 标准端点非 strict function calling（strict 仅 DeepSeek beta 提供）。
+  assert.equal(sdkTool.strict, false);
   assert.equal(
     await sdkTool.needsApproval({} as never, '{"query":"押金"}', undefined),
     false,
@@ -91,7 +92,7 @@ test("DeepSeek transport maps SDK json_schema output to supported json_object", 
       return new Response("{}", { status: 200 });
     },
   );
-  await compatibleFetch("https://api.deepseek.com/beta/chat/completions", {
+  await compatibleFetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
     body: JSON.stringify({
       response_format: { type: "json_schema", json_schema: { name: "output" } },

@@ -113,7 +113,9 @@ export function toAgentsSdkFunctionTool(
     name: definition.name,
     description: definition.description,
     parameters: definition.parameters as never,
-    strict: true,
+    // strict function calling 是 DeepSeek beta 专属能力；标准端点用非 strict 工具，
+    // 参数正确性交给 Chatty 执行器 policy 校验与坏参数重试兜底。
+    strict: false,
     needsApproval: definition.needsApproval ?? false,
     execute: async (input) => {
       const result = await definition.execute(input);

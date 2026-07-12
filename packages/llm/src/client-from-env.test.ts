@@ -6,7 +6,7 @@ test("readLlmEnv defaults chatModel to deepseek-v4-pro (pinned pro tier, not the
   const env = readLlmEnv({});
   assert.equal(env.chatModel, "deepseek-v4-pro");
   assert.equal(env.apiKey, "");
-  assert.equal(env.baseURL, "https://api.deepseek.com/beta");
+  assert.equal(env.baseURL, "https://api.deepseek.com");
 });
 
 test("readLlmEnv reads OPENAI_* and CHAT_MODEL", () => {

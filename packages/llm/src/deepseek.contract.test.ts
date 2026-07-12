@@ -25,12 +25,13 @@ const compactionSchema = z
   .strict();
 
 test(
-  "DeepSeek beta returns structured memory and compaction outputs",
+  "DeepSeek returns structured memory and compaction outputs",
   { skip: contractSkip },
   async () => {
     const endpoint = new URL(readLlmEnv().baseURL ?? "");
     assert.equal(endpoint.hostname, "api.deepseek.com");
-    assert.equal(endpoint.pathname.replace(/\/$/, ""), "/beta");
+    // 标准端点：路径为空（非 /beta）——守住"已迁出 beta"这条约束。
+    assert.equal(endpoint.pathname.replace(/\/$/, ""), "");
     const model = createDeepSeekAgentsModelFromEnv();
     const modelName = readLlmEnv().chatModel;
     const runMemory = createAgentsSdkStructuredRunner({
@@ -67,7 +68,7 @@ test(
 );
 
 test(
-  "DeepSeek beta accepts long context and reports normalized usage",
+  "DeepSeek accepts long context and reports normalized usage",
   { skip: contractSkip },
   async () => {
     const telemetry: Array<{
@@ -101,7 +102,7 @@ test(
 );
 
 test(
-  "DeepSeek beta honors AbortSignal cancellation",
+  "DeepSeek honors AbortSignal cancellation",
   { skip: contractSkip },
   async () => {
     const controller = new AbortController();
