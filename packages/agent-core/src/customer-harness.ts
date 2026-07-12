@@ -351,8 +351,16 @@ export function scheduleCustomerServiceTask(
   if (/我.*身高.*体重|身高体重.*来着/.test(question)) {
     const body = readRememberedBodyMeasurements(input.memory);
     if (body) {
+      const known = [
+        body.heightCm === undefined ? undefined : `身高 ${body.heightCm} cm`,
+        body.weightKg === undefined ? undefined : `体重 ${body.weightKg} kg`,
+      ].filter((value): value is string => value !== undefined);
+      const missing = [
+        body.heightCm === undefined ? "身高" : undefined,
+        body.weightKg === undefined ? "体重" : undefined,
+      ].filter((value): value is string => value !== undefined);
       return createAnswerQuestionTask(
-        `根据当前记忆直接回答：身高 ${body.heightCm} cm，体重 ${body.weightKg} kg；不要否认记录或追问商品`,
+        `根据当前记忆直接回答：${known.join("，")}${missing.length > 0 ? `；${missing.join("和")}还没有记录，只询问缺失项` : ""}；不要否认已知记录或追问商品`,
       );
     }
     return createCollectMissingInfoTask(
@@ -1000,17 +1008,25 @@ function mentionsClarificationRequest(question: string): boolean {
 
 function readRememberedBodyMeasurements(
   memory: MemorySnapshot,
-): { heightCm: number; weightKg: number } | undefined {
+): { heightCm?: number; weightKg?: number } | undefined {
   const customer = memory.customerMemory;
-  if (!isPlainJsonObject(customer) || !Array.isArray(customer.bodyProfiles))
-    return undefined;
-  for (const profile of customer.bodyProfiles) {
+  if (!isPlainJsonObject(customer)) return undefined;
+  const source = isPlainJsonObject(customer.summary)
+    ? customer.summary
+    : customer;
+  if (!Array.isArray(source.bodyProfiles)) return undefined;
+  for (const profile of source.bodyProfiles) {
     if (
       isPlainJsonObject(profile) &&
-      typeof profile.heightCm === "number" &&
-      typeof profile.weightKg === "number"
+      (typeof profile.heightCm === "number" ||
+        typeof profile.weightKg === "number")
     ) {
-      return { heightCm: profile.heightCm, weightKg: profile.weightKg };
+      return {
+        heightCm:
+          typeof profile.heightCm === "number" ? profile.heightCm : undefined,
+        weightKg:
+          typeof profile.weightKg === "number" ? profile.weightKg : undefined,
+      };
     }
   }
   return undefined;

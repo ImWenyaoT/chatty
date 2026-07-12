@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { scheduleCustomerServiceTask } from "@rental/agent-core";
 import { createControlPlaneRepository, openDatabase } from "@rental/db";
 import type { MemorySnapshot } from "@rental/shared";
 import { prepareTurnContext } from "./context-control";
@@ -137,6 +138,43 @@ test("context preparation skips checkpoint work below the budget", async () => {
       },
     },
   ]);
+});
+
+test("projected context preserves body profiles for harness memory recall", async () => {
+  const control = createControlPlaneRepository(openDatabase(":memory:"));
+  const result = await prepareTurnContext({
+    control,
+    snapshot: {
+      customerId: "customer-1",
+      conversationId: "conversation-1",
+      recentMessages: [],
+      customerMemory: {
+        bodyProfiles: [{ profileId: "default", heightCm: 178, weightKg: 70 }],
+      },
+    },
+    traceIds: [],
+    conversationId: "conversation-1",
+    checkpointId: "checkpoint-1",
+    workflowState: "answering",
+    memories: [],
+  });
+
+  const task = scheduleCustomerServiceTask({
+    event: {
+      eventId: "event-1",
+      type: "user_message",
+      customerId: "customer-1",
+      conversationId: "conversation-1",
+      source: "customer",
+      payload: { question: "我身高体重多少来着？" },
+      occurredAt: "2026-07-12T00:00:00.000Z",
+    },
+    memory: result.snapshot,
+  });
+
+  assert.equal(task.kind, "answer_question");
+  assert.match(task.goal, /身高 178 cm/);
+  assert.match(task.goal, /体重 70 kg/);
 });
 
 test("compaction preserves the previous checkpoint when generation or save fails", async () => {

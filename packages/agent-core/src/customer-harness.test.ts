@@ -235,7 +235,9 @@ test("scheduler recalls recorded body measurements instead of denying memory", (
     memory: memory({
       productId: undefined,
       customerMemory: {
-        bodyProfiles: [{ profileId: "default", heightCm: 178, weightKg: 70 }],
+        summary: {
+          bodyProfiles: [{ profileId: "default", heightCm: 178, weightKg: 70 }],
+        },
       },
     }),
   });
@@ -244,6 +246,29 @@ test("scheduler recalls recorded body measurements instead of denying memory", (
   assert.match(task.goal, /178/);
   assert.match(task.goal, /70/);
   assert.doesNotMatch(task.goal, /没有记录|重新提供/);
+});
+
+test("scheduler recalls a partial body profile without denying the known field", () => {
+  const event = {
+    ...userEvent("我身高体重多少来着？"),
+    productId: undefined,
+  };
+  const task = scheduleCustomerServiceTask({
+    event,
+    memory: memory({
+      productId: undefined,
+      customerMemory: {
+        summary: {
+          bodyProfiles: [{ profileId: "default", heightCm: 178 }],
+        },
+      },
+    }),
+  });
+
+  assert.equal(task.kind, "answer_question");
+  assert.match(task.goal, /身高 178/);
+  assert.match(task.goal, /体重还没有记录/);
+  assert.doesNotMatch(task.goal, /身高体重.*没有记录/);
 });
 
 test("scheduler repairs misunderstanding without exposing a knowledge tool", () => {
