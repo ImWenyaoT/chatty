@@ -23,6 +23,24 @@ const ordersSource = readAppSource('app/orders/page.tsx')
 const orderDataSource = readAppSource('app/components/seller/orderData.ts')
 const playgroundSource = readAppSource('app/playground/page.tsx')
 const cssSource = readAppSource('app/globals.css')
+const webPackageSource = readAppSource('package.json')
+
+test('web runtime scripts load the repository environment explicitly', () => {
+  const webPackage = JSON.parse(webPackageSource) as {
+    dependencies?: Record<string, string>
+    scripts?: Record<string, string>
+  }
+
+  for (const script of ['dev', 'build', 'start']) {
+    assert.match(webPackage.scripts?.[script] ?? '', /node scripts\/next-with-root-env\.mjs/)
+  }
+  assert.match(webPackage.scripts?.dev ?? '', /WATCHPACK_POLLING=true/)
+  assert.match(webPackage.dependencies?.['better-sqlite3'] ?? '', /^\^12\./)
+
+  const launcherSource = readAppSource('scripts/next-with-root-env.mjs')
+  assert.match(launcherSource, /dotenv\.config/)
+  assert.match(launcherSource, /\.\.\/\.\.\/\.\.\/\.env/)
+})
 
 test('frontend shell exposes keyboard and screen-reader navigation affordances', () => {
   assert.match(layoutSource, /className="skip-link"/)

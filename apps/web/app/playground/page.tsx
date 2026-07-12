@@ -28,6 +28,19 @@ const PRODUCT_ID_BY_ORDER_ID: Record<string, string> = {
   'ORD-20260703-006': 'SUIT-002',
 }
 
+const PLAYGROUND_ERROR_MESSAGES: Record<string, string> = {
+  llm_not_configured: '模型尚未配置，请检查仓库根目录的 .env',
+  llm_provider_failed: '模型服务暂时不可用，请稍后重试',
+  workflow_conflict: '当前会话仍在处理中，请稍后重试',
+  unauthorized: '当前请求未通过访问校验',
+  invalid_input: '消息内容不符合要求',
+}
+
+/** Converts API error codes into actionable seller-facing messages. */
+function playgroundErrorMessage(code: unknown) {
+  return typeof code === 'string' ? (PLAYGROUND_ERROR_MESSAGES[code] ?? code) : '请求失败'
+}
+
 /** Renders the seller-facing customer service workspace. */
 export default function CustomerServicePage() {
   const [selectedOrderId, setSelectedOrderId] = useState(SELLER_ORDERS[0].id)
@@ -99,7 +112,7 @@ export default function CustomerServicePage() {
         }),
       })
       const data = await response.json()
-      if (!response.ok) throw new Error(data?.error ?? '请求失败')
+      if (!response.ok) throw new Error(playgroundErrorMessage(data?.error))
 
       const reply = data as PlaygroundResponse
       const controlResponse = await fetch(
@@ -128,7 +141,12 @@ export default function CustomerServicePage() {
       ])
       setStatus(reply.terminality === 'terminal' ? '本轮已完成' : '等待继续跟进')
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message =
+        error instanceof TypeError
+          ? '无法连接本地服务，请确认 pnpm dev 正在运行'
+          : error instanceof Error
+            ? error.message
+            : String(error)
       setTurns((prev) => [
         ...prev,
         { id: nextId.current++, role: 'system', content: `请求失败：${message}` },
