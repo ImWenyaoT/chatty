@@ -1,19 +1,23 @@
-import Link from 'next/link'
-import { SellerNavigation } from './components/seller/SellerNavigation'
-import { SELLER_ORDERS } from './components/seller/orderData'
+import Link from "next/link";
+import { SellerNavigation } from "./components/seller/SellerNavigation";
+import { SELLER_ORDERS } from "./components/seller/orderData";
 import {
   getSellerWorkspaceRoute,
   sellerWorkspaceHomeRoutes,
-} from './components/seller/sellerWorkspaceRoutes'
-import { summarizeAutomationImpact } from './components/seller/productMetrics'
+} from "./components/seller/sellerWorkspaceRoutes";
+import { summarizeAutomationImpact } from "./components/seller/productMetrics";
 
 /** Shows the seller-side product home with the workspace split across focused routes. */
 export default function SellerHomePage() {
-  const activeOrders = SELLER_ORDERS.filter((order) => order.status !== '租赁中').length
-  const riskOrders = SELLER_ORDERS.filter((order) => order.risk !== '无').length
-  const playgroundRoute = getSellerWorkspaceRoute('playground')
-  const ordersRoute = getSellerWorkspaceRoute('orders')
-  const automationSummary = summarizeAutomationImpact(SELLER_ORDERS)
+  const activeOrders = SELLER_ORDERS.filter(
+    (order) => order.status !== "租赁中",
+  ).length;
+  const riskOrders = SELLER_ORDERS.filter(
+    (order) => order.risk !== "无",
+  ).length;
+  const playgroundRoute = getSellerWorkspaceRoute("playground");
+  const ordersRoute = getSellerWorkspaceRoute("orders");
+  const automationSummary = summarizeAutomationImpact(SELLER_ORDERS);
 
   return (
     <main className="seller-home" id="main-content">
@@ -22,7 +26,9 @@ export default function SellerHomePage() {
         <div>
           <p>卖家工作台</p>
           <h1>Chatty 把客服、订单和复盘拆成清晰的卖家工作流。</h1>
-          <span>首页看经营概览；客服会话处理客户；订单跟进处理履约；复盘视图看质量和提效。</span>
+          <span>
+            首页看经营概览；客服会话处理客户；订单跟进处理履约；复盘视图看质量和提效。
+          </span>
         </div>
         <div className="seller-home-actions">
           <Link href={playgroundRoute.href}>进入客服会话</Link>
@@ -48,7 +54,10 @@ export default function SellerHomePage() {
         </article>
       </section>
 
-      <section className="seller-impact-panel" aria-labelledby="seller-impact-title">
+      <section
+        className="seller-impact-panel"
+        aria-labelledby="seller-impact-title"
+      >
         <div className="seller-impact-head">
           <div>
             <p>AI 落地指标</p>
@@ -77,5 +86,5 @@ export default function SellerHomePage() {
         ))}
       </section>
     </main>
-  )
+  );
 }

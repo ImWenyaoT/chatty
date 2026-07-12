@@ -1,33 +1,38 @@
-import type { AgentSessionStatus, JsonValue, RuntimeToolCall } from '@rental/shared'
-import { createDefaultPolicy, type Policy } from './policies/policy.js'
-import type { CustomerServiceContextFragment } from './customer-harness.js'
-import type { ToolRegistry } from './tools/registry.js'
+import type {
+  AgentSessionStatus,
+  JsonValue,
+  RuntimeToolCall,
+} from "@rental/shared";
+import { createDefaultPolicy, type Policy } from "./policies/policy.js";
+import type { CustomerServiceContextFragment } from "./customer-harness.js";
+import type { ToolRegistry } from "./tools/registry.js";
 
-const SEARCH_BAD_ARGS = 'query 参数缺失或不是字符串，请重试，只需提供 query 一个参数'
+const SEARCH_BAD_ARGS =
+  "query 参数缺失或不是字符串，请重试，只需提供 query 一个参数";
 
 export type SearchExecutionResult =
   | {
-      kind: 'executed'
-      output: string
-      fragment: CustomerServiceContextFragment
-      toolCall: RuntimeToolCall
-      toolResult: JsonValue
+      kind: "executed";
+      output: string;
+      fragment: CustomerServiceContextFragment;
+      toolCall: RuntimeToolCall;
+      toolResult: JsonValue;
     }
   | {
-      kind: 'retry'
-      output: string
-    }
+      kind: "retry";
+      output: string;
+    };
 
 export type SearchExecutionInput = {
-  toolName: string
-  input: unknown
-  registry: ToolRegistry
-  question: string
-  productId?: string
-  searchedQueries: readonly string[]
-  sessionStatus?: AgentSessionStatus
-  policy?: Policy
-}
+  toolName: string;
+  input: unknown;
+  registry: ToolRegistry;
+  question: string;
+  productId?: string;
+  searchedQueries: readonly string[];
+  sessionStatus?: AgentSessionStatus;
+  policy?: Policy;
+};
 
 /**
  * Executes one harness-owned knowledge search request. The module owns query
@@ -37,37 +42,41 @@ export type SearchExecutionInput = {
 export async function executeSearchRequest(
   input: SearchExecutionInput,
 ): Promise<SearchExecutionResult> {
-  const query = readSearchQuery(input.input)
-  if (input.toolName !== 'search_knowledge' || !query) {
-    return { kind: 'retry', output: SEARCH_BAD_ARGS }
+  const query = readSearchQuery(input.input);
+  if (input.toolName !== "search_knowledge" || !query) {
+    return { kind: "retry", output: SEARCH_BAD_ARGS };
   }
 
-  const refinedQuery = refineKnowledgeQuery(query, input.question, input.productId)
+  const refinedQuery = refineKnowledgeQuery(
+    query,
+    input.question,
+    input.productId,
+  );
   if (input.searchedQueries.includes(refinedQuery)) {
     return {
-      kind: 'retry',
+      kind: "retry",
       output: `已搜索过 ${refinedQuery}。请基于已有结果直接回答。`,
-    }
+    };
   }
 
-  const tool = input.registry.get(input.toolName)
-  if (!tool) throw new Error(`tool not found: ${input.toolName}`)
+  const tool = input.registry.get(input.toolName);
+  if (!tool) throw new Error(`tool not found: ${input.toolName}`);
   const toolResult = await input.registry.invokeWithPolicy(
     input.toolName,
     { query: refinedQuery },
     input.policy ?? createDefaultPolicy(),
-    { sessionStatus: input.sessionStatus ?? 'active' },
-  )
+    { sessionStatus: input.sessionStatus ?? "active" },
+  );
   const output =
-    isPlainJsonObject(toolResult) && typeof toolResult.output === 'string'
+    isPlainJsonObject(toolResult) && typeof toolResult.output === "string"
       ? toolResult.output
-      : JSON.stringify(toolResult)
+      : JSON.stringify(toolResult);
 
   return {
-    kind: 'executed',
+    kind: "executed",
     output,
     fragment: {
-      kind: 'knowledge',
+      kind: "knowledge",
       label: `知识库检索：${refinedQuery}`,
       content: output,
     },
@@ -78,41 +87,46 @@ export async function executeSearchRequest(
       approvalRequired: tool.approvalRequired,
     },
     toolResult,
-  }
+  };
 }
 
 /** Extracts a search query from raw SDK/tool-loop input. */
 export function readSearchQuery(input: unknown): string | undefined {
-  let source = input
-  if (typeof input === 'string') {
+  let source = input;
+  if (typeof input === "string") {
     try {
-      source = JSON.parse(input) as unknown
+      source = JSON.parse(input) as unknown;
     } catch {
-      return undefined
+      return undefined;
     }
   }
-  if (!isPlainJsonObject(source) || typeof source.query !== 'string') return undefined
-  const query = source.query.trim()
-  return query.length > 0 ? query : undefined
+  if (!isPlainJsonObject(source) || typeof source.query !== "string")
+    return undefined;
+  const query = source.query.trim();
+  return query.length > 0 ? query : undefined;
 }
 
 /** 将模型给出的泛搜索词收敛到当前商品和用户问题，避免噪音词带偏 search_knowledge。 */
-function refineKnowledgeQuery(query: string, question: string, productId?: string): string {
-  const cleanQuery = query.trim()
-  if (!productId) return cleanQuery
-  if (cleanQuery.includes(productId)) return cleanQuery
+function refineKnowledgeQuery(
+  query: string,
+  question: string,
+  productId?: string,
+): string {
+  const cleanQuery = query.trim();
+  if (!productId) return cleanQuery;
+  if (cleanQuery.includes(productId)) return cleanQuery;
   if (
     /尺码|身高|体重|码|推荐/.test(question) &&
     /尺码|西装码|推荐|规则|信息|西装/.test(cleanQuery)
   ) {
-    return `${productId} 尺码`
+    return `${productId} 尺码`;
   }
   if (/押金/.test(question) && /^(规则|信息|费用|商品规则)$/.test(cleanQuery)) {
-    return '押金'
+    return "押金";
   }
-  return cleanQuery
+  return cleanQuery;
 }
 
 function isPlainJsonObject(value: unknown): value is Record<string, JsonValue> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }

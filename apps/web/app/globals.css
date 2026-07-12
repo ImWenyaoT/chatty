@@ -1,4 +1,4 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 
 /* ============================================================================
    Chatty playground — Geist design system
@@ -90,9 +90,11 @@
 
   /* 字体：Geist Sans / Mono（latin），CJK 回退系统栈 */
   --font-sans:
-    var(--font-geist-sans), -apple-system, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
-    'Microsoft YaHei', sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    var(--font-geist-sans), -apple-system, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono:
+    var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Consolas,
+    monospace;
 }
 
 /* Customer service workspace — conversation first, operations second. */
@@ -247,7 +249,7 @@
 }
 
 .support-inbox-tabs button.active::after {
-  content: '';
+  content: "";
   position: absolute;
   right: 0;
   bottom: -11px;
@@ -278,7 +280,7 @@
   background: #f0f0ec;
 }
 
-.support-conversation-list > button[data-active='true'] {
+.support-conversation-list > button[data-active="true"] {
   background: #e9f0ec;
 }
 
@@ -357,8 +359,8 @@
   background: #9b9b95;
 }
 
-.support-thread-status i[data-active='true'],
-.support-runtime summary i[data-active='true'] {
+.support-thread-status i[data-active="true"],
+.support-runtime summary i[data-active="true"] {
   background: #c47b20;
 }
 
@@ -661,7 +663,7 @@
 }
 
 .support-notes li::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 8px;
   left: 0;
@@ -796,7 +798,7 @@
     background: #1b1d19;
   }
 
-  .support-conversation-list > button[data-active='true'] {
+  .support-conversation-list > button[data-active="true"] {
     background: #202a23;
   }
 
@@ -860,8 +862,8 @@
     background: #777a72;
   }
 
-  .support-thread-status i[data-active='true'],
-  .support-runtime summary i[data-active='true'] {
+  .support-thread-status i[data-active="true"],
+  .support-runtime summary i[data-active="true"] {
     background: #d29b55;
   }
 }
@@ -1823,11 +1825,11 @@ textarea:focus-visible {
   background: var(--ds-gray-200);
 }
 
-.fulfillment-steps div[data-state='done'] span {
+.fulfillment-steps div[data-state="done"] span {
   background: var(--tone-active-dot);
 }
 
-.fulfillment-steps div[data-state='active'] span {
+.fulfillment-steps div[data-state="active"] span {
   background: var(--tone-wait-dot);
 }
 
@@ -1988,7 +1990,10 @@ textarea:focus-visible {
 }
 
 .support-inbox-shell.details-open {
-  grid-template-columns: minmax(240px, 286px) minmax(480px, 1fr) minmax(300px, 348px);
+  grid-template-columns: minmax(240px, 286px) minmax(480px, 1fr) minmax(
+      300px,
+      348px
+    );
 }
 
 .legacy-sidebar,
@@ -2174,7 +2179,7 @@ textarea:focus-visible {
   text-align: left;
 }
 
-.legacy-conversation-list button[data-active='true'] {
+.legacy-conversation-list button[data-active="true"] {
   border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
   background: color-mix(in srgb, var(--accent) 9%, var(--bg));
   box-shadow: inset 3px 0 0 var(--accent);
@@ -2330,7 +2335,11 @@ textarea:focus-visible {
 
 .legacy-message.system {
   align-self: center;
-  border-color: color-mix(in srgb, var(--tone-wait-dot) 32%, var(--border-subtle));
+  border-color: color-mix(
+    in srgb,
+    var(--tone-wait-dot) 32%,
+    var(--border-subtle)
+  );
   background: color-mix(in srgb, var(--tone-wait-dot) 10%, var(--bg));
   color: var(--tone-wait-fg);
 }
@@ -2516,7 +2525,7 @@ textarea:focus-visible {
   line-height: 16px;
 }
 
-.legacy-review-panel button[data-active='true'] {
+.legacy-review-panel button[data-active="true"] {
   border-color: var(--accent);
   background: var(--tone-human-bg);
   color: var(--tone-human-fg);

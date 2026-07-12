@@ -1,6 +1,11 @@
-import type { AgentTrace, ConversationEventType, JsonValue, RuntimeToolCall } from '@rental/shared'
-import type { Db } from './database.js'
-import { nowIso } from './database.js'
+import type {
+  AgentTrace,
+  ConversationEventType,
+  JsonValue,
+  RuntimeToolCall,
+} from "@rental/shared";
+import type { Db } from "./database.js";
+import { nowIso } from "./database.js";
 
 /**
  * Append-only store for agent traces. Each bounded step appends one row
@@ -8,33 +13,33 @@ import { nowIso } from './database.js'
  * agent can later inspect why the bot replied (PRD §6.5 user story).
  */
 export interface TraceRepository {
-  append(input: NewTrace): AgentTrace
-  queryBySession(sessionId: string, limit?: number): AgentTrace[]
+  append(input: NewTrace): AgentTrace;
+  queryBySession(sessionId: string, limit?: number): AgentTrace[];
 }
 
 export interface NewTrace {
-  id: string
-  sessionId: string
-  eventType: ConversationEventType
-  intent?: string
-  action?: string
-  input: JsonValue
-  output?: JsonValue
-  toolCalls?: RuntimeToolCall[]
-  references?: JsonValue[]
+  id: string;
+  sessionId: string;
+  eventType: ConversationEventType;
+  intent?: string;
+  action?: string;
+  input: JsonValue;
+  output?: JsonValue;
+  toolCalls?: RuntimeToolCall[];
+  references?: JsonValue[];
 }
 
 interface TraceRow {
-  id: string
-  session_id: string
-  event_type: string
-  intent: string | null
-  action: string | null
-  input_json: string
-  output_json: string | null
-  tool_calls_json: string
-  references_json: string
-  created_at: string
+  id: string;
+  session_id: string;
+  event_type: string;
+  intent: string | null;
+  action: string | null;
+  input_json: string;
+  output_json: string | null;
+  tool_calls_json: string;
+  references_json: string;
+  created_at: string;
 }
 
 export function createTraceRepository(db: Db): TraceRepository {
@@ -45,17 +50,19 @@ export function createTraceRepository(db: Db): TraceRepository {
     intent: row.intent ?? undefined,
     action: row.action ?? undefined,
     input: JSON.parse(row.input_json) as JsonValue,
-    output: row.output_json ? (JSON.parse(row.output_json) as JsonValue) : undefined,
+    output: row.output_json
+      ? (JSON.parse(row.output_json) as JsonValue)
+      : undefined,
     toolCalls: JSON.parse(row.tool_calls_json) as RuntimeToolCall[],
     references: JSON.parse(row.references_json) as JsonValue[],
     createdAt: row.created_at,
-  })
+  });
 
   return {
     append(input) {
-      const ts = nowIso()
-      const toolCalls = input.toolCalls ?? []
-      const references = input.references ?? []
+      const ts = nowIso();
+      const toolCalls = input.toolCalls ?? [];
+      const references = input.references ?? [];
       db.prepare(
         `INSERT INTO agent_traces (id, session_id, event_type, intent, action, input_json, output_json, tool_calls_json, references_json, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -70,7 +77,7 @@ export function createTraceRepository(db: Db): TraceRepository {
         JSON.stringify(toolCalls),
         JSON.stringify(references),
         ts,
-      )
+      );
       // Construct the inserted row directly instead of re-querying the session
       // (which read the newest 100 and could miss this row on a created_at tie).
       return {
@@ -84,7 +91,7 @@ export function createTraceRepository(db: Db): TraceRepository {
         toolCalls,
         references,
         createdAt: ts,
-      }
+      };
     },
 
     queryBySession(sessionId, limit = 100) {
@@ -92,9 +99,9 @@ export function createTraceRepository(db: Db): TraceRepository {
         .prepare(
           `SELECT * FROM agent_traces WHERE session_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?`,
         )
-        .all(sessionId, limit) as TraceRow[]
+        .all(sessionId, limit) as TraceRow[];
       // newest-first from DB; return oldest-first for chronological reading.
-      return rows.reverse().map(toTrace)
+      return rows.reverse().map(toTrace);
     },
-  }
+  };
 }

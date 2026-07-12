@@ -1,193 +1,207 @@
-import type { JsonValue } from '@rental/shared'
-import type { Db } from './database.js'
-import { nowIso } from './database.js'
+import type { JsonValue } from "@rental/shared";
+import type { Db } from "./database.js";
+import { nowIso } from "./database.js";
 
 export type WorkflowRunStatus =
-  | 'queued'
-  | 'running'
-  | 'waiting_for_user'
-  | 'waiting_for_approval'
-  | 'waiting_for_handoff'
-  | 'paused'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
+  | "queued"
+  | "running"
+  | "waiting_for_user"
+  | "waiting_for_approval"
+  | "waiting_for_handoff"
+  | "paused"
+  | "completed"
+  | "failed"
+  | "cancelled";
 
-export type BackgroundJobType = 'memory_extract' | 'memory_consolidate' | 'scheduled_followup'
+export type BackgroundJobType =
+  "memory_extract" | "memory_consolidate" | "scheduled_followup";
 export type BackgroundJobStatus =
-  'pending' | 'running' | 'succeeded' | 'succeeded_no_output' | 'failed' | 'cancelled'
+  | "pending"
+  | "running"
+  | "succeeded"
+  | "succeeded_no_output"
+  | "failed"
+  | "cancelled";
 
 export interface WorkflowRun {
-  id: string
-  sessionId: string
-  conversationId: string
-  idempotencyKey: string
-  status: WorkflowRunStatus
-  version: number
-  failureKind?: string
-  result?: JsonValue
-  cancelRequestedAt?: string
-  cancelReason?: string
-  leaseOwner?: string
-  leaseExpiresAt?: string
-  heartbeatAt?: string
-  createdAt: string
-  updatedAt: string
+  id: string;
+  sessionId: string;
+  conversationId: string;
+  idempotencyKey: string;
+  status: WorkflowRunStatus;
+  version: number;
+  failureKind?: string;
+  result?: JsonValue;
+  cancelRequestedAt?: string;
+  cancelReason?: string;
+  leaseOwner?: string;
+  leaseExpiresAt?: string;
+  heartbeatAt?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface WorkflowEvent {
-  runId: string
-  sequence: number
-  type: string
-  payload: JsonValue
-  createdAt: string
+  runId: string;
+  sequence: number;
+  type: string;
+  payload: JsonValue;
+  createdAt: string;
 }
 
 export interface QueuedConversationEvent {
-  id: number
-  event: JsonValue
+  id: number;
+  event: JsonValue;
 }
 
 export interface ConversationCheckpoint {
-  id: string
-  conversationId: string
-  throughTraceId: string
-  version: number
-  summary: JsonValue
-  tokenBefore: number
-  tokenAfter: number
-  model: string
-  createdAt: string
+  id: string;
+  conversationId: string;
+  throughTraceId: string;
+  version: number;
+  summary: JsonValue;
+  tokenBefore: number;
+  tokenAfter: number;
+  model: string;
+  createdAt: string;
 }
 
 export interface MemoryCandidate {
-  id: string
-  customerId: string
-  conversationId: string
-  sourceTraceId: string
-  category: string
-  key: string
-  value: JsonValue
-  confidence: number
-  sensitivity: string
-  status: 'candidate' | 'promoted' | 'pruned' | 'rejected'
-  usageCount: number
-  lastUsedAt?: string
-  createdAt: string
-  updatedAt: string
+  id: string;
+  customerId: string;
+  conversationId: string;
+  sourceTraceId: string;
+  category: string;
+  key: string;
+  value: JsonValue;
+  confidence: number;
+  sensitivity: string;
+  status: "candidate" | "promoted" | "pruned" | "rejected";
+  usageCount: number;
+  lastUsedAt?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface BackgroundJob {
-  id: string
-  type: BackgroundJobType
-  status: BackgroundJobStatus
-  conversationId?: string
-  customerId?: string
-  payload: JsonValue
-  dueAt: string
-  attempts: number
-  maxAttempts: number
-  leaseOwner?: string
-  claimFence: number
-  leaseExpiresAt?: string
-  heartbeatAt?: string
-  lastError?: string
-  runId?: string
-  createdAt: string
-  updatedAt: string
+  id: string;
+  type: BackgroundJobType;
+  status: BackgroundJobStatus;
+  conversationId?: string;
+  customerId?: string;
+  payload: JsonValue;
+  dueAt: string;
+  attempts: number;
+  maxAttempts: number;
+  leaseOwner?: string;
+  claimFence: number;
+  leaseExpiresAt?: string;
+  heartbeatAt?: string;
+  lastError?: string;
+  runId?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface OutboxMessage {
-  id: string
-  conversationId: string
-  runId: string
-  payload: JsonValue
-  status: 'pending' | 'sent'
-  idempotencyKey: string
-  createdAt: string
+  id: string;
+  conversationId: string;
+  runId: string;
+  payload: JsonValue;
+  status: "pending" | "sent";
+  idempotencyKey: string;
+  createdAt: string;
 }
 
 export interface ExtractedMemoryCandidate {
-  id: string
-  sourceTraceId: string
-  category: 'preference' | 'measurement' | 'delivery' | 'service_history'
-  key: string
-  value: JsonValue
-  confidence: number
-  sensitivity: 'normal' | 'sensitive'
+  id: string;
+  sourceTraceId: string;
+  category: "preference" | "measurement" | "delivery" | "service_history";
+  key: string;
+  value: JsonValue;
+  confidence: number;
+  sensitivity: "normal" | "sensitive";
 }
 
 export class ConversationBusyError extends Error {
   constructor(conversationId: string) {
-    super(`conversation already has an active run: ${conversationId}`)
-    this.name = 'ConversationBusyError'
+    super(`conversation already has an active run: ${conversationId}`);
+    this.name = "ConversationBusyError";
   }
 }
 
 export class InvalidWorkflowTransitionError extends Error {
   constructor(from: string, to: string) {
-    super(`invalid workflow transition: ${from} -> ${to}`)
-    this.name = 'InvalidWorkflowTransitionError'
+    super(`invalid workflow transition: ${from} -> ${to}`);
+    this.name = "InvalidWorkflowTransitionError";
   }
 }
 
 const RUN_TRANSITIONS: Record<WorkflowRunStatus, WorkflowRunStatus[]> = {
-  queued: ['running', 'cancelled'],
+  queued: ["running", "cancelled"],
   running: [
-    'waiting_for_user',
-    'waiting_for_approval',
-    'waiting_for_handoff',
-    'paused',
-    'completed',
-    'failed',
-    'cancelled',
+    "waiting_for_user",
+    "waiting_for_approval",
+    "waiting_for_handoff",
+    "paused",
+    "completed",
+    "failed",
+    "cancelled",
   ],
-  waiting_for_user: ['completed'],
-  waiting_for_approval: ['running', 'cancelled'],
-  waiting_for_handoff: ['running', 'cancelled'],
-  paused: ['running', 'cancelled'],
+  waiting_for_user: ["completed"],
+  waiting_for_approval: ["running", "cancelled"],
+  waiting_for_handoff: ["running", "cancelled"],
+  paused: ["running", "cancelled"],
   completed: [],
   failed: [],
   cancelled: [],
-}
+};
 
 /** Owns durable workflow, checkpoint, memory, job, and outbox state in SQLite. */
 export function createControlPlaneRepository(db: Db) {
   return {
     startRun(input: {
-      id: string
-      sessionId: string
-      conversationId: string
-      idempotencyKey: string
+      id: string;
+      sessionId: string;
+      conversationId: string;
+      idempotencyKey: string;
     }): WorkflowRun {
       const existing = db
-        .prepare('SELECT * FROM workflow_runs WHERE idempotency_key = ?')
-        .get(input.idempotencyKey) as WorkflowRunRow | undefined
-      if (existing) return mapRun(existing)
-      const ts = nowIso()
+        .prepare("SELECT * FROM workflow_runs WHERE idempotency_key = ?")
+        .get(input.idempotencyKey) as WorkflowRunRow | undefined;
+      if (existing) return mapRun(existing);
+      const ts = nowIso();
       try {
         db.prepare(
           `INSERT INTO workflow_runs
            (id, session_id, conversation_id, idempotency_key, status, version, created_at, updated_at)
            VALUES (?, ?, ?, ?, 'queued', 1, ?, ?)`,
-        ).run(input.id, input.sessionId, input.conversationId, input.idempotencyKey, ts, ts)
+        ).run(
+          input.id,
+          input.sessionId,
+          input.conversationId,
+          input.idempotencyKey,
+          ts,
+          ts,
+        );
       } catch (error) {
-        const message = String(error)
+        const message = String(error);
         if (
-          message.includes('idx_workflow_runs_active_conversation') ||
-          message.includes('workflow_runs.conversation_id')
+          message.includes("idx_workflow_runs_active_conversation") ||
+          message.includes("workflow_runs.conversation_id")
         ) {
-          throw new ConversationBusyError(input.conversationId)
+          throw new ConversationBusyError(input.conversationId);
         }
-        throw error
+        throw error;
       }
-      return this.getRun(input.id)!
+      return this.getRun(input.id)!;
     },
 
     getRun(id: string): WorkflowRun | undefined {
-      const row = db.prepare('SELECT * FROM workflow_runs WHERE id = ?').get(id) as
-        WorkflowRunRow | undefined
-      return row ? mapRun(row) : undefined
+      const row = db
+        .prepare("SELECT * FROM workflow_runs WHERE id = ?")
+        .get(id) as WorkflowRunRow | undefined;
+      return row ? mapRun(row) : undefined;
     },
 
     /** Counts durable queued inputs that have not completed for one conversation. */
@@ -197,24 +211,24 @@ export function createControlPlaneRepository(db: Db) {
           `SELECT COUNT(*) AS count FROM conversation_event_queue
            WHERE conversation_id = ? AND status IN ('pending','processing')`,
         )
-        .get(conversationId) as { count: number }
-      return Number(row.count)
+        .get(conversationId) as { count: number };
+      return Number(row.count);
     },
 
     /** Counts workflows in one durable status for aggregate health reporting. */
     countRunsByStatus(status: WorkflowRunStatus): number {
       const row = db
-        .prepare('SELECT COUNT(*) AS count FROM workflow_runs WHERE status = ?')
-        .get(status) as { count: number }
-      return Number(row.count)
+        .prepare("SELECT COUNT(*) AS count FROM workflow_runs WHERE status = ?")
+        .get(status) as { count: number };
+      return Number(row.count);
     },
 
     /** Aggregates all durable jobs without applying the operations-list display limit. */
     aggregateJobHealth(): {
-      memoryNoOps: number
-      attemptedJobs: number
-      retriedJobs: number
-      followupLatencyMs: number | null
+      memoryNoOps: number;
+      attemptedJobs: number;
+      retriedJobs: number;
+      followupLatencyMs: number | null;
     } {
       const row = db
         .prepare(
@@ -227,47 +241,55 @@ export function createControlPlaneRepository(db: Db) {
         FROM background_jobs`,
         )
         .get() as {
-        memory_no_ops: number | null
-        attempted_jobs: number | null
-        retried_jobs: number | null
-        followup_latency_ms: number | null
-      }
+        memory_no_ops: number | null;
+        attempted_jobs: number | null;
+        retried_jobs: number | null;
+        followup_latency_ms: number | null;
+      };
       return {
         memoryNoOps: Number(row.memory_no_ops ?? 0),
         attemptedJobs: Number(row.attempted_jobs ?? 0),
         retriedJobs: Number(row.retried_jobs ?? 0),
         followupLatencyMs:
-          row.followup_latency_ms === null ? null : Math.max(0, row.followup_latency_ms),
-      }
+          row.followup_latency_ms === null
+            ? null
+            : Math.max(0, row.followup_latency_ms),
+      };
     },
 
     /** Finds the durable workflow associated with one externally supplied request identity. */
     getRunByIdempotencyKey(idempotencyKey: string): WorkflowRun | undefined {
       const row = db
-        .prepare('SELECT * FROM workflow_runs WHERE idempotency_key = ?')
-        .get(idempotencyKey) as WorkflowRunRow | undefined
-      return row ? mapRun(row) : undefined
+        .prepare("SELECT * FROM workflow_runs WHERE idempotency_key = ?")
+        .get(idempotencyKey) as WorkflowRunRow | undefined;
+      return row ? mapRun(row) : undefined;
     },
 
     /** Durably requests cancellation and terminally fences the run from further owner writes. */
-    requestRunCancellation(id: string, reason = 'explicit_cancel'): WorkflowRun {
+    requestRunCancellation(
+      id: string,
+      reason = "explicit_cancel",
+    ): WorkflowRun {
       return db.transaction(() => {
-        const current = this.getRun(id)
-        if (!current) throw new Error(`workflow run not found: ${id}`)
-        if (current.cancelRequestedAt) return current
-        const ts = nowIso()
+        const current = this.getRun(id);
+        if (!current) throw new Error(`workflow run not found: ${id}`);
+        if (current.cancelRequestedAt) return current;
+        const ts = nowIso();
         const result = db
           .prepare(
             `UPDATE workflow_runs SET status = 'cancelled', cancel_requested_at = ?,
              cancel_reason = ?, finished_at = ?, version = version + 1, updated_at = ?
              WHERE id = ? AND status NOT IN ('completed','failed','cancelled')`,
           )
-          .run(ts, reason, ts, ts, id)
-        if (result.changes !== 1) return this.getRun(id)!
-        this.appendRunEvent(id, 'cancel_requested', { reason })
-        this.appendRunEvent(id, 'state_changed', { status: 'cancelled', reason })
-        return this.getRun(id)!
-      })()
+          .run(ts, reason, ts, ts, id);
+        if (result.changes !== 1) return this.getRun(id)!;
+        this.appendRunEvent(id, "cancel_requested", { reason });
+        this.appendRunEvent(id, "state_changed", {
+          status: "cancelled",
+          reason,
+        });
+        return this.getRun(id)!;
+      })();
     },
 
     /** Lists workflows whose queued or expired lease state makes them eligible for recovery. */
@@ -280,7 +302,7 @@ export function createControlPlaneRepository(db: Db) {
          ORDER BY created_at`,
           )
           .all(now) as WorkflowRunRow[]
-      ).map(mapRun)
+      ).map(mapRun);
     },
 
     /** Persists the externally replayable result while the workflow owner still holds its lease. */
@@ -292,7 +314,7 @@ export function createControlPlaneRepository(db: Db) {
          WHERE id = ? AND status = 'running' AND lease_owner = ?`,
           )
           .run(JSON.stringify(result), nowIso(), id, owner).changes === 1
-      )
+      );
     },
 
     transitionRun(
@@ -301,12 +323,12 @@ export function createControlPlaneRepository(db: Db) {
       failureKind?: string,
       leaseOwner?: string,
     ): WorkflowRun {
-      const current = this.getRun(id)
-      if (!current) throw new Error(`workflow run not found: ${id}`)
+      const current = this.getRun(id);
+      if (!current) throw new Error(`workflow run not found: ${id}`);
       if (!RUN_TRANSITIONS[current.status].includes(status)) {
-        throw new InvalidWorkflowTransitionError(current.status, status)
+        throw new InvalidWorkflowTransitionError(current.status, status);
       }
-      const ts = nowIso()
+      const ts = nowIso();
       const result = db
         .prepare(
           `UPDATE workflow_runs SET status = ?, version = version + 1, failure_kind = ?,
@@ -325,15 +347,22 @@ export function createControlPlaneRepository(db: Db) {
           id,
           leaseOwner ?? null,
           leaseOwner ?? null,
-        )
-      if (result.changes !== 1) throw new Error(`workflow lease lost: ${id}`)
-      return this.getRun(id)!
+        );
+      if (result.changes !== 1) throw new Error(`workflow lease lost: ${id}`);
+      return this.getRun(id)!;
     },
 
     /** Claims a queued run or an expired active run with a renewable workflow lease. */
-    claimRun(id: string, owner: string, now: string, leaseMs = 60_000): WorkflowRun | undefined {
+    claimRun(
+      id: string,
+      owner: string,
+      now: string,
+      leaseMs = 60_000,
+    ): WorkflowRun | undefined {
       return db.transaction(() => {
-        const expiresAt = new Date(new Date(now).getTime() + leaseMs).toISOString()
+        const expiresAt = new Date(
+          new Date(now).getTime() + leaseMs,
+        ).toISOString();
         const result = db
           .prepare(
             `UPDATE workflow_runs SET status = 'running', lease_owner = ?, lease_expires_at = ?,
@@ -341,14 +370,21 @@ export function createControlPlaneRepository(db: Db) {
            WHERE id = ? AND (status = 'queued' OR
              (status IN ('running','paused') AND lease_expires_at < ?))`,
           )
-          .run(owner, expiresAt, now, now, now, id, now)
-        return result.changes === 1 ? this.getRun(id) : undefined
-      })()
+          .run(owner, expiresAt, now, now, now, id, now);
+        return result.changes === 1 ? this.getRun(id) : undefined;
+      })();
     },
 
     /** Extends a workflow lease only while its current owner still holds it. */
-    heartbeatRun(id: string, owner: string, now: string, leaseMs = 60_000): boolean {
-      const expiresAt = new Date(new Date(now).getTime() + leaseMs).toISOString()
+    heartbeatRun(
+      id: string,
+      owner: string,
+      now: string,
+      leaseMs = 60_000,
+    ): boolean {
+      const expiresAt = new Date(
+        new Date(now).getTime() + leaseMs,
+      ).toISOString();
       return (
         db
           .prepare(
@@ -356,7 +392,7 @@ export function createControlPlaneRepository(db: Db) {
          WHERE id = ? AND status = 'running' AND lease_owner = ? AND lease_expires_at >= ?`,
           )
           .run(now, expiresAt, now, id, owner, now).changes === 1
-      )
+      );
     },
 
     /** Resumes a human handoff by issuing a fresh execution lease to an explicit owner. */
@@ -366,53 +402,65 @@ export function createControlPlaneRepository(db: Db) {
       now: string,
       leaseMs = 60_000,
     ): WorkflowRun | undefined {
-      const expiresAt = new Date(new Date(now).getTime() + leaseMs).toISOString()
+      const expiresAt = new Date(
+        new Date(now).getTime() + leaseMs,
+      ).toISOString();
       const result = db
         .prepare(
           `UPDATE workflow_runs SET status = 'running', lease_owner = ?, lease_expires_at = ?,
          heartbeat_at = ?, version = version + 1, updated_at = ?
          WHERE id = ? AND status = 'waiting_for_handoff'`,
         )
-        .run(owner, expiresAt, now, now, id)
-      return result.changes === 1 ? this.getRun(id) : undefined
+        .run(owner, expiresAt, now, now, id);
+      return result.changes === 1 ? this.getRun(id) : undefined;
     },
 
-    appendRunEvent(runId: string, type: string, payload: JsonValue = {}): WorkflowEvent {
+    appendRunEvent(
+      runId: string,
+      type: string,
+      payload: JsonValue = {},
+    ): WorkflowEvent {
       return db.transaction(() => {
         const sequence = Number(
           (
             db
               .prepare(
-                'SELECT COALESCE(MAX(sequence), 0) + 1 AS next FROM workflow_events WHERE run_id = ?',
+                "SELECT COALESCE(MAX(sequence), 0) + 1 AS next FROM workflow_events WHERE run_id = ?",
               )
               .get(runId) as { next: number }
           ).next,
-        )
-        const createdAt = nowIso()
+        );
+        const createdAt = nowIso();
         db.prepare(
-          'INSERT INTO workflow_events (run_id, sequence, type, payload_json, created_at) VALUES (?, ?, ?, ?, ?)',
-        ).run(runId, sequence, type, JSON.stringify(payload), createdAt)
-        return { runId, sequence, type, payload, createdAt }
-      })()
+          "INSERT INTO workflow_events (run_id, sequence, type, payload_json, created_at) VALUES (?, ?, ?, ?, ?)",
+        ).run(runId, sequence, type, JSON.stringify(payload), createdAt);
+        return { runId, sequence, type, payload, createdAt };
+      })();
     },
 
     listRunEvents(runId: string): WorkflowEvent[] {
       return (
         db
-          .prepare('SELECT * FROM workflow_events WHERE run_id = ? ORDER BY sequence')
+          .prepare(
+            "SELECT * FROM workflow_events WHERE run_id = ? ORDER BY sequence",
+          )
           .all(runId) as WorkflowEventRow[]
-      ).map(mapWorkflowEvent)
+      ).map(mapWorkflowEvent);
     },
 
     /** Aggregates one durable workflow event type for control-plane health metrics. */
     countRunEventsByType(type: string): number {
       return Number(
         (
-          db.prepare('SELECT COUNT(*) AS count FROM workflow_events WHERE type = ?').get(type) as {
-            count: number
+          db
+            .prepare(
+              "SELECT COUNT(*) AS count FROM workflow_events WHERE type = ?",
+            )
+            .get(type) as {
+            count: number;
           }
         ).count,
-      )
+      );
     },
 
     enqueueConversationEvent(
@@ -421,16 +469,18 @@ export function createControlPlaneRepository(db: Db) {
       event: JsonValue,
     ): number {
       const existing = db
-        .prepare('SELECT id FROM conversation_event_queue WHERE idempotency_key = ?')
-        .get(idempotencyKey) as { id: number } | undefined
-      if (existing) return existing.id
+        .prepare(
+          "SELECT id FROM conversation_event_queue WHERE idempotency_key = ?",
+        )
+        .get(idempotencyKey) as { id: number } | undefined;
+      if (existing) return existing.id;
       const result = db
         .prepare(
           `INSERT INTO conversation_event_queue (conversation_id, event_json, status, idempotency_key, created_at)
            VALUES (?, ?, 'pending', ?, ?)`,
         )
-        .run(conversationId, JSON.stringify(event), idempotencyKey, nowIso())
-      return Number(result.lastInsertRowid)
+        .run(conversationId, JSON.stringify(event), idempotencyKey, nowIso());
+      return Number(result.lastInsertRowid);
     },
 
     dequeueConversationEvent(conversationId: string): JsonValue | undefined {
@@ -440,35 +490,39 @@ export function createControlPlaneRepository(db: Db) {
             `SELECT id, event_json FROM conversation_event_queue
              WHERE conversation_id = ? AND status = 'pending' ORDER BY id LIMIT 1`,
           )
-          .get(conversationId) as { id: number; event_json: string } | undefined
-        if (!row) return undefined
-        db.prepare("UPDATE conversation_event_queue SET status = 'consumed' WHERE id = ?").run(
-          row.id,
-        )
-        return JSON.parse(row.event_json) as JsonValue
-      })()
+          .get(conversationId) as
+          { id: number; event_json: string } | undefined;
+        if (!row) return undefined;
+        db.prepare(
+          "UPDATE conversation_event_queue SET status = 'consumed' WHERE id = ?",
+        ).run(row.id);
+        return JSON.parse(row.event_json) as JsonValue;
+      })();
     },
 
     /** Claims the FIFO head without deleting it so failed dispatch can be retried. */
-    claimConversationEvent(conversationId: string): QueuedConversationEvent | undefined {
+    claimConversationEvent(
+      conversationId: string,
+    ): QueuedConversationEvent | undefined {
       return db.transaction(() => {
         const row = db
           .prepare(
             `SELECT id, event_json FROM conversation_event_queue
            WHERE conversation_id = ? AND status = 'pending' ORDER BY id LIMIT 1`,
           )
-          .get(conversationId) as { id: number; event_json: string } | undefined
-        if (!row) return undefined
+          .get(conversationId) as
+          { id: number; event_json: string } | undefined;
+        if (!row) return undefined;
         const changed = db
           .prepare(
             `UPDATE conversation_event_queue SET status = 'processing'
            WHERE id = ? AND status = 'pending'`,
           )
-          .run(row.id)
+          .run(row.id);
         return changed.changes === 1
           ? { id: row.id, event: JSON.parse(row.event_json) as JsonValue }
-          : undefined
-      })()
+          : undefined;
+      })();
     },
 
     /** Acknowledges a queued event only after its Customer Service Turn succeeds. */
@@ -480,7 +534,7 @@ export function createControlPlaneRepository(db: Db) {
          WHERE id = ? AND status = 'processing'`,
           )
           .run(id).changes === 1
-      )
+      );
     },
 
     /** Releases a failed queued dispatch back to the FIFO head for later recovery. */
@@ -492,7 +546,7 @@ export function createControlPlaneRepository(db: Db) {
          WHERE id = ? AND status = 'processing'`,
           )
           .run(id).changes === 1
-      )
+      );
     },
 
     /** Returns queue claims interrupted by the previous process to pending during startup recovery. */
@@ -501,22 +555,22 @@ export function createControlPlaneRepository(db: Db) {
         .prepare(
           `UPDATE conversation_event_queue SET status = 'pending' WHERE status = 'processing'`,
         )
-        .run().changes
+        .run().changes;
     },
 
     saveCheckpoint(
-      input: Omit<ConversationCheckpoint, 'version' | 'createdAt'>,
+      input: Omit<ConversationCheckpoint, "version" | "createdAt">,
     ): ConversationCheckpoint {
       const version = Number(
         (
           db
             .prepare(
-              'SELECT COALESCE(MAX(version), 0) + 1 AS next FROM conversation_checkpoints WHERE conversation_id = ?',
+              "SELECT COALESCE(MAX(version), 0) + 1 AS next FROM conversation_checkpoints WHERE conversation_id = ?",
             )
             .get(input.conversationId) as { next: number }
         ).next,
-      )
-      const createdAt = nowIso()
+      );
+      const createdAt = nowIso();
       db.prepare(
         `INSERT INTO conversation_checkpoints
          (id, conversation_id, through_trace_id, version, summary_json, token_before, token_after, model, created_at)
@@ -531,23 +585,25 @@ export function createControlPlaneRepository(db: Db) {
         input.tokenAfter,
         input.model,
         createdAt,
-      )
-      return { ...input, version, createdAt }
+      );
+      return { ...input, version, createdAt };
     },
 
-    latestCheckpoint(conversationId: string): ConversationCheckpoint | undefined {
+    latestCheckpoint(
+      conversationId: string,
+    ): ConversationCheckpoint | undefined {
       const row = db
         .prepare(
-          'SELECT * FROM conversation_checkpoints WHERE conversation_id = ? ORDER BY version DESC LIMIT 1',
+          "SELECT * FROM conversation_checkpoints WHERE conversation_id = ? ORDER BY version DESC LIMIT 1",
         )
-        .get(conversationId) as CheckpointRow | undefined
-      return row ? mapCheckpoint(row) : undefined
+        .get(conversationId) as CheckpointRow | undefined;
+      return row ? mapCheckpoint(row) : undefined;
     },
 
     insertMemoryCandidate(
-      input: Omit<MemoryCandidate, 'usageCount' | 'createdAt' | 'updatedAt'>,
+      input: Omit<MemoryCandidate, "usageCount" | "createdAt" | "updatedAt">,
     ): MemoryCandidate {
-      const ts = nowIso()
+      const ts = nowIso();
       db.prepare(
         `INSERT OR IGNORE INTO memory_candidates
          (id, customer_id, conversation_id, source_trace_id, category, memory_key, value_json, confidence, sensitivity, status, created_at, updated_at)
@@ -565,42 +621,42 @@ export function createControlPlaneRepository(db: Db) {
         input.status,
         ts,
         ts,
-      )
-      return this.listMemoryCandidates(input.customerId).find((entry) => entry.id === input.id)!
+      );
+      return this.listMemoryCandidates(input.customerId).find(
+        (entry) => entry.id === input.id,
+      )!;
     },
 
     listMemoryCandidates(
       customerId: string,
-      status?: MemoryCandidate['status'],
+      status?: MemoryCandidate["status"],
     ): MemoryCandidate[] {
       const rows = status
         ? db
             .prepare(
-              'SELECT * FROM memory_candidates WHERE customer_id = ? AND status = ? ORDER BY usage_count DESC, updated_at DESC',
+              "SELECT * FROM memory_candidates WHERE customer_id = ? AND status = ? ORDER BY usage_count DESC, updated_at DESC",
             )
             .all(customerId, status)
         : db
             .prepare(
-              'SELECT * FROM memory_candidates WHERE customer_id = ? ORDER BY usage_count DESC, updated_at DESC',
+              "SELECT * FROM memory_candidates WHERE customer_id = ? ORDER BY usage_count DESC, updated_at DESC",
             )
-            .all(customerId)
-      return (rows as MemoryCandidateRow[]).map(mapMemoryCandidate)
+            .all(customerId);
+      return (rows as MemoryCandidateRow[]).map(mapMemoryCandidate);
     },
 
     markMemoryUsed(ids: string[]): void {
       const statement = db.prepare(
-        'UPDATE memory_candidates SET usage_count = usage_count + 1, last_used_at = ?, updated_at = ? WHERE id = ?',
-      )
-      const ts = nowIso()
-      db.transaction(() => ids.forEach((id) => statement.run(ts, ts, id)))()
+        "UPDATE memory_candidates SET usage_count = usage_count + 1, last_used_at = ?, updated_at = ? WHERE id = ?",
+      );
+      const ts = nowIso();
+      db.transaction(() => ids.forEach((id) => statement.run(ts, ts, id)))();
     },
 
-    setMemoryStatus(id: string, status: MemoryCandidate['status']): void {
-      db.prepare('UPDATE memory_candidates SET status = ?, updated_at = ? WHERE id = ?').run(
-        status,
-        nowIso(),
-        id,
-      )
+    setMemoryStatus(id: string, status: MemoryCandidate["status"]): void {
+      db.prepare(
+        "UPDATE memory_candidates SET status = ?, updated_at = ? WHERE id = ?",
+      ).run(status, nowIso(), id);
     },
 
     /** Atomically stores extraction output and completes its exact fenced job claim. */
@@ -609,17 +665,18 @@ export function createControlPlaneRepository(db: Db) {
       workerId: string,
       claimFence: number,
       input: {
-        customerId: string
-        conversationId: string
-        productId: string
-        conversationSummary: string
-        candidates: ExtractedMemoryCandidate[]
+        customerId: string;
+        conversationId: string;
+        productId: string;
+        conversationSummary: string;
+        candidates: ExtractedMemoryCandidate[];
       },
       observedAt = nowIso(),
     ): boolean {
       return db.transaction(() => {
-        if (!this.ownsJobClaim(id, workerId, claimFence, observedAt)) return false
-        const ts = nowIso()
+        if (!this.ownsJobClaim(id, workerId, claimFence, observedAt))
+          return false;
+        const ts = nowIso();
         const insert = db.prepare(
           `INSERT INTO memory_candidates
            (id, customer_id, conversation_id, source_trace_id, category, memory_key, value_json,
@@ -629,8 +686,8 @@ export function createControlPlaneRepository(db: Db) {
              SELECT 1 FROM memory_candidates WHERE customer_id = ? AND conversation_id = ?
              AND source_trace_id = ? AND category = ? AND memory_key = ? AND value_json = ?
            )`,
-        )
-        let produced = 0
+        );
+        let produced = 0;
         for (const candidate of input.candidates) {
           produced += insert.run(
             candidate.id,
@@ -650,7 +707,7 @@ export function createControlPlaneRepository(db: Db) {
             candidate.category,
             candidate.key,
             JSON.stringify(candidate.value),
-          ).changes
+          ).changes;
         }
         db.prepare(
           `INSERT INTO product_memories
@@ -664,15 +721,15 @@ export function createControlPlaneRepository(db: Db) {
           input.productId,
           input.conversationSummary,
           ts,
-        )
+        );
         return this.finishJob(
           id,
-          produced === 0 ? 'succeeded_no_output' : 'succeeded',
+          produced === 0 ? "succeeded_no_output" : "succeeded",
           { produced },
           workerId,
           claimFence,
-        )
-      })()
+        );
+      })();
     },
 
     /** Atomically promotes, prunes, and replaces a summary under one fenced global lease. */
@@ -681,32 +738,42 @@ export function createControlPlaneRepository(db: Db) {
       workerId: string,
       claimFence: number,
       input: {
-        customerId: string
-        globalSummary: string
-        promotedIds: string[]
-        prunedIds: string[]
+        customerId: string;
+        globalSummary: string;
+        promotedIds: string[];
+        prunedIds: string[];
       },
       observedAt = nowIso(),
     ): boolean {
       return db.transaction(() => {
-        if (!this.ownsJobClaim(id, workerId, claimFence, observedAt)) return false
+        if (!this.ownsJobClaim(id, workerId, claimFence, observedAt))
+          return false;
         const overlap = input.promotedIds.find((candidateId) =>
           input.prunedIds.includes(candidateId),
-        )
-        if (overlap) throw new Error(`candidate cannot be promoted and pruned: ${overlap}`)
-        const ts = nowIso()
+        );
+        if (overlap)
+          throw new Error(
+            `candidate cannot be promoted and pruned: ${overlap}`,
+          );
+        const ts = nowIso();
         const update = db.prepare(
           `UPDATE memory_candidates SET status = ?, updated_at = ?
            WHERE id = ? AND customer_id = ? AND status = 'candidate'`,
-        )
+        );
         for (const candidateId of input.promotedIds) {
-          if (update.run('promoted', ts, candidateId, input.customerId).changes !== 1) {
-            throw new Error(`candidate is not promotable: ${candidateId}`)
+          if (
+            update.run("promoted", ts, candidateId, input.customerId)
+              .changes !== 1
+          ) {
+            throw new Error(`candidate is not promotable: ${candidateId}`);
           }
         }
         for (const candidateId of input.prunedIds) {
-          if (update.run('pruned', ts, candidateId, input.customerId).changes !== 1) {
-            throw new Error(`candidate is not prunable: ${candidateId}`)
+          if (
+            update.run("pruned", ts, candidateId, input.customerId).changes !==
+            1
+          ) {
+            throw new Error(`candidate is not prunable: ${candidateId}`);
           }
         }
         if (input.promotedIds.length + input.prunedIds.length > 0) {
@@ -716,35 +783,38 @@ export function createControlPlaneRepository(db: Db) {
            VALUES (?, ?, '{}', '[]', ?)
            ON CONFLICT(customer_id) DO UPDATE SET global_summary = excluded.global_summary,
              updated_at = excluded.updated_at`,
-          ).run(input.customerId, input.globalSummary, ts)
+          ).run(input.customerId, input.globalSummary, ts);
         }
         return this.finishJob(
           id,
           input.promotedIds.length + input.prunedIds.length === 0
-            ? 'succeeded_no_output'
-            : 'succeeded',
-          { promoted: input.promotedIds.length, pruned: input.prunedIds.length },
+            ? "succeeded_no_output"
+            : "succeeded",
+          {
+            promoted: input.promotedIds.length,
+            pruned: input.prunedIds.length,
+          },
           workerId,
           claimFence,
-        )
-      })()
+        );
+      })();
     },
 
     enqueueJob(input: {
-      id: string
-      type: BackgroundJobType
-      conversationId?: string
-      customerId?: string
-      payload: JsonValue
-      dueAt: string
-      idempotencyKey: string
-      maxAttempts?: number
+      id: string;
+      type: BackgroundJobType;
+      conversationId?: string;
+      customerId?: string;
+      payload: JsonValue;
+      dueAt: string;
+      idempotencyKey: string;
+      maxAttempts?: number;
     }): BackgroundJob {
       const existing = db
-        .prepare('SELECT * FROM background_jobs WHERE idempotency_key = ?')
-        .get(input.idempotencyKey) as BackgroundJobRow | undefined
-      if (existing) return mapJob(existing)
-      const ts = nowIso()
+        .prepare("SELECT * FROM background_jobs WHERE idempotency_key = ?")
+        .get(input.idempotencyKey) as BackgroundJobRow | undefined;
+      if (existing) return mapJob(existing);
+      const ts = nowIso();
       db.prepare(
         `INSERT INTO background_jobs
          (id, type, status, conversation_id, customer_id, payload_json, due_at, max_attempts, idempotency_key, created_at, updated_at)
@@ -760,19 +830,19 @@ export function createControlPlaneRepository(db: Db) {
         input.idempotencyKey,
         ts,
         ts,
-      )
-      this.appendJobEvent(input.id, 'scheduled', { dueAt: input.dueAt })
-      return this.getJob(input.id)!
+      );
+      this.appendJobEvent(input.id, "scheduled", { dueAt: input.dueAt });
+      return this.getJob(input.id)!;
     },
 
     /** Coalesces one conversation's extraction work and moves its cooling deadline forward. */
     scheduleMemoryExtraction(input: {
-      id: string
-      conversationId: string
-      customerId: string
-      payload: JsonValue
-      now: string
-      coolingMs?: number
+      id: string;
+      conversationId: string;
+      customerId: string;
+      payload: JsonValue;
+      now: string;
+      coolingMs?: number;
     }): BackgroundJob {
       return db.transaction(() => {
         const pending = db
@@ -780,35 +850,35 @@ export function createControlPlaneRepository(db: Db) {
             `SELECT * FROM background_jobs WHERE type = 'memory_extract' AND conversation_id = ?
              AND status = 'pending' ORDER BY created_at DESC LIMIT 1`,
           )
-          .get(input.conversationId) as BackgroundJobRow | undefined
+          .get(input.conversationId) as BackgroundJobRow | undefined;
         const dueAt = new Date(
           new Date(input.now).getTime() + (input.coolingMs ?? 86_400_000),
-        ).toISOString()
+        ).toISOString();
         if (!pending) {
           return this.enqueueJob({
             id: input.id,
-            type: 'memory_extract',
+            type: "memory_extract",
             conversationId: input.conversationId,
             customerId: input.customerId,
             payload: input.payload,
             dueAt,
             idempotencyKey: `memory-extract:${input.conversationId}:${input.id}`,
-          })
+          });
         }
         db.prepare(
           `UPDATE background_jobs SET payload_json = ?, due_at = CASE WHEN status = 'pending' THEN ? ELSE due_at END,
            updated_at = ? WHERE id = ?`,
-        ).run(JSON.stringify(input.payload), dueAt, input.now, pending.id)
-        this.appendJobEvent(pending.id, 'coalesced', { dueAt })
-        return this.getJob(pending.id)!
-      })()
+        ).run(JSON.stringify(input.payload), dueAt, input.now, pending.id);
+        this.appendJobEvent(pending.id, "coalesced", { dueAt });
+        return this.getJob(pending.id)!;
+      })();
     },
 
     /** Coalesces global consolidation demand behind one pending or leased job. */
     scheduleMemoryConsolidation(input: {
-      id: string
-      customerId: string
-      now: string
+      id: string;
+      customerId: string;
+      now: string;
     }): BackgroundJob {
       return db.transaction(() => {
         const active = db
@@ -816,45 +886,52 @@ export function createControlPlaneRepository(db: Db) {
             `SELECT * FROM background_jobs WHERE type = 'memory_consolidate'
            AND customer_id = ? AND status IN ('pending','running') ORDER BY created_at LIMIT 1`,
           )
-          .get(input.customerId) as BackgroundJobRow | undefined
+          .get(input.customerId) as BackgroundJobRow | undefined;
         if (active) {
-          this.appendJobEvent(active.id, 'coalesced', { customerId: input.customerId })
-          return mapJob(active)
+          this.appendJobEvent(active.id, "coalesced", {
+            customerId: input.customerId,
+          });
+          return mapJob(active);
         }
         return this.enqueueJob({
           id: input.id,
-          type: 'memory_consolidate',
+          type: "memory_consolidate",
           customerId: input.customerId,
           payload: {},
           dueAt: input.now,
           idempotencyKey: `memory-consolidate:${input.id}`,
-        })
-      })()
+        });
+      })();
     },
 
     getJob(id: string): BackgroundJob | undefined {
-      const row = db.prepare('SELECT * FROM background_jobs WHERE id = ?').get(id) as
-        BackgroundJobRow | undefined
-      return row ? mapJob(row) : undefined
+      const row = db
+        .prepare("SELECT * FROM background_jobs WHERE id = ?")
+        .get(id) as BackgroundJobRow | undefined;
+      return row ? mapJob(row) : undefined;
     },
 
     linkJobRun(id: string, runId: string): void {
-      db.prepare('UPDATE background_jobs SET run_id = ?, updated_at = ? WHERE id = ?').run(
-        runId,
-        nowIso(),
-        id,
-      )
+      db.prepare(
+        "UPDATE background_jobs SET run_id = ?, updated_at = ? WHERE id = ?",
+      ).run(runId, nowIso(), id);
     },
 
     listJobs(limit = 100): BackgroundJob[] {
       return (
         db
-          .prepare('SELECT * FROM background_jobs ORDER BY created_at DESC LIMIT ?')
+          .prepare(
+            "SELECT * FROM background_jobs ORDER BY created_at DESC LIMIT ?",
+          )
           .all(limit) as BackgroundJobRow[]
-      ).map(mapJob)
+      ).map(mapJob);
     },
 
-    claimDueJob(workerId: string, now: string, leaseMs = 60_000): BackgroundJob | undefined {
+    claimDueJob(
+      workerId: string,
+      now: string,
+      leaseMs = 60_000,
+    ): BackgroundJob | undefined {
       return db.transaction(() => {
         const row = db
           .prepare(
@@ -867,9 +944,11 @@ export function createControlPlaneRepository(db: Db) {
              ))
            ORDER BY due_at, created_at LIMIT 1`,
           )
-          .get(now, now, now) as BackgroundJobRow | undefined
-        if (!row) return undefined
-        const leaseExpiresAt = new Date(new Date(now).getTime() + leaseMs).toISOString()
+          .get(now, now, now) as BackgroundJobRow | undefined;
+        if (!row) return undefined;
+        const leaseExpiresAt = new Date(
+          new Date(now).getTime() + leaseMs,
+        ).toISOString();
         const claimedResult = db
           .prepare(
             `UPDATE background_jobs SET status = 'running', attempts = attempts + 1,
@@ -877,16 +956,24 @@ export function createControlPlaneRepository(db: Db) {
            WHERE id = ? AND claim_fence = ? AND
            (status = 'pending' OR (status = 'running' AND lease_expires_at < ?))`,
           )
-          .run(workerId, leaseExpiresAt, now, now, row.id, row.claim_fence, now)
-        if (claimedResult.changes !== 1) return undefined
-        const claimed = this.getJob(row.id)!
-        this.appendJobEvent(row.id, 'claimed', {
+          .run(
+            workerId,
+            leaseExpiresAt,
+            now,
+            now,
+            row.id,
+            row.claim_fence,
+            now,
+          );
+        if (claimedResult.changes !== 1) return undefined;
+        const claimed = this.getJob(row.id)!;
+        this.appendJobEvent(row.id, "claimed", {
           workerId,
           claimFence: claimed.claimFence,
           leaseExpiresAt,
-        })
-        return claimed
-      })()
+        });
+        return claimed;
+      })();
     },
 
     heartbeatJob(
@@ -902,12 +989,25 @@ export function createControlPlaneRepository(db: Db) {
          WHERE id = ? AND status = 'running' AND lease_owner = ? AND claim_fence = ?
          AND lease_expires_at >= ?`,
         )
-        .run(observedAt, leaseExpiresAt, observedAt, id, workerId, claimFence, observedAt)
-      return result.changes === 1
+        .run(
+          observedAt,
+          leaseExpiresAt,
+          observedAt,
+          id,
+          workerId,
+          claimFence,
+          observedAt,
+        );
+      return result.changes === 1;
     },
 
     /** Checks whether one exact leased claim is still the only valid writer. */
-    ownsJobClaim(id: string, workerId: string, claimFence: number, now?: string): boolean {
+    ownsJobClaim(
+      id: string,
+      workerId: string,
+      claimFence: number,
+      now?: string,
+    ): boolean {
       const row = now
         ? db
             .prepare(
@@ -920,18 +1020,18 @@ export function createControlPlaneRepository(db: Db) {
               `SELECT 1 FROM background_jobs WHERE id = ? AND status = 'running'
              AND lease_owner = ? AND claim_fence = ?`,
             )
-            .get(id, workerId, claimFence)
-      return row !== undefined
+            .get(id, workerId, claimFence);
+      return row !== undefined;
     },
 
     finishJob(
       id: string,
-      status: 'succeeded' | 'succeeded_no_output',
+      status: "succeeded" | "succeeded_no_output",
       payload: JsonValue = {},
       workerId?: string,
       claimFence?: number,
     ): boolean {
-      const now = nowIso()
+      const now = nowIso();
       const result = db
         .prepare(
           `UPDATE background_jobs SET status = ?, lease_owner = NULL, lease_expires_at = NULL,
@@ -947,9 +1047,9 @@ export function createControlPlaneRepository(db: Db) {
           workerId ?? null,
           claimFence ?? null,
           claimFence ?? null,
-        )
-      if (result.changes) this.appendJobEvent(id, status, payload)
-      return result.changes === 1
+        );
+      if (result.changes) this.appendJobEvent(id, status, payload);
+      return result.changes === 1;
     },
 
     failJob(
@@ -959,10 +1059,10 @@ export function createControlPlaneRepository(db: Db) {
       workerId?: string,
       claimFence?: number,
     ): boolean {
-      const job = this.getJob(id)
-      if (!job) throw new Error(`background job not found: ${id}`)
-      const terminal = job.attempts >= job.maxAttempts
-      const now = nowIso()
+      const job = this.getJob(id);
+      if (!job) throw new Error(`background job not found: ${id}`);
+      const terminal = job.attempts >= job.maxAttempts;
+      const now = nowIso();
       const result = db
         .prepare(
           `UPDATE background_jobs SET status = ?, due_at = ?, lease_owner = NULL,
@@ -972,7 +1072,7 @@ export function createControlPlaneRepository(db: Db) {
          `,
         )
         .run(
-          terminal ? 'failed' : 'pending',
+          terminal ? "failed" : "pending",
           retryAt ?? job.dueAt,
           error,
           now,
@@ -981,14 +1081,14 @@ export function createControlPlaneRepository(db: Db) {
           workerId ?? null,
           claimFence ?? null,
           claimFence ?? null,
-        )
+        );
       if (result.changes) {
-        this.appendJobEvent(id, terminal ? 'failed' : 'retry_scheduled', {
+        this.appendJobEvent(id, terminal ? "failed" : "retry_scheduled", {
           error,
           retryAt: retryAt ?? job.dueAt,
-        })
+        });
       }
-      return result.changes === 1
+      return result.changes === 1;
     },
 
     cancelJob(id: string): boolean {
@@ -997,9 +1097,9 @@ export function createControlPlaneRepository(db: Db) {
           `UPDATE background_jobs SET status = 'cancelled', lease_owner = NULL,
          lease_expires_at = NULL, updated_at = ? WHERE id = ? AND status IN ('pending','running')`,
         )
-        .run(nowIso(), id)
-      if (result.changes) this.appendJobEvent(id, 'cancelled')
-      return result.changes === 1
+        .run(nowIso(), id);
+      if (result.changes) this.appendJobEvent(id, "cancelled");
+      return result.changes === 1;
     },
 
     retryJob(id: string, dueAt = nowIso()): boolean {
@@ -1008,34 +1108,42 @@ export function createControlPlaneRepository(db: Db) {
           `UPDATE background_jobs SET status = 'pending', due_at = ?, last_error = NULL,
          lease_owner = NULL, lease_expires_at = NULL, updated_at = ? WHERE id = ? AND status = 'failed'`,
         )
-        .run(dueAt, nowIso(), id)
-      if (result.changes) this.appendJobEvent(id, 'retried')
-      return result.changes === 1
+        .run(dueAt, nowIso(), id);
+      if (result.changes) this.appendJobEvent(id, "retried");
+      return result.changes === 1;
     },
 
     appendJobEvent(jobId: string, type: string, payload: JsonValue = {}): void {
       db.prepare(
-        'INSERT INTO background_job_events (job_id, type, payload_json, created_at) VALUES (?, ?, ?, ?)',
-      ).run(jobId, type, JSON.stringify(payload), nowIso())
+        "INSERT INTO background_job_events (job_id, type, payload_json, created_at) VALUES (?, ?, ?, ?)",
+      ).run(jobId, type, JSON.stringify(payload), nowIso());
     },
 
     /** Lists one job's durable audit events in insertion order. */
-    listJobEvents(jobId: string): { type: string; payload: JsonValue; createdAt: string }[] {
+    listJobEvents(
+      jobId: string,
+    ): { type: string; payload: JsonValue; createdAt: string }[] {
       return (
         db
           .prepare(
-            'SELECT type, payload_json, created_at FROM background_job_events WHERE job_id = ? ORDER BY id',
+            "SELECT type, payload_json, created_at FROM background_job_events WHERE job_id = ? ORDER BY id",
           )
-          .all(jobId) as { type: string; payload_json: string; created_at: string }[]
+          .all(jobId) as {
+          type: string;
+          payload_json: string;
+          created_at: string;
+        }[]
       ).map((row) => ({
         type: row.type,
         payload: JSON.parse(row.payload_json) as JsonValue,
         createdAt: row.created_at,
-      }))
+      }));
     },
 
-    appendOutbox(input: Omit<OutboxMessage, 'status' | 'createdAt'>): OutboxMessage {
-      const ts = nowIso()
+    appendOutbox(
+      input: Omit<OutboxMessage, "status" | "createdAt">,
+    ): OutboxMessage {
+      const ts = nowIso();
       db.prepare(
         `INSERT OR IGNORE INTO outbox_messages
          (id, conversation_id, run_id, payload_json, status, idempotency_key, created_at)
@@ -1047,8 +1155,8 @@ export function createControlPlaneRepository(db: Db) {
         JSON.stringify(input.payload),
         input.idempotencyKey,
         ts,
-      )
-      return { ...input, status: 'pending', createdAt: ts }
+      );
+      return { ...input, status: "pending", createdAt: ts };
     },
 
     /** Atomically publishes one follow-up result and completes its exact fenced claim. */
@@ -1056,16 +1164,19 @@ export function createControlPlaneRepository(db: Db) {
       id: string,
       workerId: string,
       claimFence: number,
-      input: Omit<OutboxMessage, 'status' | 'createdAt'>,
+      input: Omit<OutboxMessage, "status" | "createdAt">,
       event: JsonValue = {},
     ): boolean {
       return db.transaction(() => {
-        const owned = this.ownsJobClaim(id, workerId, claimFence)
+        const owned = this.ownsJobClaim(id, workerId, claimFence);
         if (!owned) {
-          this.appendJobEvent(id, 'completion_rejected', { workerId, claimFence })
-          return false
+          this.appendJobEvent(id, "completion_rejected", {
+            workerId,
+            claimFence,
+          });
+          return false;
         }
-        const ts = nowIso()
+        const ts = nowIso();
         const outboxResult = db
           .prepare(
             `INSERT OR IGNORE INTO outbox_messages
@@ -1079,17 +1190,26 @@ export function createControlPlaneRepository(db: Db) {
             JSON.stringify(input.payload),
             input.idempotencyKey,
             ts,
-          )
+          );
         if (outboxResult.changes !== 1) {
           const existing = db
-            .prepare('SELECT id, run_id FROM outbox_messages WHERE idempotency_key = ?')
-            .get(input.idempotencyKey) as { id: string; run_id: string } | undefined
-          if (!existing || existing.id !== input.id || existing.run_id !== input.runId) {
-            throw new Error(`outbox idempotency conflict: ${input.idempotencyKey}`)
+            .prepare(
+              "SELECT id, run_id FROM outbox_messages WHERE idempotency_key = ?",
+            )
+            .get(input.idempotencyKey) as
+            { id: string; run_id: string } | undefined;
+          if (
+            !existing ||
+            existing.id !== input.id ||
+            existing.run_id !== input.runId
+          ) {
+            throw new Error(
+              `outbox idempotency conflict: ${input.idempotencyKey}`,
+            );
           }
-          this.appendJobEvent(id, 'outbox_deduplicated', {
+          this.appendJobEvent(id, "outbox_deduplicated", {
             idempotencyKey: input.idempotencyKey,
-          })
+          });
         }
         const result = db
           .prepare(
@@ -1097,103 +1217,108 @@ export function createControlPlaneRepository(db: Db) {
              lease_expires_at = NULL, last_error = NULL, updated_at = ? WHERE id = ?
              AND status = 'running' AND lease_owner = ? AND claim_fence = ?`,
           )
-          .run(input.runId, nowIso(), id, workerId, claimFence)
-        if (result.changes !== 1) throw new Error(`background job lease lost: ${id}`)
-        this.appendJobEvent(id, 'succeeded', event)
-        return true
-      })()
+          .run(input.runId, nowIso(), id, workerId, claimFence);
+        if (result.changes !== 1)
+          throw new Error(`background job lease lost: ${id}`);
+        this.appendJobEvent(id, "succeeded", event);
+        return true;
+      })();
     },
 
     listOutbox(limit = 100): OutboxMessage[] {
       return (
         db
-          .prepare('SELECT * FROM outbox_messages ORDER BY created_at DESC LIMIT ?')
+          .prepare(
+            "SELECT * FROM outbox_messages ORDER BY created_at DESC LIMIT ?",
+          )
           .all(limit) as OutboxRow[]
-      ).map(mapOutbox)
+      ).map(mapOutbox);
     },
-  }
+  };
 }
 
-export type ControlPlaneRepository = ReturnType<typeof createControlPlaneRepository>
+export type ControlPlaneRepository = ReturnType<
+  typeof createControlPlaneRepository
+>;
 
 interface WorkflowRunRow {
-  id: string
-  session_id: string
-  conversation_id: string
-  idempotency_key: string
-  status: WorkflowRunStatus
-  version: number
-  failure_kind: string | null
-  result_json: string | null
-  cancel_requested_at: string | null
-  cancel_reason: string | null
-  lease_owner: string | null
-  lease_expires_at: string | null
-  heartbeat_at: string | null
-  created_at: string
-  updated_at: string
+  id: string;
+  session_id: string;
+  conversation_id: string;
+  idempotency_key: string;
+  status: WorkflowRunStatus;
+  version: number;
+  failure_kind: string | null;
+  result_json: string | null;
+  cancel_requested_at: string | null;
+  cancel_reason: string | null;
+  lease_owner: string | null;
+  lease_expires_at: string | null;
+  heartbeat_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 interface WorkflowEventRow {
-  run_id: string
-  sequence: number
-  type: string
-  payload_json: string
-  created_at: string
+  run_id: string;
+  sequence: number;
+  type: string;
+  payload_json: string;
+  created_at: string;
 }
 interface CheckpointRow {
-  id: string
-  conversation_id: string
-  through_trace_id: string
-  version: number
-  summary_json: string
-  token_before: number
-  token_after: number
-  model: string
-  created_at: string
+  id: string;
+  conversation_id: string;
+  through_trace_id: string;
+  version: number;
+  summary_json: string;
+  token_before: number;
+  token_after: number;
+  model: string;
+  created_at: string;
 }
 interface MemoryCandidateRow {
-  id: string
-  customer_id: string
-  conversation_id: string
-  source_trace_id: string
-  category: string
-  memory_key: string
-  value_json: string
-  confidence: number
-  sensitivity: string
-  status: MemoryCandidate['status']
-  usage_count: number
-  last_used_at: string | null
-  created_at: string
-  updated_at: string
+  id: string;
+  customer_id: string;
+  conversation_id: string;
+  source_trace_id: string;
+  category: string;
+  memory_key: string;
+  value_json: string;
+  confidence: number;
+  sensitivity: string;
+  status: MemoryCandidate["status"];
+  usage_count: number;
+  last_used_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 interface BackgroundJobRow {
-  id: string
-  type: BackgroundJobType
-  status: BackgroundJobStatus
-  conversation_id: string | null
-  customer_id: string | null
-  payload_json: string
-  due_at: string
-  attempts: number
-  max_attempts: number
-  lease_owner: string | null
-  claim_fence: number
-  lease_expires_at: string | null
-  heartbeat_at: string | null
-  last_error: string | null
-  run_id: string | null
-  created_at: string
-  updated_at: string
+  id: string;
+  type: BackgroundJobType;
+  status: BackgroundJobStatus;
+  conversation_id: string | null;
+  customer_id: string | null;
+  payload_json: string;
+  due_at: string;
+  attempts: number;
+  max_attempts: number;
+  lease_owner: string | null;
+  claim_fence: number;
+  lease_expires_at: string | null;
+  heartbeat_at: string | null;
+  last_error: string | null;
+  run_id: string | null;
+  created_at: string;
+  updated_at: string;
 }
 interface OutboxRow {
-  id: string
-  conversation_id: string
-  run_id: string
-  payload_json: string
-  status: 'pending' | 'sent'
-  idempotency_key: string
-  created_at: string
+  id: string;
+  conversation_id: string;
+  run_id: string;
+  payload_json: string;
+  status: "pending" | "sent";
+  idempotency_key: string;
+  created_at: string;
 }
 
 /** Maps one SQLite workflow row to its public domain shape. */
@@ -1206,7 +1331,9 @@ function mapRun(row: WorkflowRunRow): WorkflowRun {
     status: row.status,
     version: row.version,
     failureKind: row.failure_kind ?? undefined,
-    result: row.result_json ? (JSON.parse(row.result_json) as JsonValue) : undefined,
+    result: row.result_json
+      ? (JSON.parse(row.result_json) as JsonValue)
+      : undefined,
     cancelRequestedAt: row.cancel_requested_at ?? undefined,
     cancelReason: row.cancel_reason ?? undefined,
     leaseOwner: row.lease_owner ?? undefined,
@@ -1214,7 +1341,7 @@ function mapRun(row: WorkflowRunRow): WorkflowRun {
     heartbeatAt: row.heartbeat_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  }
+  };
 }
 /** Maps one SQLite workflow-event row to its public domain shape. */
 function mapWorkflowEvent(row: WorkflowEventRow): WorkflowEvent {
@@ -1224,7 +1351,7 @@ function mapWorkflowEvent(row: WorkflowEventRow): WorkflowEvent {
     type: row.type,
     payload: JSON.parse(row.payload_json) as JsonValue,
     createdAt: row.created_at,
-  }
+  };
 }
 /** Maps one SQLite checkpoint row to its public domain shape. */
 function mapCheckpoint(row: CheckpointRow): ConversationCheckpoint {
@@ -1238,7 +1365,7 @@ function mapCheckpoint(row: CheckpointRow): ConversationCheckpoint {
     tokenAfter: row.token_after,
     model: row.model,
     createdAt: row.created_at,
-  }
+  };
 }
 /** Maps one SQLite memory-candidate row to its public domain shape. */
 function mapMemoryCandidate(row: MemoryCandidateRow): MemoryCandidate {
@@ -1257,7 +1384,7 @@ function mapMemoryCandidate(row: MemoryCandidateRow): MemoryCandidate {
     lastUsedAt: row.last_used_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  }
+  };
 }
 /** Maps one SQLite background-job row to its public domain shape. */
 function mapJob(row: BackgroundJobRow): BackgroundJob {
@@ -1279,7 +1406,7 @@ function mapJob(row: BackgroundJobRow): BackgroundJob {
     runId: row.run_id ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  }
+  };
 }
 /** Maps one SQLite outbox row to its public domain shape. */
 function mapOutbox(row: OutboxRow): OutboxMessage {
@@ -1291,5 +1418,5 @@ function mapOutbox(row: OutboxRow): OutboxMessage {
     status: row.status,
     idempotencyKey: row.idempotency_key,
     createdAt: row.created_at,
-  }
+  };
 }

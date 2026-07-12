@@ -1,9 +1,15 @@
-import type { RuntimeTool, JsonValue } from '@rental/shared'
-import { getProductTool, checkAvailabilityTool } from './catalog-stubs.js'
-import { createHandoffTool, createScheduleFollowupTool } from './workflow-stubs.js'
-import { issueRefundTool } from './refund-stub.js'
-import { createSearchKnowledgeTool, type KnowledgeSearcher } from './search-knowledge.js'
-import type { Policy, PolicyContext } from '../policies/policy.js'
+import type { RuntimeTool, JsonValue } from "@rental/shared";
+import { getProductTool, checkAvailabilityTool } from "./catalog-stubs.js";
+import {
+  createHandoffTool,
+  createScheduleFollowupTool,
+} from "./workflow-stubs.js";
+import { issueRefundTool } from "./refund-stub.js";
+import {
+  createSearchKnowledgeTool,
+  type KnowledgeSearcher,
+} from "./search-knowledge.js";
+import type { Policy, PolicyContext } from "../policies/policy.js";
 
 /**
  * Registry of runtime tools the agent loop can dispatch. Read-only stubs
@@ -12,22 +18,22 @@ import type { Policy, PolicyContext } from '../policies/policy.js'
  * adapters behind the same RuntimeTool interface.
  */
 export class ToolRegistry {
-  private readonly tools = new Map<string, RuntimeTool>()
+  private readonly tools = new Map<string, RuntimeTool>();
 
   register(tool: RuntimeTool): this {
     if (this.tools.has(tool.name)) {
-      throw new Error(`tool already registered: ${tool.name}`)
+      throw new Error(`tool already registered: ${tool.name}`);
     }
-    this.tools.set(tool.name, tool)
-    return this
+    this.tools.set(tool.name, tool);
+    return this;
   }
 
   get(name: string): RuntimeTool | undefined {
-    return this.tools.get(name)
+    return this.tools.get(name);
   }
 
   list(): RuntimeTool[] {
-    return [...this.tools.values()]
+    return [...this.tools.values()];
   }
 
   /** Runs a tool by name, throwing a typed error if unknown/approval-gated. */
@@ -36,12 +42,12 @@ export class ToolRegistry {
     args: Record<string, JsonValue>,
     options?: { signal?: AbortSignal },
   ): Promise<JsonValue> {
-    const tool = this.tools.get(name)
-    if (!tool) throw new ToolNotFoundError(name)
+    const tool = this.tools.get(name);
+    if (!tool) throw new ToolNotFoundError(name);
     // Hard safety gate: approvalRequired tools (high risk) never auto-run.
-    if (tool.approvalRequired) throw new ApprovalRequiredError(name)
-    options?.signal?.throwIfAborted()
-    return tool.execute(args, options)
+    if (tool.approvalRequired) throw new ApprovalRequiredError(name);
+    options?.signal?.throwIfAborted();
+    return tool.execute(args, options);
   }
 
   /**
@@ -56,37 +62,44 @@ export class ToolRegistry {
     context: PolicyContext,
     options?: { signal?: AbortSignal },
   ): Promise<JsonValue> {
-    const tool = this.tools.get(name)
-    if (!tool) throw new ToolNotFoundError(name)
+    const tool = this.tools.get(name);
+    if (!tool) throw new ToolNotFoundError(name);
     const decision = policy.check(
-      { toolName: name, arguments: args, risk: tool.risk, approvalRequired: tool.approvalRequired },
+      {
+        toolName: name,
+        arguments: args,
+        risk: tool.risk,
+        approvalRequired: tool.approvalRequired,
+      },
       context,
-    )
-    if (decision.action === 'deny') throw new PolicyDenyError(name, decision.reason)
-    if (decision.action === 'require_approval') throw new ApprovalRequiredError(name)
-    options?.signal?.throwIfAborted()
-    return tool.execute(args, options)
+    );
+    if (decision.action === "deny")
+      throw new PolicyDenyError(name, decision.reason);
+    if (decision.action === "require_approval")
+      throw new ApprovalRequiredError(name);
+    options?.signal?.throwIfAborted();
+    return tool.execute(args, options);
   }
 }
 
 export class ToolNotFoundError extends Error {
   constructor(name: string) {
-    super(`tool not found: ${name}`)
-    this.name = 'ToolNotFoundError'
+    super(`tool not found: ${name}`);
+    this.name = "ToolNotFoundError";
   }
 }
 
 export class ApprovalRequiredError extends Error {
   constructor(name: string) {
-    super(`tool requires human approval: ${name}`)
-    this.name = 'ApprovalRequiredError'
+    super(`tool requires human approval: ${name}`);
+    this.name = "ApprovalRequiredError";
   }
 }
 
 export class PolicyDenyError extends Error {
   constructor(name: string, reason: string) {
-    super(`policy denied tool ${name}: ${reason}`)
-    this.name = 'PolicyDenyError'
+    super(`policy denied tool ${name}: ${reason}`);
+    this.name = "PolicyDenyError";
   }
 }
 
@@ -103,7 +116,7 @@ export function createDefaultToolRegistry(
     scheduleFollowup?: (
       input: Record<string, JsonValue>,
       options?: { signal?: AbortSignal },
-    ) => Promise<JsonValue> | JsonValue
+    ) => Promise<JsonValue> | JsonValue;
   },
 ): ToolRegistry {
   const registry = new ToolRegistry()
@@ -111,7 +124,7 @@ export function createDefaultToolRegistry(
     .register(checkAvailabilityTool)
     .register(createHandoffTool)
     .register(createScheduleFollowupTool(workflow?.scheduleFollowup))
-    .register(issueRefundTool)
-  if (knowledge) registry.register(createSearchKnowledgeTool(knowledge))
-  return registry
+    .register(issueRefundTool);
+  if (knowledge) registry.register(createSearchKnowledgeTool(knowledge));
+  return registry;
 }

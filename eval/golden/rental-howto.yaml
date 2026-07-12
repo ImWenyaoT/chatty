@@ -10,7 +10,7 @@ steps:
   - user: 你们家衣服怎么租？
     expect:
       action: answer_question
-      contains: ['租期']
+      contains: ["租期"]
       # 提"包邮"必须带偏远地区例外，否则是过度承诺（catalog: 新疆西藏等偏远除外）
-      containsAny: ['偏远', '新疆', '西藏', '除外']
+      containsAny: ["偏远", "新疆", "西藏", "除外"]
       minScore: 6

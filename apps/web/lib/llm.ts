@@ -7,7 +7,7 @@ import {
   executeSearchRequest,
   type CustomerServiceModelFn,
   type CustomerServiceSdkRunner,
-} from '@rental/agent-core'
+} from "@rental/agent-core";
 import {
   type ChatCompletionTelemetry,
   createAgentsSdkCustomerServiceRunner,
@@ -15,36 +15,40 @@ import {
   createDeepSeekAgentsSdkToolLoop,
   parseJsonObject,
   readLlmEnv,
-} from '@rental/llm'
-import { readQuestionFromEvent, type JsonValue, type RuntimeToolCall } from '@rental/shared'
-import { z } from 'zod'
+} from "@rental/llm";
+import {
+  readQuestionFromEvent,
+  type JsonValue,
+  type RuntimeToolCall,
+} from "@rental/shared";
+import { z } from "zod";
 
 export type LlmTelemetrySummary = {
-  model: string
-  calls: number
-  callBudget: number
-  inputCacheHitTokens: number
-  inputCacheMissTokens: number
-  inputCacheHitRatio: number
-  outputTokens: number
-  totalTokens: number
-  estimatedCostCny: number
-  operations: Array<ChatCompletionTelemetry['operation']>
-  warnings: string[]
-}
+  model: string;
+  calls: number;
+  callBudget: number;
+  inputCacheHitTokens: number;
+  inputCacheMissTokens: number;
+  inputCacheHitRatio: number;
+  outputTokens: number;
+  totalTokens: number;
+  estimatedCostCny: number;
+  operations: Array<ChatCompletionTelemetry["operation"]>;
+  warnings: string[];
+};
 
 type LlmRuntimeOptions = {
-  callBudget?: number
-}
+  callBudget?: number;
+};
 
-type LlmRuntimeMode = 'disabled' | 'agents-sdk'
+type LlmRuntimeMode = "disabled" | "agents-sdk";
 
-const DEFAULT_LLM_CALL_BUDGET = 3
+const DEFAULT_LLM_CALL_BUDGET = 3;
 
 export class MissingLlmApiKeyError extends Error {
   constructor() {
-    super('DeepSeek API key is required')
-    this.name = 'MissingLlmApiKeyError'
+    super("DeepSeek API key is required");
+    this.name = "MissingLlmApiKeyError";
   }
 }
 
@@ -53,49 +57,60 @@ const SDK_TOOL_SCHEMAS = {
   check_availability: z
     .object({ size: z.string(), startDate: z.string(), endDate: z.string() })
     .strict(),
-  create_handoff: z.object({ reason: z.string(), context: z.string().nullable() }).strict(),
-  schedule_followup: z.object({ dueAt: z.string(), reason: z.string() }).strict(),
-} as const
+  create_handoff: z
+    .object({ reason: z.string(), context: z.string().nullable() })
+    .strict(),
+  schedule_followup: z
+    .object({ dueAt: z.string(), reason: z.string() })
+    .strict(),
+} as const;
 
 /** Builds the single production Agents SDK runner; task policy controls each cloned Agent. */
 export function createPlaygroundSdkRunner(
   records: ChatCompletionTelemetry[] = [],
 ): CustomerServiceSdkRunner {
-  const env = readLlmEnv()
-  if (!env.apiKey) throw new MissingLlmApiKeyError()
-  const model = createDeepSeekAgentsModelFromEnv()
+  const env = readLlmEnv();
+  if (!env.apiKey) throw new MissingLlmApiKeyError();
+  const model = createDeepSeekAgentsModelFromEnv();
 
   return async (runtime) => {
-    const toolCalls: RuntimeToolCall[] = []
-    const toolResults: JsonValue[] = []
+    const toolCalls: RuntimeToolCall[] = [];
+    const toolResults: JsonValue[] = [];
     const tools = runtime.runPolicy.toolNames.map((name) => {
-      const capability = runtime.registry.get(name)
-      if (!capability) throw new Error(`required SDK tool is not registered: ${name}`)
+      const capability = runtime.registry.get(name);
+      if (!capability)
+        throw new Error(`required SDK tool is not registered: ${name}`);
       return {
         name,
         description: capability.description,
         parameters: SDK_TOOL_SCHEMAS[name],
         needsApproval: capability.approvalRequired,
         execute: async (raw: unknown) => {
-          const parsed = SDK_TOOL_SCHEMAS[name].parse(raw) as unknown as Record<string, JsonValue>
+          const parsed = SDK_TOOL_SCHEMAS[name].parse(raw) as unknown as Record<
+            string,
+            JsonValue
+          >;
           const args = {
             ...parsed,
-            ...(name === 'check_availability'
-              ? { productId: runtime.event.productId ?? runtime.memory.productId ?? '' }
+            ...(name === "check_availability"
+              ? {
+                  productId:
+                    runtime.event.productId ?? runtime.memory.productId ?? "",
+                }
               : {}),
-            ...(name === 'create_handoff' || name === 'schedule_followup'
+            ...(name === "create_handoff" || name === "schedule_followup"
               ? { conversationId: runtime.event.conversationId }
               : {}),
-          }
+          };
           const call: RuntimeToolCall = {
             toolName: name,
             arguments: args,
             risk: capability.risk,
             approvalRequired: capability.approvalRequired,
-          }
-          toolCalls.push(call)
-          runtime.emitEvent?.('tool_attempted', call as unknown as JsonValue)
-          let result: JsonValue
+          };
+          toolCalls.push(call);
+          runtime.emitEvent?.("tool_attempted", call as unknown as JsonValue);
+          let result: JsonValue;
           try {
             result = await runtime.registry.invokeWithPolicy(
               name,
@@ -105,29 +120,36 @@ export function createPlaygroundSdkRunner(
                 sessionStatus: runtime.sessionStatus,
               },
               { signal: runtime.signal },
-            )
+            );
           } catch (error) {
-            if (!(error instanceof ApprovalRequiredError) && !(error instanceof PolicyDenyError)) {
-              throw error
+            if (
+              !(error instanceof ApprovalRequiredError) &&
+              !(error instanceof PolicyDenyError)
+            ) {
+              throw error;
             }
-            result = { error: error.name, message: error.message }
+            result = { error: error.name, message: error.message };
           }
-          toolResults.push(result)
-          runtime.emitEvent?.('tool_completed', { toolName: name, result })
-          if (name === 'search_knowledge' && result && typeof result === 'object') {
-            const output = (result as { output?: unknown }).output
-            if (typeof output === 'string') {
+          toolResults.push(result);
+          runtime.emitEvent?.("tool_completed", { toolName: name, result });
+          if (
+            name === "search_knowledge" &&
+            result &&
+            typeof result === "object"
+          ) {
+            const output = (result as { output?: unknown }).output;
+            if (typeof output === "string") {
               runtime.context.fragments.push({
-                kind: 'knowledge',
-                label: '知识库工具结果',
+                kind: "knowledge",
+                label: "知识库工具结果",
                 content: output,
-              })
+              });
             }
           }
-          return result
+          return result;
         },
-      }
-    })
+      };
+    });
     const runSdk = createAgentsSdkCustomerServiceRunner({
       instructions: CUSTOMER_SERVICE_SDK_INSTRUCTIONS,
       input: buildSdkPrompt(runtime),
@@ -139,9 +161,9 @@ export function createPlaygroundSdkRunner(
       maxTurns: runtime.runPolicy.maxTurns,
       telemetry: (record) => records.push(record),
       signal: runtime.signal,
-    })
-    runtime.emitEvent?.('model_called', { model: env.chatModel })
-    const output = await runSdk()
+    });
+    runtime.emitEvent?.("model_called", { model: env.chatModel });
+    const output = await runSdk();
     return {
       reply: output.reply,
       action: {
@@ -153,38 +175,45 @@ export function createPlaygroundSdkRunner(
       toolCalls,
       toolResults,
       outputValidated: true,
-    }
-  }
+    };
+  };
 }
 
 /** Renders task, tool policy, and dynamic context in a cache-friendly stable order. */
-function buildSdkPrompt(runtime: Parameters<CustomerServiceSdkRunner>[0]): string {
-  const [task, ...dynamicFragments] = runtime.context.fragments
+function buildSdkPrompt(
+  runtime: Parameters<CustomerServiceSdkRunner>[0],
+): string {
+  const [task, ...dynamicFragments] = runtime.context.fragments;
   const render = (fragment: (typeof runtime.context.fragments)[number]) =>
-    `## ${fragment.label}\n${fragment.content}`
+    `## ${fragment.label}\n${fragment.content}`;
   return [
-    task ? render(task) : '',
-    `## 当前工具策略\n允许工具：${runtime.runPolicy.toolNames.join(', ') || '无'}\n工具选择：${runtime.runPolicy.toolChoice}`,
+    task ? render(task) : "",
+    `## 当前工具策略\n允许工具：${runtime.runPolicy.toolNames.join(", ") || "无"}\n工具选择：${runtime.runPolicy.toolChoice}`,
     ...dynamicFragments.map(render),
   ]
     .filter(Boolean)
-    .join('\n\n')
+    .join("\n\n");
 }
 
 /** Derives the auditable action summary from the deterministic scheduled task. */
-function actionForTask(kind: Parameters<typeof createCustomerServiceRunPolicy>[0]['kind']) {
-  if (kind === 'collect_missing_info') return 'ask_missing_info' as const
-  if (kind === 'answer_question') return 'answer_question' as const
-  if (kind === 'check_availability') return 'check_availability' as const
-  if (kind === 'handoff') return 'handoff' as const
-  return 'schedule_followup' as const
+function actionForTask(
+  kind: Parameters<typeof createCustomerServiceRunPolicy>[0]["kind"],
+) {
+  if (kind === "collect_missing_info") return "ask_missing_info" as const;
+  if (kind === "answer_question") return "answer_question" as const;
+  if (kind === "check_availability") return "check_availability" as const;
+  if (kind === "handoff") return "handoff" as const;
+  return "schedule_followup" as const;
 }
 
 /** Calculates the normalized prompt/KV cache hit ratio for input tokens. */
-function calculateInputCacheHitRatio(hitTokens: number, missTokens: number): number {
-  const totalInputTokens = hitTokens + missTokens
-  if (totalInputTokens <= 0) return 0
-  return Number((hitTokens / totalInputTokens).toFixed(4))
+function calculateInputCacheHitRatio(
+  hitTokens: number,
+  missTokens: number,
+): number {
+  const totalInputTokens = hitTokens + missTokens;
+  if (totalInputTokens <= 0) return 0;
+  return Number((hitTokens / totalInputTokens).toFixed(4));
 }
 
 /**
@@ -196,8 +225,8 @@ function calculateInputCacheHitRatio(hitTokens: number, missTokens: number): num
  * runs the deterministic composer and keeps no-key demo/smoke behavior.
  */
 export function createPlaygroundModelFn(): CustomerServiceModelFn | undefined {
-  if (!readLlmEnv().apiKey) return undefined
-  return createAgentsSdkComposeModelFn()
+  if (!readLlmEnv().apiKey) return undefined;
+  return createAgentsSdkComposeModelFn();
 }
 
 /** Wraps the Agents SDK run loop into the existing harness modelFn contract. */
@@ -206,9 +235,9 @@ function createAgentsSdkComposeModelFn(
 ): CustomerServiceModelFn {
   return async (prompt, runtime) => {
     const searchTool =
-      runtime?.task.kind === 'answer_question'
-        ? runtime.registry?.get('search_knowledge')
-        : undefined
+      runtime?.task.kind === "answer_question"
+        ? runtime.registry?.get("search_knowledge")
+        : undefined;
     const runSdk = createDeepSeekAgentsSdkToolLoop({
       instructions: CUSTOMER_SERVICE_COMPOSE_INSTRUCTIONS,
       maxTurns: searchTool ? 4 : 2,
@@ -219,16 +248,20 @@ function createAgentsSdkComposeModelFn(
               {
                 name: searchTool.name,
                 description: searchTool.description,
-                parameters: searchTool.parameters ?? { type: 'object', properties: {} },
+                parameters: searchTool.parameters ?? {
+                  type: "object",
+                  properties: {},
+                },
                 needsApproval: searchTool.approvalRequired,
-                execute: async (input) => executeSdkSearchTool(input, runtime, searchTool.name),
+                execute: async (input) =>
+                  executeSdkSearchTool(input, runtime, searchTool.name),
               },
             ]
           : [],
-    })
-    const raw = await runSdk(prompt)
-    return JSON.stringify(parseJsonObject<Record<string, unknown>>(raw))
-  }
+    });
+    const raw = await runSdk(prompt);
+    return JSON.stringify(parseJsonObject<Record<string, unknown>>(raw));
+  };
 }
 
 /**
@@ -240,9 +273,9 @@ async function executeSdkSearchTool(
   runtime: NonNullable<Parameters<CustomerServiceModelFn>[1]>,
   toolName: string,
 ): Promise<string> {
-  const registry = runtime.registry
+  const registry = runtime.registry;
   if (!registry)
-    return '工具注册表不可用。请基于已知信息谨慎回答，不确定的内容如实告知用户无法确认。'
+    return "工具注册表不可用。请基于已知信息谨慎回答，不确定的内容如实告知用户无法确认。";
 
   const result = await executeSearchRequest({
     toolName,
@@ -252,16 +285,16 @@ async function executeSdkSearchTool(
     productId: runtime.event.productId ?? runtime.memory.productId,
     searchedQueries:
       runtime.searchTrace?.toolCalls.flatMap((call) =>
-        typeof call.arguments.query === 'string' ? [call.arguments.query] : [],
+        typeof call.arguments.query === "string" ? [call.arguments.query] : [],
       ) ?? [],
     sessionStatus: runtime.sessionStatus,
     policy: runtime.policy,
-  })
-  if (result.kind === 'retry') return result.output
-  runtime.context.fragments.push(result.fragment)
-  runtime.searchTrace?.toolCalls.push(result.toolCall)
-  runtime.searchTrace?.toolResults.push(result.toolResult)
-  return result.output
+  });
+  if (result.kind === "retry") return result.output;
+  runtime.context.fragments.push(result.fragment);
+  runtime.searchTrace?.toolCalls.push(result.toolCall);
+  runtime.searchTrace?.toolResults.push(result.toolResult);
+  return result.output;
 }
 
 /** Aggregates per-call LLM telemetry into a compact trace payload for the playground inspector. */
@@ -270,17 +303,23 @@ export function createLlmTelemetrySummary(
   records: ChatCompletionTelemetry[],
   options: LlmRuntimeOptions = {},
 ): LlmTelemetrySummary {
-  const callBudget = options.callBudget ?? DEFAULT_LLM_CALL_BUDGET
-  const summary = records.reduce<Omit<LlmTelemetrySummary, 'inputCacheHitRatio' | 'warnings'>>(
+  const callBudget = options.callBudget ?? DEFAULT_LLM_CALL_BUDGET;
+  const summary = records.reduce<
+    Omit<LlmTelemetrySummary, "inputCacheHitRatio" | "warnings">
+  >(
     (summary, record) => ({
       model,
       calls: summary.calls + 1,
       callBudget,
-      inputCacheHitTokens: summary.inputCacheHitTokens + record.inputCacheHitTokens,
-      inputCacheMissTokens: summary.inputCacheMissTokens + record.inputCacheMissTokens,
+      inputCacheHitTokens:
+        summary.inputCacheHitTokens + record.inputCacheHitTokens,
+      inputCacheMissTokens:
+        summary.inputCacheMissTokens + record.inputCacheMissTokens,
       outputTokens: summary.outputTokens + record.outputTokens,
       totalTokens: summary.totalTokens + record.totalTokens,
-      estimatedCostCny: Number((summary.estimatedCostCny + record.estimatedCostCny).toFixed(12)),
+      estimatedCostCny: Number(
+        (summary.estimatedCostCny + record.estimatedCostCny).toFixed(12),
+      ),
       operations: [...summary.operations, record.operation],
     }),
     {
@@ -294,9 +333,11 @@ export function createLlmTelemetrySummary(
       estimatedCostCny: 0,
       operations: [],
     },
-  )
+  );
   const warnings =
-    summary.calls > callBudget ? [`llm_call_budget_exceeded: ${summary.calls}/${callBudget}`] : []
+    summary.calls > callBudget
+      ? [`llm_call_budget_exceeded: ${summary.calls}/${callBudget}`]
+      : [];
   return {
     ...summary,
     inputCacheHitRatio: calculateInputCacheHitRatio(
@@ -304,7 +345,7 @@ export function createLlmTelemetrySummary(
       summary.inputCacheMissTokens,
     ),
     warnings,
-  }
+  };
 }
 
 /**
@@ -314,19 +355,20 @@ export function createLlmTelemetrySummary(
  * toolLoopFn is always undefined.
  */
 export function createPlaygroundLlmRuntime(options: LlmRuntimeOptions = {}): {
-  mode: LlmRuntimeMode
-  sdkRunner: CustomerServiceSdkRunner
-  summary: () => LlmTelemetrySummary
+  mode: LlmRuntimeMode;
+  sdkRunner: CustomerServiceSdkRunner;
+  summary: () => LlmTelemetrySummary;
 } {
-  const env = readLlmEnv()
-  const records: ChatCompletionTelemetry[] = []
-  const callBudget = options.callBudget ?? DEFAULT_LLM_CALL_BUDGET
+  const env = readLlmEnv();
+  const records: ChatCompletionTelemetry[] = [];
+  const callBudget = options.callBudget ?? DEFAULT_LLM_CALL_BUDGET;
   if (!env.apiKey) {
-    throw new MissingLlmApiKeyError()
+    throw new MissingLlmApiKeyError();
   }
   return {
-    mode: 'agents-sdk',
+    mode: "agents-sdk",
     sdkRunner: createPlaygroundSdkRunner(records),
-    summary: () => createLlmTelemetrySummary(env.chatModel, records, { callBudget }),
-  }
+    summary: () =>
+      createLlmTelemetrySummary(env.chatModel, records, { callBudget }),
+  };
 }

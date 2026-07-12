@@ -9,4 +9,4 @@ conversationId: golden-store-contact-v1
 steps:
   - user: 你们店铺叫什么名字？电话是多少？
     expect:
-      contains: ['示例租衣店', '18800000000']
+      contains: ["示例租衣店", "18800000000"]

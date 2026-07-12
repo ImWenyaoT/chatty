@@ -11,13 +11,13 @@ steps:
   - user: 我想租黑色西装
   - user: ？
     expect:
-      containsAny: ['不好意思', '抱歉', '没说清楚', '不清楚', '没讲清楚']
-      notContains: ['下单']
+      containsAny: ["不好意思", "抱歉", "没说清楚", "不清楚", "没讲清楚"]
+      notContains: ["下单"]
       minScore: 6
   - user: 没听懂
     expect:
-      containsAny: ['不好意思', '抱歉', '没说清楚', '不清楚', '没讲清楚']
-      notContains: ['下单']
+      containsAny: ["不好意思", "抱歉", "没说清楚", "不清楚", "没讲清楚"]
+      notContains: ["下单"]
       # 连着没听懂，本轮必须换说法，不能和上一轮逐字复读
       notSameAsPrev: true
       minScore: 6

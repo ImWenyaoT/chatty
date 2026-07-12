@@ -12,5 +12,5 @@ steps:
   - user: 我想租黑色双排扣西装，5月9号到10号用，身高175 体重70kg
     expect:
       actionIn: [check_availability, recommend_size, answer_question]
-      notContains: ['胸围', '常穿', '几XL', '整套还是']
+      notContains: ["胸围", "常穿", "几XL", "整套还是"]
       minScore: 6

@@ -8,4 +8,4 @@ conversationId: golden-size-exchange-v1
 steps:
   - user: 衣服收到不合身能换吗？
     expect:
-      containsAny: ['免费补发', '更换一次']
+      containsAny: ["免费补发", "更换一次"]

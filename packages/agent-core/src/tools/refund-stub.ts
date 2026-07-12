@@ -1,4 +1,4 @@
-import type { JsonValue, RuntimeTool } from '@rental/shared'
+import type { JsonValue, RuntimeTool } from "@rental/shared";
 
 // High-risk tools (PRD §11: refund/compensation/order modification). These are
 // schema-only this round: approvalRequired is true so they can never auto-run,
@@ -11,8 +11,8 @@ import type { JsonValue, RuntimeTool } from '@rental/shared'
  */
 export class NotImplementedError extends Error {
   constructor(name: string) {
-    super(`tool not implemented this round: ${name}`)
-    this.name = 'NotImplementedError'
+    super(`tool not implemented this round: ${name}`);
+    this.name = "NotImplementedError";
   }
 }
 
@@ -22,17 +22,21 @@ export class NotImplementedError extends Error {
  */
 function notImplemented(name: string) {
   return async (): Promise<JsonValue> => {
-    throw new NotImplementedError(name)
-  }
+    throw new NotImplementedError(name);
+  };
 }
 
 // --- issue_refund(orderNo, amount, reason) ----------------------------------
 // approvalRequired:true + high risk => always needs human approval (PRD §11).
 
-export const issueRefundTool: RuntimeTool<Record<string, JsonValue>, JsonValue> = {
-  name: 'issue_refund',
-  description: 'Issue a refund/compensation on an order. Requires human approval.',
-  risk: 'high',
+export const issueRefundTool: RuntimeTool<
+  Record<string, JsonValue>,
+  JsonValue
+> = {
+  name: "issue_refund",
+  description:
+    "Issue a refund/compensation on an order. Requires human approval.",
+  risk: "high",
   approvalRequired: true,
-  execute: notImplemented('issue_refund'),
-}
+  execute: notImplemented("issue_refund"),
+};

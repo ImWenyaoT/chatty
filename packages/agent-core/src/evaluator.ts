@@ -7,18 +7,18 @@
  * boundary stays clean.
  */
 export interface EvaluationResult {
-  score: number
-  issues: string[]
-  suggestions: string[]
-  suggestedReply?: string
-  evaluatorModel: string
-  promptVersion: string
+  score: number;
+  issues: string[];
+  suggestions: string[];
+  suggestedReply?: string;
+  evaluatorModel: string;
+  promptVersion: string;
 }
 
 /** A single message in the history handed to the evaluator. */
 export interface EvaluationMessage {
-  role: string
-  content: string
+  role: string;
+  content: string;
 }
 
 /**
@@ -27,7 +27,10 @@ export interface EvaluationMessage {
  * agent-core depends on this interface, never on a concrete judge.
  */
 export interface Evaluator {
-  evaluate(history: EvaluationMessage[], reply: string): Promise<EvaluationResult>
+  evaluate(
+    history: EvaluationMessage[],
+    reply: string,
+  ): Promise<EvaluationResult>;
 }
 
 /**
@@ -39,16 +42,18 @@ export interface Evaluator {
  * memory can never feed the evaluator garbage. Returns [] for any non-array
  * input.
  */
-export function normalizeEvalHistory(recentMessages: unknown): EvaluationMessage[] {
-  if (!Array.isArray(recentMessages)) return []
-  const out: EvaluationMessage[] = []
+export function normalizeEvalHistory(
+  recentMessages: unknown,
+): EvaluationMessage[] {
+  if (!Array.isArray(recentMessages)) return [];
+  const out: EvaluationMessage[] = [];
   for (const entry of recentMessages) {
-    if (entry && typeof entry === 'object') {
-      const { role, content } = entry as Record<string, unknown>
-      if (typeof role === 'string' && typeof content === 'string') {
-        out.push({ role, content })
+    if (entry && typeof entry === "object") {
+      const { role, content } = entry as Record<string, unknown>;
+      if (typeof role === "string" && typeof content === "string") {
+        out.push({ role, content });
       }
     }
   }
-  return out
+  return out;
 }

@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto'
+import { timingSafeEqual } from "node:crypto";
 
 /**
  * Decides whether a playground/API request is authorized.
@@ -16,12 +16,12 @@ export function isPlaygroundAuthorized(
   providedKey: string | null | undefined,
   expectedKey: string | undefined,
 ): boolean {
-  if (!expectedKey) return true
-  if (typeof providedKey !== 'string' || providedKey.length === 0) return false
-  const provided = Buffer.from(providedKey)
-  const expected = Buffer.from(expectedKey)
+  if (!expectedKey) return true;
+  if (typeof providedKey !== "string" || providedKey.length === 0) return false;
+  const provided = Buffer.from(providedKey);
+  const expected = Buffer.from(expectedKey);
   // timingSafeEqual throws on length mismatch; a length difference is already a
   // non-match, so guard it (the length itself is not the secret).
-  if (provided.length !== expected.length) return false
-  return timingSafeEqual(provided, expected)
+  if (provided.length !== expected.length) return false;
+  return timingSafeEqual(provided, expected);
 }

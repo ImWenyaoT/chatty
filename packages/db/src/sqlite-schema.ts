@@ -200,11 +200,11 @@ CREATE TABLE IF NOT EXISTS knowledge_index_meta (
   source_hash TEXT NOT NULL,
   built_at TEXT NOT NULL
 );
-`
+`;
 
 /**
  * Returns the MVP SQLite schema without opening a database connection.
  */
 export function getSqliteSchemaSql() {
-  return sqliteSchemaSql
+  return sqliteSchemaSql;
 }

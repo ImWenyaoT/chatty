@@ -10,5 +10,5 @@ steps:
   - user: 就是当前链接这款吗
     expect:
       action: answer_question
-      containsAny: ['这款', '就是', '对']
-      notContains: ['胸围', '常穿']
+      containsAny: ["这款", "就是", "对"]
+      notContains: ["胸围", "常穿"]

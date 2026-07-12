@@ -1,12 +1,17 @@
-import type { NextConfig } from 'next'
+import type { NextConfig } from "next";
 
 const config: NextConfig = {
   // Transpile the internal workspace packages so their emitted TS (src/ imports)
   // works under Next's bundler without a pre-build step.
-  transpilePackages: ['@rental/shared', '@rental/db', '@rental/agent-core', '@rental/llm'],
+  transpilePackages: [
+    "@rental/shared",
+    "@rental/db",
+    "@rental/agent-core",
+    "@rental/llm",
+  ],
   // Native modules must stay external to the bundler.
   // - better-sqlite3: native addon.
-  serverExternalPackages: ['better-sqlite3'],
+  serverExternalPackages: ["better-sqlite3"],
   // serverExternalPackages alone is not enough here: @rental/db imports
   // better-sqlite3, and because @rental/db is in transpilePackages Next follows
   // that import INTO the server bundle, where the bare-specifier external matcher
@@ -23,14 +28,14 @@ const config: NextConfig = {
       ) =>
         ctx.request && /^better-sqlite3(\/.*)?$/.test(ctx.request)
           ? callback(null, `commonjs ${ctx.request}`)
-          : callback()
-      const existing = webpackConfig.externals
+          : callback();
+      const existing = webpackConfig.externals;
       webpackConfig.externals = Array.isArray(existing)
         ? [externalizeNativeAddon, ...existing]
-        : [externalizeNativeAddon, existing].filter(Boolean)
+        : [externalizeNativeAddon, existing].filter(Boolean);
     }
-    return webpackConfig
+    return webpackConfig;
   },
-}
+};
 
-export default config
+export default config;

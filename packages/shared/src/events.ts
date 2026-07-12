@@ -1,4 +1,4 @@
-import type { ConversationEvent } from './types.js'
+import type { ConversationEvent } from "./types.js";
 
 /**
  * 从 ConversationEvent 的 payload 中提取用户问题文本。
@@ -6,7 +6,7 @@ import type { ConversationEvent } from './types.js'
  * 收敛于此，保证所有调用方对同一事件永远读出同一问题。
  */
 export function readQuestionFromEvent(event: ConversationEvent): string {
-  if (typeof event.payload === 'string') return event.payload
-  const obj = event.payload as { question?: unknown } | null
-  return typeof obj?.question === 'string' ? obj.question : ''
+  if (typeof event.payload === "string") return event.payload;
+  const obj = event.payload as { question?: unknown } | null;
+  return typeof obj?.question === "string" ? obj.question : "";
 }

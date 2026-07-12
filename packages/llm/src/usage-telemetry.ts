@@ -5,13 +5,13 @@
 
 /** 一次模型调用的归一化遥测：cache 命中/未命中、输出 token 与人民币成本。 */
 export interface ChatCompletionTelemetry {
-  model: string
-  operation: 'complete' | 'completeJson' | 'completeWithTools' | 'agentsSdkRun'
-  inputCacheHitTokens: number
-  inputCacheMissTokens: number
-  outputTokens: number
-  totalTokens: number
-  estimatedCostCny: number
+  model: string;
+  operation: "complete" | "completeJson" | "completeWithTools" | "agentsSdkRun";
+  inputCacheHitTokens: number;
+  inputCacheMissTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  estimatedCostCny: number;
 }
 
 /**
@@ -22,33 +22,38 @@ export function estimateCostCny(
   model: string,
   usage: Pick<
     ChatCompletionTelemetry,
-    'inputCacheHitTokens' | 'inputCacheMissTokens' | 'outputTokens'
+    "inputCacheHitTokens" | "inputCacheMissTokens" | "outputTokens"
   >,
 ): number {
-  const rates = model.includes('flash')
+  const rates = model.includes("flash")
     ? { hit: 0.00000002, miss: 0.000001, output: 0.000002 }
-    : { hit: 0.000000025, miss: 0.000003, output: 0.000006 }
+    : { hit: 0.000000025, miss: 0.000003, output: 0.000006 };
   const cost =
     usage.inputCacheHitTokens * rates.hit +
     usage.inputCacheMissTokens * rates.miss +
-    usage.outputTokens * rates.output
-  return Number(cost.toFixed(12))
+    usage.outputTokens * rates.output;
+  return Number(cost.toFixed(12));
 }
 
 /** Agents SDK 的 Usage 形态（inputTokensDetails 为数组，含 cached_tokens）。 */
 export type AgentsSdkUsageLike = {
-  inputTokens?: number
-  outputTokens?: number
-  totalTokens?: number
-  inputTokensDetails?: Array<Record<string, number>> | Record<string, number>
-}
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  inputTokensDetails?: Array<Record<string, number>> | Record<string, number>;
+};
 
 /** 从 inputTokensDetails（数组或对象）累计 cache 命中 token 数。 */
-function readCachedTokens(details: AgentsSdkUsageLike['inputTokensDetails']): number {
+function readCachedTokens(
+  details: AgentsSdkUsageLike["inputTokensDetails"],
+): number {
   if (Array.isArray(details)) {
-    return details.reduce((sum, entry) => sum + (Number(entry?.cached_tokens) || 0), 0)
+    return details.reduce(
+      (sum, entry) => sum + (Number(entry?.cached_tokens) || 0),
+      0,
+    );
   }
-  return Number(details?.cached_tokens) || 0
+  return Number(details?.cached_tokens) || 0;
 }
 
 /**
@@ -59,14 +64,14 @@ export function agentsSdkUsageToTelemetry(
   model: string,
   usage: AgentsSdkUsageLike | undefined,
 ): ChatCompletionTelemetry {
-  const inputCacheHitTokens = readCachedTokens(usage?.inputTokensDetails)
-  const inputTokens = Number(usage?.inputTokens) || 0
-  const outputTokens = Number(usage?.outputTokens) || 0
-  const inputCacheMissTokens = Math.max(0, inputTokens - inputCacheHitTokens)
-  const totalTokens = Number(usage?.totalTokens) || inputTokens + outputTokens
+  const inputCacheHitTokens = readCachedTokens(usage?.inputTokensDetails);
+  const inputTokens = Number(usage?.inputTokens) || 0;
+  const outputTokens = Number(usage?.outputTokens) || 0;
+  const inputCacheMissTokens = Math.max(0, inputTokens - inputCacheHitTokens);
+  const totalTokens = Number(usage?.totalTokens) || inputTokens + outputTokens;
   return {
     model,
-    operation: 'agentsSdkRun',
+    operation: "agentsSdkRun",
     inputCacheHitTokens,
     inputCacheMissTokens,
     outputTokens,
@@ -76,5 +81,5 @@ export function agentsSdkUsageToTelemetry(
       inputCacheMissTokens,
       outputTokens,
     }),
-  }
+  };
 }

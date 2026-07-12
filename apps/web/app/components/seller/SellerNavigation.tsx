@@ -1,9 +1,12 @@
-import Link from 'next/link'
-import { SELLER_WORKSPACE_ROUTES, type SellerWorkspaceRouteKey } from './sellerWorkspaceRoutes'
+import Link from "next/link";
+import {
+  SELLER_WORKSPACE_ROUTES,
+  type SellerWorkspaceRouteKey,
+} from "./sellerWorkspaceRoutes";
 
 type SellerNavigationProps = {
-  active: SellerWorkspaceRouteKey
-}
+  active: SellerWorkspaceRouteKey;
+};
 
 /** Renders the seller-side route switcher from the shared Seller Workspace route catalog. */
 export function SellerNavigation({ active }: SellerNavigationProps) {
@@ -16,8 +19,8 @@ export function SellerNavigation({ active }: SellerNavigationProps) {
       <div>
         {SELLER_WORKSPACE_ROUTES.map((item) => (
           <Link
-            aria-current={active === item.key ? 'page' : undefined}
-            className={active === item.key ? 'active' : undefined}
+            aria-current={active === item.key ? "page" : undefined}
+            className={active === item.key ? "active" : undefined}
             href={item.href}
             key={item.key}
           >
@@ -26,5 +29,5 @@ export function SellerNavigation({ active }: SellerNavigationProps) {
         ))}
       </div>
     </nav>
-  )
+  );
 }

@@ -5,6 +5,5 @@ coverage
 pnpm-lock.yaml
 *.db
 data
-rag-service/data
 *.svg
 *.md

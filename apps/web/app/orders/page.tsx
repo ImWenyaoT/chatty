@@ -1,40 +1,55 @@
-'use client'
+"use client";
 
-import { useMemo, useState } from 'react'
-import { SellerNavigation } from '../components/seller/SellerNavigation'
-import { SELLER_ORDERS, type SellerOrder } from '../components/seller/orderData'
+import { useMemo, useState } from "react";
+import { SellerNavigation } from "../components/seller/SellerNavigation";
+import {
+  SELLER_ORDERS,
+  type SellerOrder,
+} from "../components/seller/orderData";
 
-const FULFILLMENT_STEPS = ['录单', '复核', '备货', '发货', '签收', '归还', '完成']
+const FULFILLMENT_STEPS = [
+  "录单",
+  "复核",
+  "备货",
+  "发货",
+  "签收",
+  "归还",
+  "完成",
+];
 
 /** Picks the active fulfillment step for the order management progress board. */
-function stepState(order: SellerOrder, index: number): 'done' | 'active' | 'todo' {
+function stepState(
+  order: SellerOrder,
+  index: number,
+): "done" | "active" | "todo" {
   const activeIndex =
-    order.status === '待复核'
+    order.status === "待复核"
       ? 1
-      : order.status === '待发货'
+      : order.status === "待发货"
         ? 2
-        : order.status === '租赁中'
+        : order.status === "租赁中"
           ? 5
-          : 6
-  if (index < activeIndex) return 'done'
-  if (index === activeIndex) return 'active'
-  return 'todo'
+          : 6;
+  if (index < activeIndex) return "done";
+  if (index === activeIndex) return "active";
+  return "todo";
 }
 
 /** Restores the seller order-management page as a separate route from the chat console. */
 export default function OrdersPage() {
-  const [query, setQuery] = useState('')
-  const [selectedId, setSelectedId] = useState(SELLER_ORDERS[0].id)
-  const selected = SELLER_ORDERS.find((order) => order.id === selectedId) ?? SELLER_ORDERS[0]
+  const [query, setQuery] = useState("");
+  const [selectedId, setSelectedId] = useState(SELLER_ORDERS[0].id);
+  const selected =
+    SELLER_ORDERS.find((order) => order.id === selectedId) ?? SELLER_ORDERS[0];
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return SELLER_ORDERS
+    const q = query.trim().toLowerCase();
+    if (!q) return SELLER_ORDERS;
     return SELLER_ORDERS.filter((order) =>
       [order.id, order.customer, order.product, order.status].some((value) =>
         value.toLowerCase().includes(q),
       ),
-    )
-  }, [query])
+    );
+  }, [query]);
 
   return (
     <main className="orders-page" id="main-content">
@@ -55,14 +70,14 @@ export default function OrdersPage() {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
-            <button type="button" onClick={() => setQuery('')}>
+            <button type="button" onClick={() => setQuery("")}>
               重置
             </button>
           </div>
           <div className="order-row-list">
             {filtered.map((order) => (
               <button
-                className={`order-row ${order.id === selected.id ? 'active' : ''}`}
+                className={`order-row ${order.id === selected.id ? "active" : ""}`}
                 key={order.id}
                 type="button"
                 onClick={() => setSelectedId(order.id)}
@@ -112,7 +127,9 @@ export default function OrdersPage() {
             <div>
               <span>AI 处理</span>
               <strong>
-                {selected.automation.mode === 'ai_resolved' ? '自动推进' : '人工复核'}
+                {selected.automation.mode === "ai_resolved"
+                  ? "自动推进"
+                  : "人工复核"}
               </strong>
             </div>
             <div>
@@ -175,5 +192,5 @@ export default function OrdersPage() {
         </section>
       </div>
     </main>
-  )
+  );
 }

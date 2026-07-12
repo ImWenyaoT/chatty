@@ -1,9 +1,9 @@
-import OpenAI from 'openai'
+import OpenAI from "openai";
 
 export interface LlmEnvConfig {
-  apiKey: string
-  baseURL: string | undefined
-  chatModel: string
+  apiKey: string;
+  baseURL: string | undefined;
+  chatModel: string;
 }
 
 /**
@@ -19,26 +19,28 @@ export interface LlmEnvConfig {
  */
 export function readLlmEnv(env: NodeJS.ProcessEnv = process.env): LlmEnvConfig {
   return {
-    apiKey: env.OPENAI_API_KEY ?? '',
-    baseURL: env.OPENAI_BASE_URL || 'https://api.deepseek.com/beta',
+    apiKey: env.OPENAI_API_KEY ?? "",
+    baseURL: env.OPENAI_BASE_URL || "https://api.deepseek.com/beta",
     chatModel: normalizeChatModel(env.CHAT_MODEL),
-  }
+  };
 }
 
 /**
  * Builds the shared OpenAI-format client for DeepSeek. Re-exported so callers
  * do not depend on the `openai` package directly.
  */
-export function createOpenAiClientFromEnv(env: NodeJS.ProcessEnv = process.env): OpenAI {
-  const { apiKey, baseURL } = readLlmEnv(env)
-  return new OpenAI({ apiKey, baseURL })
+export function createOpenAiClientFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): OpenAI {
+  const { apiKey, baseURL } = readLlmEnv(env);
+  return new OpenAI({ apiKey, baseURL });
 }
 
 /** Keeps Chatty on DeepSeek v4 pro even when an alias or old env points at flash. */
 function normalizeChatModel(model: string | undefined): string {
-  if (!model) return 'deepseek-v4-pro'
+  if (!model) return "deepseek-v4-pro";
   if (/^(deepseek-v4-flash|deepseek-chat|deepseek-reasoner)$/i.test(model)) {
-    return 'deepseek-v4-pro'
+    return "deepseek-v4-pro";
   }
-  return model
+  return model;
 }

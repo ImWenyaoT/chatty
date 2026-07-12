@@ -15,11 +15,11 @@ conversationId: golden-happy-path-v1
 steps:
   - user: 你好 在吗
     expect:
-      contains: ['在']
+      contains: ["在"]
 
   - user: 我想租这款黑色西装
     expect:
-      containsAny: ['日期', '时间', '几号', '档期', '什么时候', '身高']
+      containsAny: ["日期", "时间", "几号", "档期", "什么时候", "身高"]
 
   - user: 4月29号到30号用
 
@@ -27,6 +27,6 @@ steps:
 
   - user: 可以下单吗
     expect:
-      contains: ['下单']
-      notContains: ['电话', '到店']
+      contains: ["下单"]
+      notContains: ["电话", "到店"]
       minScore: 6

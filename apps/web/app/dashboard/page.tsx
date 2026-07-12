@@ -1,32 +1,34 @@
-import Link from 'next/link'
-import { SellerNavigation } from '../components/seller/SellerNavigation'
-import { SELLER_ORDERS } from '../components/seller/orderData'
-import { summarizeAutomationImpact } from '../components/seller/productMetrics'
-import { getRepos } from '@/lib/db'
-import { JobActions } from './JobActions'
-import { buildOperationsControlView } from '@/lib/control-plane-read-model'
+import Link from "next/link";
+import { SellerNavigation } from "../components/seller/SellerNavigation";
+import { SELLER_ORDERS } from "../components/seller/orderData";
+import { summarizeAutomationImpact } from "../components/seller/productMetrics";
+import { getRepos } from "@/lib/db";
+import { JobActions } from "./JobActions";
+import { buildOperationsControlView } from "@/lib/control-plane-read-model";
 
 // 复盘视图以演示会话/知识面板为主，但会读取 trace review 汇总，展示真实任务
 // 反馈闭环的最小产品指标。质量回归仍由根级 `pnpm eval` 的朴素金标回归承担。
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 const KNOWLEDGE_BUCKETS = [
-  { label: '规则政策', value: 12, hint: '租赁、押金、物流、退换' },
-  { label: '商品档案', value: 8, hint: '西装、礼服、尺码表、图片说明' },
-  { label: '历史问答', value: 24, hint: '客服沉淀的常见回复' },
-]
+  { label: "规则政策", value: 12, hint: "租赁、押金、物流、退换" },
+  { label: "商品档案", value: 8, hint: "西装、礼服、尺码表、图片说明" },
+  { label: "历史问答", value: 24, hint: "客服沉淀的常见回复" },
+];
 
 /** 复盘视图：卖家会话、知识覆盖与 trace review 总览，实时问答在 Playground。 */
 export default function DashboardPage() {
-  const selected = SELLER_ORDERS[0]
-  const reviewSummary = getRepos().reviews.summarize()
-  const automationSummary = summarizeAutomationImpact(SELLER_ORDERS)
-  const operations = buildOperationsControlView(getRepos().control)
-  const jobs = operations.jobs.slice(0, 12)
-  const outbox = operations.outbox.slice(0, 12)
+  const selected = SELLER_ORDERS[0];
+  const reviewSummary = getRepos().reviews.summarize();
+  const automationSummary = summarizeAutomationImpact(SELLER_ORDERS);
+  const operations = buildOperationsControlView(getRepos().control);
+  const jobs = operations.jobs.slice(0, 12);
+  const outbox = operations.outbox.slice(0, 12);
   const topTags = Object.entries(reviewSummary.tags)
-    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
-    .slice(0, 3)
+    .sort(
+      (left, right) => right[1] - left[1] || left[0].localeCompare(right[0]),
+    )
+    .slice(0, 3);
 
   return (
     <main className="seller-dashboard" id="main-content">
@@ -129,8 +131,8 @@ export default function DashboardPage() {
               <span>标签</span>
               <strong>
                 {topTags.length
-                  ? topTags.map(([tag, count]) => `${tag} ${count}`).join(' / ')
-                  : '暂无'}
+                  ? topTags.map(([tag, count]) => `${tag} ${count}`).join(" / ")
+                  : "暂无"}
               </strong>
             </div>
           </div>
@@ -170,15 +172,24 @@ export default function DashboardPage() {
                     <strong>{job.type}</strong>
                     <span>{job.status}</span>
                   </div>
-                  <p>{job.conversationId ?? job.customerId ?? 'global'}</p>
+                  <p>{job.conversationId ?? job.customerId ?? "global"}</p>
                   <small>
-                    attempt {job.attempts}/{job.maxAttempts} · due {job.dueAt} · lease{' '}
-                    {job.leaseOwner ?? 'none'} · heartbeat {job.heartbeatAt ?? 'unknown'}
-                    {job.retryDelayMs !== undefined ? ` · retry in ${job.retryDelayMs}ms` : ''}
-                    {job.lastError ? ` · ${job.lastError}` : ''}
+                    attempt {job.attempts}/{job.maxAttempts} · due {job.dueAt} ·
+                    lease {job.leaseOwner ?? "none"} · heartbeat{" "}
+                    {job.heartbeatAt ?? "unknown"}
+                    {job.retryDelayMs !== undefined
+                      ? ` · retry in ${job.retryDelayMs}ms`
+                      : ""}
+                    {job.lastError ? ` · ${job.lastError}` : ""}
                   </small>
-                  <p>事件：{job.events.map((event) => event.type).join(' → ') || '暂无事件证据'}</p>
-                  <p>取消：{job.status === 'cancelled' ? '已取消' : '无取消证据'}</p>
+                  <p>
+                    事件：
+                    {job.events.map((event) => event.type).join(" → ") ||
+                      "暂无事件证据"}
+                  </p>
+                  <p>
+                    取消：{job.status === "cancelled" ? "已取消" : "无取消证据"}
+                  </p>
                   <JobActions jobId={job.id} status={job.status} />
                 </article>
               ))
@@ -188,7 +199,10 @@ export default function DashboardPage() {
           </div>
         </section>
       </section>
-      <section className="dashboard-wide-panel" aria-label="Control Plane 健康指标">
+      <section
+        className="dashboard-wide-panel"
+        aria-label="Control Plane 健康指标"
+      >
         <section className="dashboard-panel">
           <div className="dashboard-panel-head">
             <h2>Control Plane 健康指标</h2>
@@ -202,7 +216,8 @@ export default function DashboardPage() {
             <div>
               <span>Compaction</span>
               <strong>
-                {operations.metrics.compactions} / failed {operations.metrics.compactionFailures}
+                {operations.metrics.compactions} / failed{" "}
+                {operations.metrics.compactionFailures}
               </strong>
             </div>
             <div>
@@ -213,7 +228,7 @@ export default function DashboardPage() {
               <span>Retry rate</span>
               <strong>
                 {operations.metrics.retryRate === null
-                  ? '未知（无 attempt）'
+                  ? "未知（无 attempt）"
                   : `${(operations.metrics.retryRate * 100).toFixed(1)}%`}
               </strong>
             </div>
@@ -221,7 +236,7 @@ export default function DashboardPage() {
               <span>Follow-up latency</span>
               <strong>
                 {operations.metrics.followupLatencyMs === null
-                  ? '未知（无已完成 follow-up）'
+                  ? "未知（无已完成 follow-up）"
                   : `${Math.round(operations.metrics.followupLatencyMs)} ms`}
               </strong>
             </div>
@@ -229,13 +244,15 @@ export default function DashboardPage() {
               <span>Outbox delivery</span>
               <strong>
                 {outbox.length
-                  ? outbox.map((message) => `${message.status}:${message.id}`).join(' / ')
-                  : '暂无投递记录'}
+                  ? outbox
+                      .map((message) => `${message.status}:${message.id}`)
+                      .join(" / ")
+                  : "暂无投递记录"}
               </strong>
             </div>
           </div>
         </section>
       </section>
     </main>
-  )
+  );
 }
