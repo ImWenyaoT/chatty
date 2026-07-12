@@ -19,10 +19,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  CUSTOMER_SERVICE_COMPOSE_INSTRUCTIONS,
+  CUSTOMER_SERVICE_SDK_INSTRUCTIONS,
+  createCustomerServiceSdkRunner,
   createDefaultToolRegistry,
-  type CustomerServiceModelFn,
-  type CustomerServiceToolLoopFn,
+  type CustomerServiceSdkRunner,
   runCustomerServiceHarnessStep,
   type ToolRegistry,
 } from "@rental/agent-core";
@@ -35,8 +35,8 @@ import {
   syncKnowledgeIndex,
 } from "@rental/db";
 import {
-  createChatCompletionsAdapterFromEnv,
-  parseJsonObject,
+  createAgentsSdkCustomerServiceTextRunner,
+  createDeepSeekAgentsModelFromEnv,
   readLlmEnv,
 } from "@rental/llm";
 import type { ConversationEvent } from "@rental/shared";
@@ -206,8 +206,7 @@ interface HarnessSession {
   db: Db;
   memory: MemoryRepository;
   registry: ToolRegistry;
-  modelFn?: CustomerServiceModelFn;
-  toolLoopFn?: CustomerServiceToolLoopFn;
+  sdkRunner?: CustomerServiceSdkRunner;
   conversationId: string;
   /** 本场景累积的对话（judge 的历史切片来源，口径含当前轮）。 */
   history: Array<{ role: string; content: string }>;
@@ -215,36 +214,30 @@ interface HarnessSession {
 }
 
 /**
- * 构建 harness compose 的模型注入（语义与 apps/web/lib/llm.ts 的
- * createComposeModelFn/createComposeToolLoopFn 一致；eval 不跨包引 Next app
- * 内部文件，这里内联同款包装）：JSON 宽容解析后再字符串化，完全不可解析时
- * 抛错由 compose 落回确定性 composer。无 OPENAI_API_KEY 时返回空对象，
- * harness 落确定性 composer（报告里自然全 FAIL，不伪装成可评测）。
+ * 构建 harness 生产 lane 注入：eval 与 apps/web 复用同一
+ * createCustomerServiceSdkRunner（DeepSeek Agents SDK 工具循环 + 宽容文本回复，
+ * 非 outputType——DeepSeek 两端点都不支持 json_schema，结构化输出不收敛）。使金标
+ * 直接护航生产路径。无 OPENAI_API_KEY 时返回 undefined，harness 落确定性 composer。
  */
-function createHarnessModelFns(): {
-  modelFn?: CustomerServiceModelFn;
-  toolLoopFn?: CustomerServiceToolLoopFn;
-} {
-  if (!readLlmEnv().apiKey) return {};
-  const adapter = createChatCompletionsAdapterFromEnv();
-  return {
-    modelFn: async (prompt) =>
-      JSON.stringify(
-        await adapter.completeJson<Record<string, unknown>>([
-          { role: "system", content: CUSTOMER_SERVICE_COMPOSE_INSTRUCTIONS },
-          { role: "user", content: prompt },
-        ]),
-      ),
-    toolLoopFn: async (messages, tools) => {
-      const reply = await adapter.completeWithTools(messages, tools);
-      if ("toolCalls" in reply) return reply;
-      return {
-        text: JSON.stringify(
-          parseJsonObject<Record<string, unknown>>(reply.text),
-        ),
-      };
-    },
-  };
+function createHarnessSdkRunner(): CustomerServiceSdkRunner | undefined {
+  const env = readLlmEnv();
+  if (!env.apiKey) return undefined;
+  const model = createDeepSeekAgentsModelFromEnv();
+  return createCustomerServiceSdkRunner(
+    (opts) =>
+      createAgentsSdkCustomerServiceTextRunner({
+        instructions: opts.instructions,
+        input: opts.input,
+        model,
+        modelName: env.chatModel,
+        tools: opts.tools,
+        toolChoice: opts.toolChoice,
+        toolUseBehavior: opts.toolUseBehavior,
+        maxTurns: opts.maxTurns,
+        signal: opts.signal,
+      }),
+    { modelName: env.chatModel },
+  );
 }
 
 /** 打开一个场景会话：删除重建独立 tmp SQLite，同步知识索引，装配 repos。 */
@@ -262,7 +255,7 @@ async function openHarnessSession(scenario: Scenario): Promise<HarnessSession> {
     db,
     memory: createMemoryRepository(db),
     registry: createDefaultToolRegistry(createKnowledgeRepository(db)),
-    ...createHarnessModelFns(),
+    sdkRunner: createHarnessSdkRunner(),
     conversationId:
       scenario.conversationId ??
       `${scenario.customerId}:${scenario.productId ?? "general"}`,
@@ -300,8 +293,7 @@ async function sendTurn(
     memory: snapshot,
     registry: session.registry,
     sessionStatus: "active",
-    modelFn: session.modelFn,
-    toolLoopFn: session.toolLoopFn,
+    sdkRunner: session.sdkRunner,
   });
   const answer = harness.step.reply ?? "";
   // route.ts 步骤 5b 同款连续性写入：只追加消息滑窗，不提升 profile 字段
@@ -588,9 +580,9 @@ async function main() {
     return;
   }
 
-  // prompt 版本追溯：harness 的 prompt 本体是 compose 指令常量，取其内容哈希前 6 位。
+  // prompt 版本追溯：harness 生产 lane 的 prompt 本体是 SDK 指令常量，取其内容哈希前 6 位。
   const promptVersion = `harness-${createHash("sha256")
-    .update(CUSTOMER_SERVICE_COMPOSE_INSTRUCTIONS)
+    .update(CUSTOMER_SERVICE_SDK_INSTRUCTIONS)
     .digest("hex")
     .slice(0, 6)}`;
 

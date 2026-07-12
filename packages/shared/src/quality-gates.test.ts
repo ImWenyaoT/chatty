@@ -181,10 +181,12 @@ test("agent instructions retain the current issue-tracker and pull-request contr
 
 test("development method keeps implementation inside the reference bounds", () => {
   assert.match(DEVELOPMENT_METHOD_RULE, /jd\.md/);
-  assert.match(DEVELOPMENT_METHOD_RULE, /codex/);
-  assert.doesNotMatch(DEVELOPMENT_METHOD_RULE, /openclaw|claude-code/);
+  assert.match(DEVELOPMENT_METHOD_RULE, /claude-code/);
+  assert.doesNotMatch(DEVELOPMENT_METHOD_RULE, /openclaw|codex/);
 
-  assert.deepEqual(REFERENCE_DEBUGGING_METHOD.allowedReferences, ["codex"]);
+  assert.deepEqual(REFERENCE_DEBUGGING_METHOD.allowedReferences, [
+    "claude-code",
+  ]);
   assert.equal(REFERENCE_DEBUGGING_METHOD.requiresSingleReferenceChoice, true);
   assert.equal(REFERENCE_DEBUGGING_METHOD.requiresSmallestReproduction, true);
 });

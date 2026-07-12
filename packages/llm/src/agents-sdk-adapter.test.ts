@@ -102,3 +102,83 @@ test("DeepSeek transport maps SDK json_schema output to supported json_object", 
     type: "json_object",
   });
 });
+
+test("DeepSeek transport rewrites json_schema even when the URL is a URL object", async () => {
+  let capturedBody = "";
+  const compatibleFetch = createDeepSeekCompatibleFetch(
+    async (_input, init) => {
+      capturedBody = String(init?.body ?? "");
+      return new Response("{}", { status: 200 });
+    },
+  );
+  await compatibleFetch(new URL("https://api.deepseek.com/chat/completions"), {
+    method: "POST",
+    body: JSON.stringify({
+      response_format: { type: "json_schema", json_schema: { name: "o" } },
+    }),
+  });
+  assert.equal(JSON.parse(capturedBody).response_format.type, "json_object");
+});
+
+test("DeepSeek transport passes non chat-completions requests through untouched", async () => {
+  let sawUrl = "";
+  let capturedBody = "";
+  const compatibleFetch = createDeepSeekCompatibleFetch(async (input, init) => {
+    sawUrl = String(input);
+    capturedBody = String(init?.body ?? "");
+    return new Response("{}", { status: 200 });
+  });
+  const body = JSON.stringify({
+    response_format: { type: "json_schema", json_schema: { name: "o" } },
+  });
+  await compatibleFetch("https://api.deepseek.com/models", {
+    method: "POST",
+    body,
+  });
+  // 非 /chat/completions 端点不改写：json_schema 原样透传。
+  assert.equal(sawUrl, "https://api.deepseek.com/models");
+  assert.equal(JSON.parse(capturedBody).response_format.type, "json_schema");
+});
+
+test("DeepSeek transport leaves non-json_schema response_format unchanged", async () => {
+  let capturedBody = "";
+  const compatibleFetch = createDeepSeekCompatibleFetch(
+    async (_input, init) => {
+      capturedBody = String(init?.body ?? "");
+      return new Response("{}", { status: 200 });
+    },
+  );
+  await compatibleFetch("https://api.deepseek.com/chat/completions", {
+    method: "POST",
+    body: JSON.stringify({ response_format: { type: "json_object" } }),
+  });
+  assert.equal(JSON.parse(capturedBody).response_format.type, "json_object");
+});
+
+test("DeepSeek transport passes through a body that is not valid JSON", async () => {
+  let capturedBody = "";
+  const compatibleFetch = createDeepSeekCompatibleFetch(
+    async (_input, init) => {
+      capturedBody = String(init?.body ?? "");
+      return new Response("{}", { status: 200 });
+    },
+  );
+  await compatibleFetch("https://api.deepseek.com/chat/completions", {
+    method: "POST",
+    body: "not-json",
+  });
+  // 坏 body 不抛错，原样透传交给底层 fetch。
+  assert.equal(capturedBody, "not-json");
+});
+
+test("DeepSeek transport passes through requests without a string body", async () => {
+  let called = false;
+  const compatibleFetch = createDeepSeekCompatibleFetch(async () => {
+    called = true;
+    return new Response("{}", { status: 200 });
+  });
+  await compatibleFetch("https://api.deepseek.com/chat/completions", {
+    method: "GET",
+  });
+  assert.equal(called, true);
+});

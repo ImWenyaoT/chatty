@@ -58,7 +58,7 @@ export function projectContext(input: {
   };
 }
 
-/** Creates a Codex-style context checkpoint before the next model sample crosses the budget. */
+/** Creates a Claude-Code-style context checkpoint before the next model sample crosses the budget. */
 export async function compactContextIfNeeded(input: {
   control: ControlPlaneRepository;
   snapshot: MemorySnapshot;

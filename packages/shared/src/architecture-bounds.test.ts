@@ -53,7 +53,7 @@ function listSourceFiles(dir: string): string[] {
 test("agent complexity bounds stay between the current jd and reference agent source code", () => {
   assert.deepEqual(AGENT_COMPLEXITY_BOUNDS.lowerBound, ["docs/jd.md"]);
   assert.deepEqual(AGENT_COMPLEXITY_BOUNDS.upperBound, [
-    "/Users/edward/Documents/oss/codex",
+    "/home/ail510/tian_wenyao/projects/oss/claude_code",
   ]);
 });
 
@@ -71,9 +71,9 @@ test("architecture complexity policy prefers deletion over optimizing out-of-bou
 });
 
 test("only explicit reference agents can be used in architecture design choices", () => {
-  assert.ok(isAllowedArchitectureReference("codex"));
+  assert.ok(isAllowedArchitectureReference("claude-code"));
   assert.equal(isAllowedArchitectureReference("openclaw"), false);
-  assert.equal(isAllowedArchitectureReference("claude-code"), false);
+  assert.equal(isAllowedArchitectureReference("codex"), false);
   assert.equal(isAllowedArchitectureReference("opencode"), false);
   assert.equal(isAllowedArchitectureReference("hermes"), false);
   assert.equal(isAllowedArchitectureReference("pi"), false);
@@ -105,24 +105,24 @@ test("each documented agent architecture topic declares exactly one primary refe
   ]);
 
   const byTopic = getPrimaryReferenceByTopic();
-  assert.equal(byTopic["task scheduling 拆分"], "codex");
-  assert.equal(byTopic["如何实现 multi agent"], "codex");
-  assert.equal(byTopic["loop 和流程控制"], "codex");
-  assert.equal(byTopic["如何更好控制整个 loop 和 workflow"], "codex");
-  assert.equal(byTopic["如何做可视化、可观测性与 terminal UI"], "codex");
-  assert.equal(byTopic["input 拼接 prompt"], "codex");
-  assert.equal(byTopic["如何实现 long-term memory"], "codex");
-  assert.equal(byTopic["如何实现 skills 和 plugins"], "codex");
-  assert.equal(byTopic["如何做好 context auto compression"], "codex");
-  assert.equal(byTopic["output parser"], "codex");
-  assert.equal(byTopic["执行器 executor"], "codex");
-  assert.equal(byTopic["如何设计可以自由配置的 mcp"], "codex");
-  assert.equal(byTopic["如何做好 eval 和自动化测试"], "codex");
-  assert.equal(byTopic["terminal 执行"], "codex");
-  assert.equal(byTopic["如何控制 sandbox 环境"], "codex");
-  assert.equal(byTopic["如何管理 background tasks"], "codex");
-  assert.equal(byTopic["terminal 读 output"], "codex");
-  assert.equal(byTopic["基本 file I/O（读、写、搜）"], "codex");
+  assert.equal(byTopic["task scheduling 拆分"], "claude-code");
+  assert.equal(byTopic["如何实现 multi agent"], "claude-code");
+  assert.equal(byTopic["loop 和流程控制"], "claude-code");
+  assert.equal(byTopic["如何更好控制整个 loop 和 workflow"], "claude-code");
+  assert.equal(byTopic["如何做可视化、可观测性与 terminal UI"], "claude-code");
+  assert.equal(byTopic["input 拼接 prompt"], "claude-code");
+  assert.equal(byTopic["如何实现 long-term memory"], "claude-code");
+  assert.equal(byTopic["如何实现 skills 和 plugins"], "claude-code");
+  assert.equal(byTopic["如何做好 context auto compression"], "claude-code");
+  assert.equal(byTopic["output parser"], "claude-code");
+  assert.equal(byTopic["执行器 executor"], "claude-code");
+  assert.equal(byTopic["如何设计可以自由配置的 mcp"], "claude-code");
+  assert.equal(byTopic["如何做好 eval 和自动化测试"], "claude-code");
+  assert.equal(byTopic["terminal 执行"], "claude-code");
+  assert.equal(byTopic["如何控制 sandbox 环境"], "claude-code");
+  assert.equal(byTopic["如何管理 background tasks"], "claude-code");
+  assert.equal(byTopic["terminal 读 output"], "claude-code");
+  assert.equal(byTopic["基本 file I/O（读、写、搜）"], "claude-code");
 });
 
 test("new jd capability review declares one allowed primary reference per capability", () => {
@@ -141,16 +141,19 @@ test("new jd capability review declares one allowed primary reference per capabi
   ]);
 
   const byTopic = getPrimaryReferenceByJdCapability();
-  assert.equal(byTopic["LLM API 与 KV Cache"], "codex");
-  assert.equal(byTopic["Agent Loop 与 Tool Use"], "codex");
-  assert.equal(byTopic["Reasoning 与 Planning"], "codex");
-  assert.equal(byTopic["Skills 与 MCP"], "codex");
-  assert.equal(byTopic.Memory, "codex");
-  assert.equal(byTopic["Subagent 与 Multi-Agent"], "codex");
-  assert.equal(byTopic["Prompt / Context / Harness Engineering"], "codex");
-  assert.equal(byTopic.评测基准与数据标注, "codex");
-  assert.equal(byTopic.真实任务反馈与产品指标, "codex");
-  assert.equal(byTopic["UI/UX 与 demo 原型"], "codex");
+  assert.equal(byTopic["LLM API 与 KV Cache"], "claude-code");
+  assert.equal(byTopic["Agent Loop 与 Tool Use"], "claude-code");
+  assert.equal(byTopic["Reasoning 与 Planning"], "claude-code");
+  assert.equal(byTopic["Skills 与 MCP"], "claude-code");
+  assert.equal(byTopic.Memory, "claude-code");
+  assert.equal(byTopic["Subagent 与 Multi-Agent"], "claude-code");
+  assert.equal(
+    byTopic["Prompt / Context / Harness Engineering"],
+    "claude-code",
+  );
+  assert.equal(byTopic.评测基准与数据标注, "claude-code");
+  assert.equal(byTopic.真实任务反馈与产品指标, "claude-code");
+  assert.equal(byTopic["UI/UX 与 demo 原型"], "claude-code");
 });
 
 test("deepseek-first harness compatibility does not assume OpenAI-only model surfaces", () => {

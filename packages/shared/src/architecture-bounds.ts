@@ -1,4 +1,4 @@
-export type ArchitectureReference = "codex";
+export type ArchitectureReference = "claude-code";
 
 export type AgentArchitectureTopic =
   | "task scheduling 拆分"
@@ -98,12 +98,12 @@ export const ARCHITECTURE_COMPLEXITY_POLICY = {
   target: "stay-inside-bounds",
   lowerBoundAction: "raise-to-jd-and-prd",
   upperBoundAction: "delete-before-optimizing",
-  rule: "低于新版 jd.md 的能力要补到下限；超出 OpenClaw/Codex/Claude Code 区间且不能服务客服 harness 的实现先删除，不做优化。",
+  rule: "低于新版 jd.md 的能力要补到下限；超出 Claude Code 区间且不能服务客服 harness 的实现先删除，不做优化。",
 } as const;
 
 export const AGENT_COMPLEXITY_BOUNDS = {
   lowerBound: ["docs/jd.md"],
-  upperBound: ["/Users/edward/Documents/oss/codex"],
+  upperBound: ["/home/ail510/tian_wenyao/projects/oss/claude_code"],
 } as const;
 
 export const RETRIEVAL_HARNESS_STRATEGY: RetrievalHarnessStrategy = {
@@ -139,106 +139,111 @@ export const AGENT_ARCHITECTURE_REFERENCE_CHOICES: readonly AgentArchitectureRef
   [
     {
       topic: "task scheduling 拆分",
-      primaryReference: "codex",
+      primaryReference: "claude-code",
       rationale:
-        "以 Codex 的 task -> tool-loop 边界作为主参考，Chatty 收敛为客服单轮窄任务。",
+        "以 Claude Code 的 AgentDefinition（收窄工具池 + 独立 maxTurns/toolChoice/系统提示 的递归 query）作为 run policy 落地形态主参考；Chatty 收敛为客服单轮窄任务。",
     },
     {
       topic: "如何实现 multi agent",
-      primaryReference: "codex",
+      primaryReference: "claude-code",
       rationale:
-        "Codex 的主 agent 管理 subagent 是最接近 task scheduling 拆分的参考实现。",
+        "Claude Code 的 subagent = 派生 scoped context + 按 allowedTools 收窄权限 的递归 query（runAgent.ts）是最贴近 task scheduling 拆分的参考；Chatty 保持同进程单层。",
     },
     {
       topic: "loop 和流程控制",
-      primaryReference: "codex",
+      primaryReference: "claude-code",
       rationale:
-        "以 Codex 的 bounded tool-call loop、cancel、steering 和 traceable turn 作为主参考。",
+        "以 Claude Code query loop 的 async generator + 不可变 State 快照 + 命名 transition/return reason（query.ts）作为有界循环主参考。",
     },
     {
       topic: "如何更好控制整个 loop 和 workflow",
-      primaryReference: "codex",
-      rationale: "Codex 对 loop 边界、中断、转向、收尾和审批的控制面最完整。",
+      primaryReference: "claude-code",
+      rationale:
+        "Claude Code 用命名 transition.reason 显式重入 + maxTurns 单点强制 + Stop hook 收尾，作为 loop/workflow 控制面主参考。",
     },
     {
       topic: "如何做可视化、可观测性与 terminal UI",
-      primaryReference: "codex",
-      rationale: "Codex 的 typed event stream 和 TUI 渲染是可观测性的主参考。",
+      primaryReference: "claude-code",
+      rationale:
+        "Claude Code 循环 yield 的 typed 事件流 + cost-tracker 累加聚合是可观测性主参考；Chatty 无 TUI，只取事件流形状。",
     },
     {
       topic: "input 拼接 prompt",
-      primaryReference: "codex",
+      primaryReference: "claude-code",
       rationale:
-        "以 Codex 的 history projection、tools schema 和 prefix-cache 友好上下文作为主参考。",
+        "以 Claude Code 的 ToolUseContext 载体、history projection 与渐进披露上下文注入作为 prompt 拼接主参考。",
     },
     {
       topic: "如何实现 long-term memory",
-      primaryReference: "codex",
+      primaryReference: "claude-code",
       rationale:
-        "Codex 的会话 rollout/checkpoint 持久化与状态恢复作为长期记忆主参考；Chatty 落到 SQLite transaction-scoped memory。",
+        "Claude Code 的 memdir 两段式（会话结束抽取 → 下次开场相关性预取注入）作为长期记忆主参考；Chatty 落到 SQLite transaction-scoped memory。",
     },
     {
       topic: "如何实现 skills 和 plugins",
-      primaryReference: "codex",
+      primaryReference: "claude-code",
       rationale:
-        "Codex 的 tool/MCP 配置与能力暴露方式作为 skills/plugins 主参考；Chatty 收敛为客服工具注册表。",
+        "Claude Code 的 frontmatter 声明式技能注册（SKILL.md）+ 渐进披露（shouldDefer/ToolSearch）作为 skills/plugins 主参考；Chatty 收敛为客服工具注册表。",
     },
     {
       topic: "如何做好 context auto compression",
-      primaryReference: "codex",
+      primaryReference: "claude-code",
       rationale:
-        "Codex 的 auto-compact/checkpoint 摘要是主参考，Chatty 当前只保留滑窗。",
+        "Claude Code 的三档压缩（microcompact 清空老 tool_result 正文 → autoCompact 摘要 → 阈值=窗口−buffer）是主参考；Chatty MVP 先做 microcompact + 尾部截断。",
     },
     {
       topic: "output parser",
-      primaryReference: "codex",
-      rationale: "Codex 的原生 tool call 和参数反序列化错误回喂是主参考。",
+      primaryReference: "claude-code",
+      rationale:
+        "Claude Code 的 zod safeParse + validateInput/checkPermissions 分离与坏参数回喂模型自纠是 output parser 主参考。",
     },
     {
       topic: "执行器 executor",
-      primaryReference: "codex",
+      primaryReference: "claude-code",
       rationale:
-        "Codex 的审批、sandbox、执行、结果回填 orchestrator 是主参考。",
+        "Claude Code 的 runToolUse 单次流水线（校验→PreToolUse→权限→call→PostToolUse→结果整形）+ isReadOnly/isConcurrencySafe 并发分区是执行器主参考。",
     },
     {
       topic: "如何设计可以自由配置的 mcp",
-      primaryReference: "codex",
+      primaryReference: "claude-code",
       rationale:
-        "Codex 的 MCP server 配置、工具目录与审批分层作为可配置工具面主参考。",
+        "Claude Code 的 frontmatter mcpServers/工具目录 + deny 规则装配期过滤作为可配置工具面主参考。",
     },
     {
       topic: "如何做好 eval 和自动化测试",
-      primaryReference: "codex",
-      rationale: "Codex 的质量门禁、可观测 run、回归验证意识是测试体系主参考。",
+      primaryReference: "claude-code",
+      rationale:
+        "Claude Code 的 hook 断言、typed 事件流可回放与确定性工具管线可测性作为测试体系主参考。",
     },
     {
       topic: "terminal 执行",
-      primaryReference: "codex",
+      primaryReference: "claude-code",
       rationale:
-        "Codex 的 shell approval、sandbox 和长命令执行是 terminal 执行主参考。",
+        "Claude Code 的 BashTool + canUseTool 三态权限 + 长命令执行作为 terminal 执行主参考；Chatty 映射为业务 side-effect 工具。",
     },
     {
       topic: "如何控制 sandbox 环境",
-      primaryReference: "codex",
+      primaryReference: "claude-code",
       rationale:
-        "Codex 的 sandbox/approval 分层是主参考；Chatty 映射成业务 side-effect sandbox。",
+        "Claude Code 的 permission mode（default/plan/acceptEdits/bypass）+ 工具级 checkPermissions 分层是主参考；Chatty 映射成业务 side-effect sandbox。",
     },
     {
       topic: "如何管理 background tasks",
-      primaryReference: "codex",
+      primaryReference: "claude-code",
       rationale:
-        "Codex 的后台 turn、cancel 和抢占机制是主参考；Chatty 默认不启用后台 agent task。",
+        "Claude Code 的 run_in_background/Task 后台 turn 与 TaskStop 抢占是主参考；Chatty 默认不启用后台 agent task。",
     },
     {
       topic: "terminal 读 output",
-      primaryReference: "codex",
-      rationale: "Codex 的 stdout/stderr 增量事件和输出截断策略是主参考。",
+      primaryReference: "claude-code",
+      rationale:
+        "Claude Code 的工具结果流式回填 + maxResultSizeChars 超限落盘截断作为输出读取主参考。",
     },
     {
       topic: "基本 file I/O（读、写、搜）",
-      primaryReference: "codex",
+      primaryReference: "claude-code",
       rationale:
-        "Codex 的文件读写/patch 工具与检索能力作为 file I/O 主参考。",
+        "Claude Code 的 FileEdit/Read/Grep 工具与结果整形作为 file I/O 主参考。",
     },
   ];
 
@@ -246,62 +251,63 @@ export const JD_CAPABILITY_REFERENCE_CHOICES: readonly JdCapabilityReferenceChoi
   [
     {
       topic: "LLM API 与 KV Cache",
-      primaryReference: "codex",
+      primaryReference: "claude-code",
       rationale:
-        "Codex 的 prompt_cache_key、cached_input_tokens、token usage/budget 体系最贴近 Chatty 的 DeepSeek pro 账单与 cache 命中观测。",
+        "Claude Code 的 cost-tracker（token/cache 命中/时长累加聚合）与 prompt-caching 观测思路贴近 Chatty 的 DeepSeek pro 账单与 cache 命中观测。",
     },
     {
       topic: "Agent Loop 与 Tool Use",
-      primaryReference: "codex",
+      primaryReference: "claude-code",
       rationale:
-        "Codex 的 bounded tool-call loop、审批、trace 和 fallback 是主参考。",
+        "Claude Code 的 query loop（generator+State）+ runToolUse 工具流水线是 Agent Loop 与 Tool Use 主参考。",
     },
     {
       topic: "Reasoning 与 Planning",
-      primaryReference: "codex",
+      primaryReference: "claude-code",
       rationale:
-        "Codex 的 plan/steer/turn 边界适合作为 Chatty 窄任务 planning 的上限。",
+        "Claude Code 的 plan permission mode 与 turn 边界适合作为 Chatty 窄任务 planning 的上限。",
     },
     {
       topic: "Skills 与 MCP",
-      primaryReference: "codex",
+      primaryReference: "claude-code",
       rationale:
-        "Codex 的 tool/MCP 配置与工具目录作为能力目录化主参考。",
+        "Claude Code 的 frontmatter 声明式技能 + 渐进披露 + mcpServers 配置作为能力目录化主参考。",
     },
     {
       topic: "Memory",
-      primaryReference: "codex",
+      primaryReference: "claude-code",
       rationale:
-        "Codex 的会话状态/rollout 持久化作为 memory 主参考；Chatty 落 SQLite memory。",
+        "Claude Code 的 memdir 抽取+相关性预取两段式作为 memory 主参考；Chatty 落 SQLite memory。",
     },
     {
       topic: "Subagent 与 Multi-Agent",
-      primaryReference: "codex",
+      primaryReference: "claude-code",
       rationale:
-        "Codex 的主 agent/subagent 管理用于定义上限；Chatty 当前不实现。",
+        "Claude Code 的 subagent=递归 query + scoped context + allowedTools 收窄作为 Subagent/Multi-Agent 主参考；Chatty MVP 保持单层。",
     },
     {
       topic: "Prompt / Context / Harness Engineering",
-      primaryReference: "codex",
+      primaryReference: "claude-code",
       rationale:
-        "Codex 的上下文投影、工具 schema、缓存友好 prompt 和 traceable turn 是主参考。",
+        "Claude Code 的 ToolUseContext 贯穿载体、渐进披露上下文注入与 hook 驱动的 context engineering 是 Harness Engineering 主参考。",
     },
     {
       topic: "评测基准与数据标注",
-      primaryReference: "codex",
-      rationale: "Codex 的质量门禁、回归测试和可观测 run 是主参考。",
+      primaryReference: "claude-code",
+      rationale:
+        "Claude Code 的 hook 断言与 typed 事件流可回放作为评测与回归主参考。",
     },
     {
       topic: "真实任务反馈与产品指标",
-      primaryReference: "codex",
+      primaryReference: "claude-code",
       rationale:
-        "Codex 的 trace、usage、analytics 事件思路适合作为真实任务反馈闭环主参考。",
+        "Claude Code 的 trace、cost-tracker、analytics logEvent 事件思路适合作为真实任务反馈闭环主参考。",
     },
     {
       topic: "UI/UX 与 demo 原型",
-      primaryReference: "codex",
+      primaryReference: "claude-code",
       rationale:
-        "Codex 的 typed event stream、TUI 渲染与审批交互作为 demo/UX 可视化主参考。",
+        "Claude Code 的 typed event stream 与 Ink TUI 渲染、三态审批交互作为 demo/UX 可视化主参考。",
     },
   ];
 
@@ -385,7 +391,7 @@ export const DEEPSEEK_HARNESS_COMPATIBILITY: readonly DeepSeekHarnessCompatibili
 export function isAllowedArchitectureReference(
   value: string,
 ): value is ArchitectureReference {
-  return value === "codex";
+  return value === "claude-code";
 }
 
 /** 将参考选择转成按主题索引的对象，方便文档生成或测试做精确断言。 */

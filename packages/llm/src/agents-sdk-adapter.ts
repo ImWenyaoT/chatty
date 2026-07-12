@@ -171,6 +171,45 @@ export function createAgentsSdkCustomerServiceRunner(
   });
 }
 
+/**
+ * Runs one bounded customer-service turn as a plain tool loop and returns the
+ * final reply. Unlike the structured runner it does NOT set the Agents SDK
+ * `outputType`: DeepSeek does not support `response_format: json_schema` on any
+ * endpoint, and its `json_object` structured output does not converge when tools
+ * are present (the SDK loops to maxTurns). The model replies as plain short text;
+ * the reply is extracted leniently, tolerating an optional `{reply}` JSON wrap.
+ */
+export function createAgentsSdkCustomerServiceTextRunner(
+  options: AgentsSdkToolLoopOptions,
+): () => Promise<{ reply: string }> {
+  const runLoop = createAgentsSdkToolLoopFn(options);
+  return async () => {
+    const text = await runLoop(options.input ?? options.instructions);
+    return { reply: extractCustomerServiceReply(text) };
+  };
+}
+
+/** Extracts the user-facing reply from the model's final text, tolerating a {reply} JSON wrap. */
+function extractCustomerServiceReply(text: string): string {
+  const trimmed = text.trim();
+  const replyFromJson = (candidate: string): string | undefined => {
+    try {
+      const parsed = JSON.parse(candidate) as { reply?: unknown };
+      return typeof parsed.reply === "string" ? parsed.reply : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const direct = replyFromJson(trimmed);
+  if (direct !== undefined) return direct;
+  const block = trimmed.match(/\{[\s\S]*\}/);
+  if (block) {
+    const embedded = replyFromJson(block[0]);
+    if (embedded !== undefined) return embedded;
+  }
+  return trimmed;
+}
+
 /** Runs one bounded structured-output clone of the single base Chatty Agent. */
 export function createAgentsSdkStructuredRunner<TSchema extends z.ZodObject>(
   options: AgentsSdkStructuredRunnerOptions<TSchema>,

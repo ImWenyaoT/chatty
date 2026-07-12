@@ -203,3 +203,84 @@ test("checkpoint and memory usage preserve durable context evidence", () => {
   control.markMemoryUsed([memory.id]);
   assert.equal(control.listMemoryCandidates("customer-1")[0].usageCount, 1);
 });
+
+test("run reads: getRun, idempotency lookup, status counts, and recoverable list", () => {
+  const control = createControlPlaneRepository(openDatabase(":memory:"));
+  assert.equal(control.getRun("missing"), undefined);
+  control.startRun({
+    id: "run-r",
+    sessionId: "s-1",
+    conversationId: "c-r",
+    idempotencyKey: "idem-r",
+  });
+  assert.equal(control.getRun("run-r")?.id, "run-r");
+  assert.equal(control.getRunByIdempotencyKey("idem-r")?.id, "run-r");
+  assert.equal(control.getRunByIdempotencyKey("nope"), undefined);
+  assert.equal(control.countRunsByStatus("queued"), 1);
+  assert.equal(control.countRunsByStatus("running"), 0);
+  // 排队中的 run 天然可恢复。
+  assert.deepEqual(
+    control.listRecoverableRuns("2999-01-01T00:00:00.000Z").map((r) => r.id),
+    ["run-r"],
+  );
+  control.transitionRun("run-r", "running");
+  assert.equal(control.countRunsByStatus("queued"), 0);
+  assert.equal(control.countRunsByStatus("running"), 1);
+});
+
+test("run event log sequences per run and counts by type", () => {
+  const control = createControlPlaneRepository(openDatabase(":memory:"));
+  control.startRun({
+    id: "run-e",
+    sessionId: "s-1",
+    conversationId: "c-e",
+    idempotencyKey: "idem-e",
+  });
+  const first = control.appendRunEvent("run-e", "state_changed", {
+    status: "running",
+  });
+  const second = control.appendRunEvent("run-e", "heartbeat");
+  assert.equal(first.sequence, 1);
+  assert.equal(second.sequence, 2);
+  const events = control.listRunEvents("run-e");
+  assert.deepEqual(
+    events.map((e) => e.type),
+    ["state_changed", "heartbeat"],
+  );
+  assert.deepEqual(events[0].payload, { status: "running" });
+  assert.equal(control.countRunEventsByType("heartbeat"), 1);
+  assert.equal(control.listRunEvents("other-run").length, 0);
+});
+
+test("saveRunResult persists only for the current running lease owner", () => {
+  const control = createControlPlaneRepository(openDatabase(":memory:"));
+  control.startRun({
+    id: "run-s",
+    sessionId: "s-1",
+    conversationId: "c-s",
+    idempotencyKey: "idem-s",
+  });
+  // 未 claim（仍 queued）时不可保存结果。
+  assert.equal(control.saveRunResult("run-s", "worker", { ok: true }), false);
+  control.claimRun("run-s", "worker", "2026-07-11T00:00:00.000Z");
+  // 非持锁 owner 不可保存。
+  assert.equal(control.saveRunResult("run-s", "intruder", { ok: true }), false);
+  assert.equal(control.saveRunResult("run-s", "worker", { ok: true }), true);
+});
+
+test("requestRunCancellation fences the run and is idempotent", () => {
+  const control = createControlPlaneRepository(openDatabase(":memory:"));
+  control.startRun({
+    id: "run-c",
+    sessionId: "s-1",
+    conversationId: "c-c",
+    idempotencyKey: "idem-c",
+  });
+  const cancelled = control.requestRunCancellation("run-c", "user_abort");
+  assert.equal(cancelled.status, "cancelled");
+  assert.equal(control.countRunEventsByType("cancel_requested"), 1);
+  // 幂等：二次取消不再追加事件。
+  control.requestRunCancellation("run-c", "user_abort");
+  assert.equal(control.countRunEventsByType("cancel_requested"), 1);
+  assert.throws(() => control.requestRunCancellation("missing"), /not found/);
+});

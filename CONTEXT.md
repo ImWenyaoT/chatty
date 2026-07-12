@@ -53,11 +53,11 @@ The integration boundary where OpenAI Agents SDK provides generic model/tool-loo
 _Avoid_: SDK-owned business logic, OpenAI-only architecture, self-built protocol loop
 
 **OpenAI SDK First With DeepSeek Compatibility**:
-The implementation preference that Chatty should use OpenAI Agents SDK wherever it covers DeepSeek-compatible agent loop, tool orchestration, and model plumbing, while keeping already-submitted resume claims stable. When the Agents SDK does not cover a capability, or DeepSeek does not support the needed OpenAI surface, Chatty may fall back to the official OpenAI SDK Chat Completions API as compatible harness plumbing. Only when neither official SDK path fits should Chatty choose one upper-bound reference from OpenClaw, Codex, or Claude Code.
-_Avoid_: hand-rolled SDK-compatible protocol by default, SDK avoidance, resume-drifting rewrite, treating every direct Chat Completions call as a failure, three-reference choice before SDK check
+The implementation preference that Chatty should use OpenAI Agents SDK wherever it covers DeepSeek-compatible agent loop, tool orchestration, and model plumbing, while keeping already-submitted resume claims stable. When the Agents SDK does not cover a capability, or DeepSeek does not support the needed OpenAI surface, Chatty may fall back to the official OpenAI SDK Chat Completions API as compatible harness plumbing. Only when neither official SDK path fits should Chatty choose its single upper-bound reference, Claude Code.
+_Avoid_: hand-rolled SDK-compatible protocol by default, SDK avoidance, resume-drifting rewrite, treating every direct Chat Completions call as a failure, reference choice before SDK check
 
 **Deterministic Task Scheduling**:
-The current Chatty Harness scheduling strategy where the harness, not the model, chooses the bounded customer-service task before composition. It is a Codex-inspired task-to-runner boundary adapted down to customer-service turns: the model may shape wording and action details later, but it must operate inside the scheduled task boundary.
+The current Chatty Harness scheduling strategy where the harness, not the model, chooses the bounded customer-service task before composition. It is a Claude-Code-inspired task-to-runner boundary (AgentDefinition-style: a narrowed tool pool with bounded turns per scheduled task) adapted down to customer-service turns: the model may shape wording and action details later, but it must operate inside the scheduled task boundary.
 _Avoid_: model-planned task routing, free-form intent routing
 
 **Tool Calling**:
@@ -85,7 +85,7 @@ The optional recap surface for explaining trace review, knowledge coverage, and 
 _Avoid_: backend dashboard, BI dashboard, admin console
 
 **Reference-Bound Development**:
-The engineering method for keeping Chatty between the lower bound of `docs/jd.md` and the upper bound of `openclaw`, `codex`, and `claude-code`. Each capability chooses one primary reference before implementation.
+The engineering method for keeping Chatty between the lower bound of `docs/jd.md` and the single upper bound of `claude-code`. Each capability takes `claude-code` as its primary reference before implementation.
 _Avoid_: generic inspiration, mixed reference soup, rewrite without bounds
 
 **Building-Block Reproduction**:
