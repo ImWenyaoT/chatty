@@ -6,10 +6,9 @@ import {
   ToolNotFoundError,
 } from "./registry.js";
 
-// MVP tool set: the 3 actions the harness scheduler dispatches + get_product
-// catalog lookup + the schema-only high-risk refund stub.
+// MVP tool set: the 3 actions the harness scheduler dispatches + the
+// schema-only high-risk refund stub.
 const EXPECTED_TOOLS = [
-  "get_product",
   "check_availability",
   "create_handoff",
   "schedule_followup",
@@ -20,31 +19,12 @@ function registry() {
   return createDefaultToolRegistry();
 }
 
-test("default registry registers exactly the 5 MVP tools", () => {
+test("default registry registers exactly the 4 MVP tools", () => {
   const names = registry()
     .list()
     .map((t) => t.name)
     .sort();
   assert.deepEqual(names, [...EXPECTED_TOOLS].sort());
-});
-
-test("get_product returns the seeded catalog entry", async () => {
-  const out = await registry().invoke("get_product", { productId: "suit-001" });
-  const r = out as { found: boolean; id: string; dailyPrice: number };
-  assert.equal(r.found, true);
-  assert.equal(r.id, "SUIT-001");
-  assert.equal(r.dailyPrice, 199);
-});
-
-test("get_product reports an unknown catalog id without inventing product facts", async () => {
-  const out = await registry().invoke("get_product", {
-    productId: "missing-product",
-  });
-
-  assert.deepEqual(out, {
-    found: false,
-    productId: "missing-product",
-  });
 });
 
 test("check_availability answers for a known product", async () => {
