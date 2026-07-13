@@ -3,7 +3,11 @@ import { spawn } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { openDatabase } from "@rental/db";
+import {
+  createSessionRepository,
+  createTraceRepository,
+  openDatabase,
+} from "@rental/db";
 
 const root = resolve(import.meta.dirname, "..");
 const dbPath = join(
@@ -12,6 +16,20 @@ const dbPath = join(
 );
 const port = 3400 + (process.pid % 1000);
 const origin = `http://127.0.0.1:${port}`;
+const seedDb = openDatabase(dbPath);
+createSessionRepository(seedDb).create({
+  id: "session-fullstack-history",
+  customerId: "fullstack-customer",
+  conversationId: "fullstack-conversation",
+});
+createTraceRepository(seedDb).append({
+  id: "trace-fullstack-history",
+  sessionId: "session-fullstack-history",
+  eventType: "agent_reply_sent",
+  input: { question: "历史消息还在吗？" },
+  output: { reply: "还在，切换回来会重新加载。" },
+});
+seedDb.close();
 const server = spawn(
   process.execPath,
   ["scripts/next-with-root-env.mjs", "start", "-p", String(port)],
@@ -40,6 +58,21 @@ try {
   const page = await fetch(`${origin}/orders`);
   assert.equal(page.status, 200);
   assert.match(await page.text(), /订单跟进/);
+
+  const historyResponse = await fetch(
+    `${origin}/api/playground?conversationId=fullstack-conversation`,
+  );
+  assert.equal(historyResponse.status, 200);
+  const history = (await historyResponse.json()) as {
+    messages: Array<{ role: string; content: string }>;
+  };
+  assert.deepEqual(
+    history.messages.map(({ role, content }) => ({ role, content })),
+    [
+      { role: "user", content: "历史消息还在吗？" },
+      { role: "assistant", content: "还在，切换回来会重新加载。" },
+    ],
+  );
 
   const response = await fetch(`${origin}/api/orders/place`, {
     method: "POST",
@@ -71,4 +104,4 @@ assert.equal(
   "FULLSTACK-001",
 );
 db.close();
-console.log("fullstack integration: PASS (page -> HTTP API -> SQLite)");
+console.log("fullstack integration: PASS (page <-> HTTP API <-> SQLite)");

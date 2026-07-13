@@ -28,7 +28,7 @@ pnpm smoke    # core data-path smoke with test doubles
 pnpm eval     # golden regression (needs a real LLM key)
 ```
 
-Set `OPENAI_API_KEY` (a DeepSeek OpenAI-format key) before running the playground. Model calls use DeepSeek pro through the Agents SDK; the message API returns 503 when the key is absent.
+Set `OPENAI_API_KEY` (a DeepSeek OpenAI-format key) before running the playground. Model calls use DeepSeek pro through the Agents SDK; the message API returns 503 when the key is absent. By default, `pnpm dev` persists sessions, traces, memory, and conversation history to `data/chatty.sqlite`; set `CHATTY_DB_PATH` to override it.
 
 ## Layout
 

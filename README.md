@@ -28,7 +28,7 @@ pnpm smoke    # 使用测试替身的核心数据链路冒烟
 pnpm eval     # 金标回归（需真实 LLM key）
 ```
 
-运行 playground 前必须配置 `OPENAI_API_KEY`（DeepSeek 的 OpenAI-format key）；模型步骤走 DeepSeek pro + Agents SDK。缺少 key 时消息接口返回 503。
+运行 playground 前必须配置 `OPENAI_API_KEY`（DeepSeek 的 OpenAI-format key）；模型步骤走 DeepSeek pro + Agents SDK。缺少 key 时消息接口返回 503。`pnpm dev` 默认把 session、trace、memory 和会话历史持久化到 `data/chatty.sqlite`；需要改路径时设置 `CHATTY_DB_PATH`。
 
 ## 结构
 

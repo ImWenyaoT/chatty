@@ -9,14 +9,16 @@ import { SellerNavigation } from "../components/seller/SellerNavigation";
 import { SELLER_ORDERS } from "../components/seller/orderData";
 import {
   isApiErrorResponse,
+  isPlaygroundHistoryResponse,
   isPlaygroundResponse,
   type HarnessTrace,
+  type PlaygroundHistoryMessage,
   type PlaygroundResponse,
 } from "@rental/shared/browser";
 import type { ConversationControlApiView } from "@/lib/control-plane-read-model";
 
 type ChatTurn = {
-  id: number;
+  id: string;
   role: "user" | "assistant" | "system";
   content: string;
   trace?: HarnessTrace;
@@ -41,6 +43,8 @@ const PLAYGROUND_ERROR_MESSAGES = {
   invalid_input: "消息内容不符合要求",
 } as const;
 
+const EMPTY_TURNS: ChatTurn[] = [];
+
 /** Converts API error codes into actionable seller-facing messages. */
 function playgroundErrorMessage(payload: unknown) {
   if (!isApiErrorResponse(payload)) return "请求失败";
@@ -51,14 +55,27 @@ function playgroundErrorMessage(payload: unknown) {
   );
 }
 
+function historyMessageToTurn(message: PlaygroundHistoryMessage): ChatTurn {
+  return {
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    traceId: message.traceId,
+    sessionId: message.sessionId,
+  };
+}
+
 /** Renders the seller-facing customer service workspace. */
 export default function CustomerServicePage() {
   const [selectedOrderId, setSelectedOrderId] = useState(SELLER_ORDERS[0].id);
   const [question, setQuestion] = useState("");
   const [imageUrl, setImageUrl] = useState("");
-  const [turns, setTurns] = useState<ChatTurn[]>([]);
+  const [turnsByConversation, setTurnsByConversation] = useState<
+    Record<string, ChatTurn[]>
+  >({});
   const [status, setStatus] = useState("等待客户消息");
   const [sending, setSending] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [controlPlane, setControlPlane] =
     useState<ConversationControlApiView>();
@@ -71,6 +88,7 @@ export default function CustomerServicePage() {
     SELLER_ORDERS[0];
   const productId = PRODUCT_ID_BY_ORDER_ID[selectedOrder.id] ?? "SUIT-001";
   const conversationId = `${selectedOrder.customer}:${productId}`;
+  const turns = turnsByConversation[conversationId] ?? EMPTY_TURNS;
   const visibleOrders = SELLER_ORDERS.filter((order) =>
     `${order.customer} ${order.product} ${order.channel}`
       .toLowerCase()
@@ -81,29 +99,97 @@ export default function CustomerServicePage() {
     bottomRef.current?.scrollIntoView({ block: "end" });
   }, [turns, sending]);
 
-  /** Selects a customer queue item and clears the transient conversation view. */
+  useEffect(() => {
+    const controller = new AbortController();
+    async function hydrateConversation() {
+      setHistoryLoading(true);
+      setStatus("正在加载会话记录");
+      setControlPlaneError(undefined);
+      try {
+        const [historyResponse, controlResponse] = await Promise.all([
+          fetch(
+            `/api/playground?conversationId=${encodeURIComponent(conversationId)}`,
+            { signal: controller.signal },
+          ),
+          fetch(
+            `/api/control-plane?conversationId=${encodeURIComponent(conversationId)}&customerId=${encodeURIComponent(selectedOrder.customer)}`,
+            { signal: controller.signal },
+          ),
+        ]);
+        const history: unknown = await historyResponse.json();
+        if (!historyResponse.ok || !isPlaygroundHistoryResponse(history)) {
+          throw new Error("服务返回了不完整的会话记录");
+        }
+        const hydratedTurns = history.messages.map(historyMessageToTurn);
+        setTurnsByConversation((current) => ({
+          ...current,
+          [conversationId]: hydratedTurns,
+        }));
+        if (controlResponse.ok) {
+          setControlPlane(
+            (await controlResponse.json()) as ConversationControlApiView,
+          );
+        } else {
+          setControlPlane(undefined);
+          setControlPlaneError("控制面状态读取失败");
+        }
+        setStatus(
+          history.hasEarlierMessages
+            ? "已恢复最近 100 轮，较早记录保留在数据库中"
+            : hydratedTurns.length
+              ? "会话记录已恢复"
+              : "等待客户消息",
+        );
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setControlPlane(undefined);
+        setControlPlaneError("会话记录读取失败");
+        setStatus(
+          error instanceof Error ? `加载失败：${error.message}` : "加载失败",
+        );
+      } finally {
+        if (!controller.signal.aborted) setHistoryLoading(false);
+      }
+    }
+    void hydrateConversation();
+    return () => controller.abort();
+  }, [conversationId, selectedOrder.customer]);
+
+  /** Selects a customer queue item; persisted history is hydrated by conversation id. */
   function selectOrder(orderId: string) {
     setSelectedOrderId(orderId);
-    setTurns([]);
     setQuestion("");
     setImageUrl("");
-    setStatus("等待客户消息");
     setControlPlane(undefined);
     setControlPlaneError(undefined);
+  }
+
+  function appendTurns(targetConversationId: string, additions: ChatTurn[]) {
+    setTurnsByConversation((current) => ({
+      ...current,
+      [targetConversationId]: [
+        ...(current[targetConversationId] ?? []),
+        ...additions,
+      ],
+    }));
   }
 
   /** Sends a customer message through the harness using product-safe defaults. */
   async function sendMessage(text: string) {
     const trimmed = text.trim();
     const attachedImageUrl = imageUrl.trim();
-    if ((!trimmed && !attachedImageUrl) || sending) return;
+    if ((!trimmed && !attachedImageUrl) || sending || historyLoading) return;
+    const targetConversationId = conversationId;
 
     const visibleContent = attachedImageUrl
       ? `${trimmed || "发送了一张图片"}\n图片：${attachedImageUrl}`
       : trimmed;
-    setTurns((prev) => [
-      ...prev,
-      { id: nextId.current++, role: "user", content: visibleContent },
+    appendTurns(targetConversationId, [
+      {
+        id: `local:${nextId.current++}`,
+        role: "user",
+        content: visibleContent,
+      },
     ]);
     setQuestion("");
     setImageUrl("");
@@ -144,10 +230,9 @@ export default function CustomerServicePage() {
         setControlPlane(undefined);
         setControlPlaneError("控制面状态读取失败");
       }
-      setTurns((prev) => [
-        ...prev,
+      appendTurns(targetConversationId, [
         {
-          id: nextId.current++,
+          id: `local:${nextId.current++}`,
           role: "assistant",
           content: reply.reply || "（无回复）",
           trace: reply.harnessTrace,
@@ -166,10 +251,9 @@ export default function CustomerServicePage() {
           : error instanceof Error
             ? error.message
             : String(error);
-      setTurns((prev) => [
-        ...prev,
+      appendTurns(targetConversationId, [
         {
-          id: nextId.current++,
+          id: `local:${nextId.current++}`,
           role: "system",
           content: `请求失败：${message}`,
         },
@@ -213,6 +297,7 @@ export default function CustomerServicePage() {
                 data-active={order.id === selectedOrder.id}
                 key={order.id}
                 type="button"
+                disabled={sending}
                 onClick={() => selectOrder(order.id)}
               >
                 <span className="support-conversation-topline">
@@ -249,7 +334,7 @@ export default function CustomerServicePage() {
           </header>
 
           <div
-            aria-busy={sending}
+            aria-busy={sending || historyLoading}
             aria-label="实时会话记录"
             aria-live="polite"
             className="support-chat-history"
@@ -264,7 +349,9 @@ export default function CustomerServicePage() {
             ) : (
               turns.map((turn) => <LegacyMessage key={turn.id} turn={turn} />)
             )}
-            {sending ? (
+            {historyLoading ? (
+              <div className="support-typing">正在恢复会话记录…</div>
+            ) : sending ? (
               <div className="support-typing">Chatty 正在整理回复…</div>
             ) : null}
             <div ref={bottomRef} />
@@ -309,7 +396,11 @@ export default function CustomerServicePage() {
                 size="icon"
                 type="submit"
                 aria-label="发送"
-                disabled={(!question.trim() && !imageUrl.trim()) || sending}
+                disabled={
+                  (!question.trim() && !imageUrl.trim()) ||
+                  sending ||
+                  historyLoading
+                }
               >
                 <Send data-icon="inline-start" />
               </Button>
@@ -435,7 +526,7 @@ function LegacyMessage({ turn }: { turn: ChatTurn }) {
       <div className="support-message-content">{turn.content}</div>
       {turn.traceId ? (
         <p>
-          状态：{turn.status} · 会话 {turn.sessionId}
+          {turn.status ? `状态：${turn.status} · ` : ""}会话 {turn.sessionId}
         </p>
       ) : null}
     </article>

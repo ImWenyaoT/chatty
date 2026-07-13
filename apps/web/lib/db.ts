@@ -17,11 +17,12 @@ import {
   type TraceReviewRepository,
   type ControlPlaneRepository,
 } from "@rental/db";
+import { resolveChattyDatabasePath } from "./database-path.mjs";
 
 // One SQLite connection per server process. The agent loop is single-process
 // in MVP (docs §5.1); a worker extraction can own its own connection later.
-// SQLite is the only persistence layer: with
-// CHATTY_DB_PATH unset it runs on ':memory:' — same code path, no durability.
+// SQLite is the only persistence layer. Development defaults to data/chatty.sqlite;
+// tests opt into ':memory:' explicitly and deployments can mount any file path.
 
 interface Repos {
   sessions: SessionRepository;
@@ -37,9 +38,10 @@ let repos: Repos | undefined;
 /** Opens the process-wide SQLite connection and builds the repositories once. */
 function ensureInitialized(): Repos {
   if (repos) return repos;
-  const dbPath = process.env.CHATTY_DB_PATH
-    ? path.resolve(process.env.CHATTY_DB_PATH)
-    : ":memory:";
+  const dbPath = resolveChattyDatabasePath(
+    process.env.CHATTY_DB_PATH,
+    process.cwd(),
+  );
   const db = openDatabase(dbPath);
   // 知识索引幂等同步：启动时对比语料
   // hash，变更才整体重建。候选路径覆盖 repo 根或 apps/web 两种 cwd。

@@ -25,6 +25,7 @@ const orderDataSource = readAppSource("app/components/seller/orderData.ts");
 const playgroundSource = readAppSource("app/playground/page.tsx");
 const cssSource = readAppSource("app/globals.css");
 const webPackageSource = readAppSource("package.json");
+const databasePathSource = readAppSource("lib/database-path.mjs");
 
 test("web runtime scripts load the repository environment explicitly", () => {
   const webPackage = JSON.parse(webPackageSource) as {
@@ -44,6 +45,9 @@ test("web runtime scripts load the repository environment explicitly", () => {
   const launcherSource = readAppSource("scripts/next-with-root-env.mjs");
   assert.match(launcherSource, /dotenv\.config/);
   assert.match(launcherSource, /\.\.\/\.\.\/\.\.\/\.env/);
+  assert.match(launcherSource, /CHATTY_DB_PATH/);
+  assert.match(launcherSource, /database-path\.mjs/);
+  assert.match(databasePathSource, /data\/chatty\.sqlite/);
 });
 
 test("frontend shell exposes keyboard and screen-reader navigation affordances", () => {
@@ -55,7 +59,7 @@ test("frontend shell exposes keyboard and screen-reader navigation affordances",
   assert.match(playgroundSource, /id="main-content"/);
   assert.match(playgroundSource, /role="status"/);
   assert.match(playgroundSource, /role="log"/);
-  assert.match(playgroundSource, /aria-busy=\{sending\}/);
+  assert.match(playgroundSource, /aria-busy=\{sending \|\| historyLoading\}/);
 });
 
 test("playground controls expose state beyond color alone", () => {
@@ -68,6 +72,13 @@ test("playground controls expose state beyond color alone", () => {
   assert.match(playgroundSource, /aria-label="发送"/);
   assert.doesNotMatch(playgroundSource, /客户详情/);
   assert.doesNotMatch(playgroundSource, /清空/);
+});
+
+test("switching conversations restores the persisted transcript", () => {
+  assert.match(playgroundSource, /isPlaygroundHistoryResponse/);
+  assert.match(playgroundSource, /\/api\/playground\?conversationId=/);
+  assert.doesNotMatch(playgroundSource, /setTurns\(\[\]\)/);
+  assert.match(playgroundSource, /turn\.status \? `状态：/);
 });
 
 test("frontend CSS keeps focus visible and mobile touch targets large enough", () => {

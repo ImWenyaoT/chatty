@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isApiErrorResponse, isPlaygroundResponse } from "./api-contracts.js";
+import {
+  isApiErrorResponse,
+  isPlaygroundHistoryResponse,
+  isPlaygroundResponse,
+} from "./api-contracts.js";
 
 test("playground response guard accepts the public success contract", () => {
   assert.equal(
@@ -20,4 +24,30 @@ test("playground response guard accepts the public success contract", () => {
 test("playground response guard rejects incomplete success-shaped JSON", () => {
   assert.equal(isPlaygroundResponse({ reply: "only text" }), false);
   assert.equal(isApiErrorResponse({ error: "llm_provider_failed" }), true);
+});
+
+test("playground history guard accepts only a complete persisted transcript", () => {
+  assert.equal(
+    isPlaygroundHistoryResponse({
+      conversationId: "conversation-1",
+      sessionId: "session-1",
+      hasEarlierMessages: false,
+      messages: [
+        {
+          id: "trace-1:user",
+          role: "user",
+          content: "租期怎么算？",
+          createdAt: "2026-07-13T00:00:00.000Z",
+        },
+      ],
+    }),
+    true,
+  );
+  assert.equal(
+    isPlaygroundHistoryResponse({
+      conversationId: "conversation-1",
+      messages: [{ id: "broken", role: "tool", content: "hidden" }],
+    }),
+    false,
+  );
 });

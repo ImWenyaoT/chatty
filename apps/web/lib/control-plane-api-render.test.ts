@@ -3,6 +3,7 @@ import test from "node:test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import DashboardPage from "../app/dashboard/page";
+import { GET as getPlaygroundHistory } from "../app/api/playground/route";
 import {
   GET as getControlPlane,
   POST as postControlPlane,
@@ -11,6 +12,56 @@ import { GET as getJobs, POST as postJobs } from "../app/api/jobs/route";
 import { POST as postTraceReview } from "../app/api/trace-reviews/route";
 import { POST as postOrder } from "../app/api/orders/place/route";
 import { getRepos } from "./db";
+
+test("playground history API restores a persisted conversation transcript", async () => {
+  const repos = getRepos();
+  repos.sessions.create({
+    id: "session-history-api",
+    customerId: "customer-history-api",
+    conversationId: "conversation-history-api",
+  });
+  repos.traces.append({
+    id: "trace-history-api",
+    sessionId: "session-history-api",
+    eventType: "agent_reply_sent",
+    input: { question: "租期怎么算？" },
+    output: { reply: "从签收次日开始计算。" },
+  });
+
+  const response = await getPlaygroundHistory(
+    new Request(
+      "http://localhost/api/playground?conversationId=conversation-history-api",
+    ),
+  );
+
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as {
+    messages: Array<{ createdAt: string }>;
+  };
+  assert.equal(typeof body.messages[0]?.createdAt, "string");
+  assert.equal(typeof body.messages[1]?.createdAt, "string");
+  assert.deepEqual(body, {
+    conversationId: "conversation-history-api",
+    sessionId: "session-history-api",
+    hasEarlierMessages: false,
+    messages: [
+      {
+        id: "trace-history-api:user",
+        role: "user",
+        content: "租期怎么算？",
+        createdAt: body.messages[0]?.createdAt,
+      },
+      {
+        id: "trace-history-api:assistant",
+        role: "assistant",
+        content: "从签收次日开始计算。",
+        traceId: "trace-history-api",
+        sessionId: "session-history-api",
+        createdAt: body.messages[1]?.createdAt,
+      },
+    ],
+  });
+});
 
 test("control-plane APIs serialize explicit empty and unknown state", async () => {
   const controlResponse = await getControlPlane(

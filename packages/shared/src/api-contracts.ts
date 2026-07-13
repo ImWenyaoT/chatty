@@ -44,6 +44,23 @@ export type PlaygroundResponse = {
   harnessTrace: HarnessTrace;
 };
 
+export type PlaygroundHistoryMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+  traceId?: string;
+  sessionId?: string;
+};
+
+/** Successful payload returned by GET /api/playground. */
+export type PlaygroundHistoryResponse = {
+  conversationId: string;
+  sessionId?: string;
+  hasEarlierMessages: boolean;
+  messages: PlaygroundHistoryMessage[];
+};
+
 export type PlaygroundErrorCode =
   | "unauthorized"
   | "invalid_json"
@@ -74,6 +91,32 @@ export function isPlaygroundResponse(
     typeof value.status === "string" &&
     typeof value.terminality === "string" &&
     isRecord(value.harnessTrace)
+  );
+}
+
+/** Guards a persisted transcript before the browser hydrates its message list. */
+export function isPlaygroundHistoryResponse(
+  value: unknown,
+): value is PlaygroundHistoryResponse {
+  if (
+    !isRecord(value) ||
+    typeof value.conversationId !== "string" ||
+    (value.sessionId !== undefined && typeof value.sessionId !== "string") ||
+    typeof value.hasEarlierMessages !== "boolean" ||
+    !Array.isArray(value.messages)
+  ) {
+    return false;
+  }
+  return value.messages.every(
+    (message) =>
+      isRecord(message) &&
+      typeof message.id === "string" &&
+      (message.role === "user" || message.role === "assistant") &&
+      typeof message.content === "string" &&
+      typeof message.createdAt === "string" &&
+      (message.traceId === undefined || typeof message.traceId === "string") &&
+      (message.sessionId === undefined ||
+        typeof message.sessionId === "string"),
   );
 }
 

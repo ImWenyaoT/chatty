@@ -179,7 +179,10 @@ export async function runCustomerServiceTurn(
         id: traceId,
         sessionId: session.id,
         eventType: "evaluation_failed",
-        input: { question: input.question },
+        input: {
+          question: input.question,
+          ...(input.imageUrl ? { imageUrl: input.imageUrl } : {}),
+        },
         output: { failureKind: "configuration_error", message: String(error) },
         toolCalls: [],
         references: [],
@@ -227,7 +230,10 @@ export async function runCustomerServiceTurn(
         id: traceId,
         sessionId: session.id,
         eventType: "evaluation_failed",
-        input: { question: input.question },
+        input: {
+          question: input.question,
+          ...(input.imageUrl ? { imageUrl: input.imageUrl } : {}),
+        },
         output: {
           failureKind: "provider_or_output_validation",
           message: String(error),
@@ -261,6 +267,7 @@ export async function runCustomerServiceTurn(
       action: harness.trace.action.action,
       input: {
         question: input.question,
+        ...(input.imageUrl ? { imageUrl: input.imageUrl } : {}),
         harnessContext: harness.trace.context.fragments as unknown as JsonValue,
       },
       output:

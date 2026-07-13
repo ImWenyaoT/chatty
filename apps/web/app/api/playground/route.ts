@@ -9,6 +9,8 @@ import {
   runCustomerServiceTurn,
 } from "@/lib/customer-service-turn";
 import { MissingLlmApiKeyError } from "@/lib/llm";
+import { getRepos } from "@/lib/db";
+import { readConversationHistory } from "@/lib/conversation-history";
 
 // Customer-service endpoint: drives one bounded seller-assistant Harness step.
 // Request:  POST { customerId, productId?, conversationId?, question, imageUrl? }
@@ -19,6 +21,27 @@ import { MissingLlmApiKeyError } from "@/lib/llm";
 // Runs a single bounded step per request (docs tech-stack §2: no long loops in the handler).
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
+
+/** Returns the persisted seller transcript for one conversation. */
+export async function GET(request: Request) {
+  if (
+    !isPlaygroundAuthorized(
+      request.headers.get("x-api-key"),
+      process.env.CHATTY_API_KEY,
+    )
+  ) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  const conversationId = new URL(request.url).searchParams.get(
+    "conversationId",
+  );
+  if (!conversationId?.trim()) {
+    return NextResponse.json({ error: "invalid_input" }, { status: 400 });
+  }
+  return NextResponse.json(
+    readConversationHistory(getRepos(), conversationId.trim()),
+  );
+}
 
 export async function POST(request: Request) {
   // Optional shared-key gate: open when CHATTY_API_KEY is unset (zero-config dev),
