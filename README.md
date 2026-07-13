@@ -18,6 +18,58 @@
 - **LLM 可观测** — 生产模型调用走 DeepSeek pro + OpenAI Agents SDK 的 Chat Completions model；逐次调用记录 KV cache 命中率与成本。
 - **金标回归** — `eval/` 朴素金标 + LLM-judge，`pnpm eval` 一条命令跑完。
 
+## 架构
+
+monorepo 分层：`apps/web` 只做展示与 HTTP 适配，真正的价值在 `agent-core` 这层 harness；model 与持久化都是可替换的依赖。
+
+```mermaid
+flowchart TD
+  web["apps/web · Next.js<br/>playground + dashboard + /api"]
+  core["packages/agent-core · Harness<br/>确定性任务调度 · context 组装/压缩 · 有界 loop · run policy · 工具 · agentic 检索"]
+  llm["packages/llm<br/>DeepSeek ⇄ OpenAI Agents SDK · usage 遥测"]
+  db[("packages/db · SQLite<br/>session · trace · 事务级 memory · FTS5 知识索引")]
+  shared["packages/shared · 契约 / schema / 浏览器安全类型"]
+  worker["scripts/worker · 后台作业<br/>到期跟进 · 记忆抽取/固化"]
+  eval["eval/ · 金标回归 + LLM judge"]
+  deepseek(("DeepSeek API"))
+
+  web --> core
+  core --> llm --> deepseek
+  core --> db
+  worker --> core
+  worker --> db
+  eval --> core
+  web -. 契约 .-> shared
+  core -. 契约 .-> shared
+```
+
+一条客服消息 = 一个有界闭环。harness 掌控任务边界、上下文与工具，model 只在被调度的 task 内决定下一步：
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant U as 客户消息
+  participant H as Harness (agent-core)
+  participant M as Model (DeepSeek·Agents SDK)
+  participant T as Tools + Policy
+  participant D as SQLite
+
+  U->>H: 一条客服消息
+  H->>H: 确定性任务调度（选 task + 工具子集）
+  H->>D: 读 memory / checkpoint
+  H->>H: context 组装（超限则压缩为 checkpoint）
+  H->>M: 工具阶段 run（有界 turns）
+  M->>T: 请求 search_knowledge
+  T->>T: run policy 门：allow / require_approval / deny
+  T->>D: FTS5 检索知识
+  T-->>M: 证据（纯文本三段式）
+  M-->>H: 工具结果
+  H->>M: 无工具收尾 run（基于证据生成回复）
+  M-->>H: 最终回复
+  H->>D: 落 trace + 续接 memory + 更新 session
+  H-->>U: 回复 + 可观测 harnessTrace
+```
+
 ## 快速开始
 
 ```bash
