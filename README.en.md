@@ -18,6 +18,58 @@
 - **LLM observability** — production calls use DeepSeek pro through the OpenAI Agents SDK Chat Completions model; each call records KV cache hit ratio and cost.
 - **Golden regression** — a plain golden set under `eval/` plus an LLM judge, run with a single `pnpm eval`.
 
+## Architecture
+
+The monorepo is layered: `apps/web` is only presentation + HTTP adapters; the real value lives in the `agent-core` harness, and both the model and persistence are replaceable dependencies.
+
+```mermaid
+flowchart TD
+  web["apps/web · Next.js<br/>playground + dashboard + /api"]
+  core["packages/agent-core · Harness<br/>deterministic scheduling · context assembly/compaction · bounded loop · run policy · tools · agentic search"]
+  llm["packages/llm<br/>DeepSeek ⇄ OpenAI Agents SDK · usage telemetry"]
+  db[("packages/db · SQLite<br/>session · trace · transaction-scoped memory · FTS5 knowledge")]
+  shared["packages/shared · contracts / schemas / browser-safe types"]
+  worker["scripts/worker · background jobs<br/>scheduled follow-ups · memory extraction/consolidation"]
+  eval["eval/ · golden regression + LLM judge"]
+  deepseek(("DeepSeek API"))
+
+  web --> core
+  core --> llm --> deepseek
+  core --> db
+  worker --> core
+  worker --> db
+  eval --> core
+  web -. contracts .-> shared
+  core -. contracts .-> shared
+```
+
+One customer-service message = one bounded closed loop. The harness owns the task boundary, context, and tools; the model only chooses the next step inside the scheduled task:
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant U as Customer message
+  participant H as Harness (agent-core)
+  participant M as Model (DeepSeek·Agents SDK)
+  participant T as Tools + Policy
+  participant D as SQLite
+
+  U->>H: one customer-service message
+  H->>H: deterministic task scheduling (task + tool subset)
+  H->>D: read memory / checkpoint
+  H->>H: assemble context (compact to a checkpoint if over budget)
+  H->>M: tool-phase run (bounded turns)
+  M->>T: request search_knowledge
+  T->>T: run policy gate: allow / require_approval / deny
+  T->>D: FTS5 knowledge search
+  T-->>M: evidence (three-part plain text)
+  M-->>H: tool result
+  H->>M: tool-free final run (grounded in evidence)
+  M-->>H: final reply
+  H->>D: append trace + continuity memory + update session
+  H-->>U: reply + observable harnessTrace
+```
+
 ## Quickstart
 
 ```bash
