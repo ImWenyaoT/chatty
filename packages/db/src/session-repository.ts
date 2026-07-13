@@ -1,8 +1,4 @@
-import type {
-  AgentSession,
-  AgentSessionStatus,
-  JsonValue,
-} from "@rental/shared";
+import type { AgentSession, AgentSessionStatus } from "@rental/shared";
 import type { Db } from "./database.js";
 import { nowIso } from "./database.js";
 
@@ -108,6 +104,3 @@ export function createSessionRepository(db: Db): SessionRepository {
     },
   };
 }
-
-// Re-export so callers don't need @rental/shared just for JsonValue typing.
-export type { JsonValue };

@@ -30,6 +30,9 @@ function getProduct(id: string): ProductCatalogEntry | undefined {
   return PRODUCTS[id.toUpperCase()];
 }
 
+// Widens a specific object literal to JsonValue at the call site (its param type
+// does the coercion). Not an identity no-op: without it the tools' union return
+// types infer `?: undefined` members, which are not assignable to JsonValue.
 function jsonResult(value: JsonValue): JsonValue {
   return value;
 }
