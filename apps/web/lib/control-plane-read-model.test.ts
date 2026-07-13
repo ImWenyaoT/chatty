@@ -70,7 +70,7 @@ test("operations control view exposes job evidence, delivery and aggregate healt
   });
   control.transitionRun("failed-run", "running");
   control.transitionRun("failed-run", "failed", "provider_error");
-  control.appendRunEvent("failed-run", "compaction_completed");
+  control.appendRunEvent("failed-run", "compacted");
   control.appendRunEvent("failed-run", "compaction_failed");
   control.enqueueJob({
     id: "job-1",

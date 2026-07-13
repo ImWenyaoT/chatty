@@ -218,15 +218,23 @@ export default function CustomerServicePage() {
         throw new Error("服务返回了不完整的会话结果");
 
       const reply: PlaygroundResponse = data;
-      const controlResponse = await fetch(
-        `/api/control-plane?conversationId=${encodeURIComponent(conversationId)}&customerId=${encodeURIComponent(selectedOrder.customer)}&runId=${encodeURIComponent(reply.runId)}`,
-      );
-      if (controlResponse.ok) {
-        setControlPlane(
-          (await controlResponse.json()) as ConversationControlApiView,
+      // The control-plane read only feeds the secondary runtime inspector panel.
+      // Its failure (incl. a network rejection) must never discard the reply that
+      // already succeeded above, so keep it in its own try/catch.
+      try {
+        const controlResponse = await fetch(
+          `/api/control-plane?conversationId=${encodeURIComponent(conversationId)}&customerId=${encodeURIComponent(selectedOrder.customer)}&runId=${encodeURIComponent(reply.runId)}`,
         );
-        setControlPlaneError(undefined);
-      } else {
+        if (controlResponse.ok) {
+          setControlPlane(
+            (await controlResponse.json()) as ConversationControlApiView,
+          );
+          setControlPlaneError(undefined);
+        } else {
+          setControlPlane(undefined);
+          setControlPlaneError("控制面状态读取失败");
+        }
+      } catch {
         setControlPlane(undefined);
         setControlPlaneError("控制面状态读取失败");
       }

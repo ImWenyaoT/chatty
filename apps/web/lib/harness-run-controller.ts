@@ -135,8 +135,12 @@ export class HarnessRunController {
   cancel(runId: string): WorkflowRun {
     const run = this.repository.requestRunCancellation(runId);
     const active = activeAbortControllers.get(runId);
-    if (active?.owner === this.owner)
+    if (active?.owner === this.owner) {
       active.controller.abort(new Error("workflow cancelled"));
+      // Cancellation never routes through transition(), so drop the signal here
+      // to avoid leaking a Map entry per cancelled run over the process lifetime.
+      activeAbortControllers.delete(runId);
+    }
     return run;
   }
 
@@ -144,9 +148,14 @@ export class HarnessRunController {
   observeCancellation(runId: string): boolean {
     const run = this.repository.getRun(runId);
     if (!run?.cancelRequestedAt) return false;
-    activeAbortControllers
-      .get(runId)
-      ?.controller.abort(new Error(run.cancelReason ?? "workflow cancelled"));
+    const active = activeAbortControllers.get(runId);
+    if (active) {
+      active.controller.abort(
+        new Error(run.cancelReason ?? "workflow cancelled"),
+      );
+      // Terminal for the in-process signal; delete so cancelled runs don't leak.
+      activeAbortControllers.delete(runId);
+    }
     return true;
   }
 

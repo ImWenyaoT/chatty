@@ -104,7 +104,7 @@ export function buildOperationsControlView(
     outbox: control.listOutbox(),
     metrics: {
       workflowFailures: control.countRunsByStatus("failed"),
-      compactions: control.countRunEventsByType("compaction_completed"),
+      compactions: control.countRunEventsByType("compacted"),
       compactionFailures: control.countRunEventsByType("compaction_failed"),
       memoryNoOps: jobHealth.memoryNoOps,
       retryRate: jobHealth.attemptedJobs

@@ -1,10 +1,19 @@
 # Context Map
 
-Chatty is a pnpm monorepo. Its ubiquitous language spans several bounded contexts — one per package/app, plus the evaluation and retrieval surfaces. This map is the entry point the engineering skills read first: it points at the per-context `CONTEXT.md` files and at the shared, system-wide glossary.
+Chatty is a pnpm monorepo. Its ubiquitous language spans several bounded contexts — one per package/app, plus the evaluation and retrieval surfaces. This map is the entry point the engineering skills read first: it carries the cross-cutting vocabulary and points at the per-context `CONTEXT.md` files.
 
-## Shared glossary
+## Shared vocabulary
 
-- **`CONTEXT.md`** (repo root) — system-wide ubiquitous language shared across every context: _Harness_, _Chatty Harness_, _Chatty Agent_, _Agent Not Chatbot_, _Reference-Bound Development_, and the other cross-cutting terms. Read this for any concept that isn't specific to a single context.
+Cross-cutting terms that span every context (read these for any concept not specific to one context):
+
+- **Harness / Chatty Harness** — the agent runtime boundary: context assembly, memory, loop/flow control, tool calling, policy, trace. Chatty's irreducible value, not a prompt wrapper.
+- **Chatty Agent** — DeepSeek (the model) + Chatty Harness. The model-plus-harness runtime boundary, not the web UI.
+- **Agent Not Chatbot / Not Workflow** — plans and executes bounded task flow under harness control; the model participates in choosing the next step, but only inside scheduled task bounds.
+- **Reference-Bound Development** — kept between the JD floor (`docs/jd.md`) and the single upper bound `claude-code`. Each capability takes `claude-code` as its primary reference before implementation.
+- **Agents SDK Adapter Boundary** — OpenAI Agents SDK supplies generic model/tool-loop plumbing for DeepSeek's OpenAI-format endpoint; a replaceable dependency, not the agent architecture.
+- **Agentic Search over RAG** — retrieval is exposed as a bounded agent tool over well-indexed, summarized content plus memory. No RAG pipeline, no vector database.
+- **Transaction-Scoped Memory** — preserve the recent transaction context needed to finish the current task, not a social-chat archive.
+- **SQLite Harness Store** — MVP persistence for sessions, transaction-scoped memory, traces, and FTS5 knowledge index (SQLite via `better-sqlite3`).
 
 ## Contexts
 

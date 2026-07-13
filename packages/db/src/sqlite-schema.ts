@@ -10,9 +10,6 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
   updated_at TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_agent_sessions_customer
-  ON agent_sessions (customer_id, conversation_id);
-
 CREATE TABLE IF NOT EXISTS customer_memories (
   customer_id TEXT PRIMARY KEY,
   global_summary TEXT NOT NULL DEFAULT '',
@@ -60,9 +57,6 @@ CREATE TABLE IF NOT EXISTS agent_trace_reviews (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
-
-CREATE INDEX IF NOT EXISTS idx_agent_trace_reviews_label
-  ON agent_trace_reviews (label, updated_at);
 
 CREATE TABLE IF NOT EXISTS workflow_runs (
   id TEXT PRIMARY KEY,
@@ -133,7 +127,6 @@ CREATE TABLE IF NOT EXISTS memory_candidates (
   status TEXT NOT NULL,
   usage_count INTEGER NOT NULL DEFAULT 0,
   last_used_at TEXT,
-  expires_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

@@ -176,6 +176,36 @@ test("background jobs use leases, retries, cancellation, and idempotency", () =>
   assert.equal(control.cancelJob("job-1"), true);
 });
 
+test("retryJob resets attempts so a terminally-failed job is claimable again", () => {
+  const control = createControlPlaneRepository(openDatabase(":memory:"));
+  const dueAt = "2026-07-11T00:00:00.000Z";
+  control.enqueueJob({
+    id: "job-retry",
+    type: "scheduled_followup",
+    conversationId: "conversation-retry",
+    payload: { reason: "确认尺码" },
+    dueAt,
+    idempotencyKey: "retry-1",
+    maxAttempts: 1,
+  });
+  // Claim once (attempts→1) then fail at the cap → terminal 'failed'.
+  control.claimDueJob("worker-1", dueAt);
+  control.failJob("job-retry", "boom");
+  assert.equal(control.getJob("job-retry")?.status, "failed");
+  assert.equal(control.getJob("job-retry")?.attempts, 1);
+
+  // Retry must reset attempts, otherwise claimDueJob's `attempts < max_attempts`
+  // never matches and the requeued job stays silently stuck.
+  assert.equal(control.retryJob("job-retry", dueAt), true);
+  assert.equal(control.getJob("job-retry")?.status, "pending");
+  assert.equal(control.getJob("job-retry")?.attempts, 0);
+  assert.equal(
+    control.claimDueJob("worker-2", dueAt)?.id,
+    "job-retry",
+    "retried job must be claimable by the worker again",
+  );
+});
+
 test("checkpoint and memory usage preserve durable context evidence", () => {
   const control = createControlPlaneRepository(openDatabase(":memory:"));
   const checkpoint = control.saveCheckpoint({
