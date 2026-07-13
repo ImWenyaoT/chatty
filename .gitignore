@@ -34,8 +34,11 @@ reference/
 # data/ 与数据库文件覆盖 CHATTY_DB_PATH 等运行时库。
 data/
 *.db
+*.db-*
 *.sqlite
+*.sqlite-*
 *.sqlite3
+*.sqlite3-*
 
 # 本地账单/usage 导出仅用于分析，不入公开仓库
 usage_data_*/
