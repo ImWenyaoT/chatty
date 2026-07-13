@@ -1115,9 +1115,12 @@ export function createControlPlaneRepository(db: Db) {
     },
 
     retryJob(id: string, dueAt = nowIso()): boolean {
+      // A job only reaches 'failed' at the attempt cap (see failJob), so a retry
+      // must reset attempts — otherwise claimDueJob's `attempts < max_attempts`
+      // guard never matches and the requeued job is silently stuck 'pending'.
       const result = db
         .prepare(
-          `UPDATE background_jobs SET status = 'pending', due_at = ?, last_error = NULL,
+          `UPDATE background_jobs SET status = 'pending', attempts = 0, due_at = ?, last_error = NULL,
          lease_owner = NULL, lease_expires_at = NULL, updated_at = ? WHERE id = ? AND status = 'failed'`,
         )
         .run(dueAt, nowIso(), id);

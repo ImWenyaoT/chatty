@@ -13,6 +13,7 @@ export default tseslint.config(
       "**/node_modules/**",
       "**/coverage/**",
       "**/*.svg",
+      "**/.remember/**",
       "pnpm-lock.yaml",
     ],
   },

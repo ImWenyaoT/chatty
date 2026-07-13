@@ -27,7 +27,12 @@ export async function POST(request: Request) {
   ) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  const body = (await request.json()) as { jobId?: string; action?: string };
+  let body: { jobId?: string; action?: string };
+  try {
+    body = (await request.json()) as { jobId?: string; action?: string };
+  } catch {
+    return NextResponse.json({ error: "invalid_json" }, { status: 400 });
+  }
   if (!body.jobId || !["cancel", "retry"].includes(body.action ?? "")) {
     return NextResponse.json({ error: "invalid_input" }, { status: 400 });
   }

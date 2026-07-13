@@ -40,14 +40,6 @@ export type AgentsSdkToolLoopOptions = {
   signal?: AbortSignal;
 };
 
-export const CUSTOMER_SERVICE_FINAL_OUTPUT_SCHEMA = z
-  .object({ reply: z.string().min(1) })
-  .strict();
-
-export type CustomerServiceFinalOutput = z.infer<
-  typeof CUSTOMER_SERVICE_FINAL_OUTPUT_SCHEMA
->;
-
 export type AgentsSdkStructuredRunnerOptions<TSchema extends z.ZodObject> =
   AgentsSdkToolLoopOptions & { outputType: TSchema; outputExample: string };
 
@@ -158,17 +150,6 @@ export function createAgentsSdkToolLoopFn(options: AgentsSdkToolLoopOptions) {
     }
     return String(result.finalOutput ?? "");
   };
-}
-
-/** Runs one structured, bounded customer-service turn through a clone of one base Agent. */
-export function createAgentsSdkCustomerServiceRunner(
-  options: AgentsSdkToolLoopOptions,
-) {
-  return createAgentsSdkStructuredRunner({
-    ...options,
-    outputType: CUSTOMER_SERVICE_FINAL_OUTPUT_SCHEMA,
-    outputExample: '{"reply":"..."}',
-  });
 }
 
 /**
@@ -284,18 +265,4 @@ export function createAgentsSdkStructuredRunner<TSchema extends z.ZodObject>(
     }
     return options.outputType.parse(result.finalOutput) as z.infer<TSchema>;
   };
-}
-
-/**
- * Convenience builder for production wiring: DeepSeek model from env plus SDK
- * tool loop from the supplied harness instructions/tools.
- */
-export function createDeepSeekAgentsSdkToolLoop(
-  options: Omit<AgentsSdkToolLoopOptions, "model">,
-) {
-  return createAgentsSdkToolLoopFn({
-    ...options,
-    model: createDeepSeekAgentsModelFromEnv(),
-    modelName: options.modelName ?? readLlmEnv().chatModel,
-  });
 }
