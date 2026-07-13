@@ -1,5 +1,4 @@
 <p align="center"><strong>Chatty</strong></p>
-<p align="center">A single-agent harness for seller-side customer service · TypeScript / Node.js · DeepSeek-backed</p>
 <p align="center">
   <a href="https://github.com/ImWenyaoT/chatty/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ImWenyaoT/chatty/actions/workflows/ci.yml/badge.svg" /></a>
 </p>
@@ -7,27 +6,35 @@
 
 ---
 
-`agent = model + harness`: the model is pinned to `deepseek-v4-pro`; the harness is the part that evolves. One customer-service message runs through a bounded loop — task scheduling → context preparation → Agents SDK tool round → policy-gated execution → tool-free final run → trace — observable and regression-tested end to end. The live playground path requires a DeepSeek API key; tests and smoke checks use explicit stubs for deterministic boundaries.
+A seller-side customer-service **[Agent][] [Harness][]** · TypeScript / Node.js · DeepSeek-backed. Around one question — *what makes a single service [turn][] complete and correct* — it shapes task identification, [context][] assembly, knowledge retrieval, tool use, risk approval, and human handoff into an evaluable, replayable loop. The [model][] is pinned to `deepseek-v4-pro`; the [harness][] is the part that evolves.
 
-## Capabilities
+- **Task endpoints + regression eval** — high-frequency service tasks get explicit endpoints (answer · check knowledge · check availability · hand off · follow up); golden scenarios + an LLM judge regression-test them, turning off-topic replies, missed tool calls, and misjudged actions into a fixed test set.
+- **Agentic retrieval, no RAG** — facts (policy · fees · rental period · after-sales) go through a `search_knowledge` [tool][tool call] over a SQLite FTS5 knowledge base: top-3 hits, a bounded tool loop, deduped queries, evidence fed back into [context][] for grounded fact-checking — no RAG pipeline, no vector database.
+- **Constrained executor** — the model output is parsed into a constrained `CustomerServiceAction`; the executor routes every call through a tool registry and an allow / require_approval / deny [permission][permission mode] gate, so refunds, handoff, and session-close (medium/high risk) reach approval or a human.
+- **Closed feedback loop** — tool calls, approval paths, and eval failures chain into *service task → failure attribution → prompt / flow change → regression*, keeping agent-experience issues trackable, fixable, and verifiable.
 
-- **Harness loop** — deterministic task scheduling + bounded loop control; missing configuration and provider/output failures remain explicit errors instead of being disguised as successful replies.
-- **Agentic retrieval** — each scheduled task exposes only its required tools; one bounded tool phase can call `search_knowledge` (SQLite FTS5 trigram + a 2-char Chinese LIKE fallback), followed by a tool-free SDK run grounded in that evidence.
-- **Policy-aware executor** — every tool call passes an allow / require_approval / deny gate; high-risk tools (e.g. refunds) never auto-execute.
-- **Memory & trace** — SQLite-persisted session / trace / memory; a turn's commit and continuity memory are locked down by tests.
-- **LLM observability** — production calls use DeepSeek pro through the OpenAI Agents SDK Chat Completions model; each call records KV cache hit ratio and cost.
-- **Golden regression** — a plain golden set under `eval/` plus an LLM judge, run with a single `pnpm eval`.
+## Quickstart
 
-## Architecture
+```bash
+pnpm install --frozen-lockfile
+pnpm dev      # Next.js playground (apps/web)
+pnpm test     # workspace unit tests
+pnpm smoke    # core data-path smoke, no network
+pnpm eval     # golden regression (needs a DeepSeek key)
+```
 
-The monorepo is layered: `apps/web` is only presentation + HTTP adapters; the real value lives in the `agent-core` harness, and both the model and persistence are replaceable dependencies.
+Set `OPENAI_API_KEY` (a DeepSeek OpenAI-format key) before the playground — the message API returns 503 without it. State persists to `data/chatty.sqlite`; set `CHATTY_DB_PATH` to override.
+
+## Monorepo
+
+`apps/web` is presentation only; the value lives in the `agent-core` [harness][], with the [model][] and persistence as replaceable dependencies.
 
 ```mermaid
 flowchart TD
   web["apps/web · Next.js<br/>playground + dashboard + /api"]
-  core["packages/agent-core · Harness<br/>deterministic scheduling · context assembly/compaction · bounded loop · run policy · tools · agentic search"]
+  core["packages/agent-core · Harness<br/>task scheduling · context assembly/compaction · bounded loop · run policy · tools · agentic search"]
   llm["packages/llm<br/>DeepSeek ⇄ OpenAI Agents SDK · usage telemetry"]
-  db[("packages/db · SQLite<br/>session · trace · transaction-scoped memory · FTS5 knowledge")]
+  db[("packages/db · SQLite<br/>session · trace · memory · FTS5 knowledge")]
   shared["packages/shared · contracts / schemas / browser-safe types"]
   worker["scripts/worker · background jobs<br/>scheduled follow-ups · memory extraction/consolidation"]
   eval["eval/ · golden regression + LLM judge"]
@@ -43,7 +50,22 @@ flowchart TD
   core -. contracts .-> shared
 ```
 
-One customer-service message = one bounded closed loop. The harness owns the task boundary, context, and tools; the model only chooses the next step inside the scheduled task:
+| Path | Role |
+| --- | --- |
+| [`packages/agent-core`](packages/agent-core) | harness core: task scheduling, [context][], run policy, tool execution, agentic search |
+| [`packages/llm`](packages/llm) | Agents SDK adapter for DeepSeek + usage telemetry ([cache tokens][], cost) |
+| [`packages/db`](packages/db) | SQLite: [session][] / trace / [memory][memory system] / knowledge (FTS5) |
+| [`packages/shared`](packages/shared) | cross-package types, schemas, browser-safe contracts |
+| [`apps/web`](apps/web) | Next.js playground + dashboard |
+| [`eval/`](eval) | golden regression + LLM judge |
+
+## Quality gates
+
+`test` / `test:fullstack` / `test:coverage` / `test:coverage:core` / `smoke` / `typecheck` / `lint` run on every PR and `main` via [CI](.github/workflows/ci.yml); the full-stack gate exercises the real Next API, SQLite, and worker. The real-LLM golden regression is a manual workflow ([`eval.yml`](.github/workflows/eval.yml)). A `v*` tag builds a standalone server, health-checks it on a persistent SQLite path, and publishes a runnable [release](.github/workflows/release.yml). Root [`package.json`](package.json) is the command source of truth.
+
+## Core capabilities
+
+One message = one bounded [turn][]. The [harness][] owns the task boundary, [context][], and tools; the [model][] only picks the next step inside the scheduled task.
 
 ```mermaid
 sequenceDiagram
@@ -70,39 +92,47 @@ sequenceDiagram
   H-->>U: reply + observable harnessTrace
 ```
 
-## Quickstart
+### Task scheduling
 
-```bash
-pnpm install --frozen-lockfile
-pnpm dev      # Next.js playground (apps/web)
-pnpm test     # workspace unit tests
-pnpm smoke    # core data-path smoke with test doubles
-pnpm eval     # golden regression (needs a real LLM key)
-```
+The harness — not the model — picks the bounded task and its tool subset before composing (a Claude-Code-style narrowed tool pool with bounded turns per task).
 
-Set `OPENAI_API_KEY` (a DeepSeek OpenAI-format key) before running the playground. Model calls use DeepSeek pro through the Agents SDK; the message API returns 503 when the key is absent. By default, `pnpm dev` persists sessions, traces, memory, and conversation history to `data/chatty.sqlite`; set `CHATTY_DB_PATH` to override it.
+### Loop & flow control
 
-## Layout
+Two bounded phases: a tool round, then a tool-free final run grounded in that evidence. Missing-key, provider, and output-validation failures stay explicit errors — never disguised as a reply.
 
-| Path | Role |
-| --- | --- |
-| [`packages/agent-core`](packages/agent-core) | Harness core: task scheduling, context, run policy, tool execution, agentic search |
-| [`packages/llm`](packages/llm) | Agents SDK adapter for the DeepSeek Chat Completions model + usage telemetry |
-| [`packages/db`](packages/db) | SQLite: session / trace / memory / knowledge (FTS5) |
-| [`packages/shared`](packages/shared) | Cross-package types, schemas, and browser-safe contracts |
-| [`apps/web`](apps/web) | Next.js playground + dashboard |
-| [`eval/`](eval) | Plain golden regression (judge + golden runner + scenario YAML) |
+### Input / prompt assembly
 
-## Quality gates
+[Context][] is assembled from [memory][memory system] + retrieved knowledge + the prior checkpoint, and [compacted][compaction] into a new checkpoint once it exceeds the [token][] budget.
 
-`pnpm test` / `pnpm test:fullstack` / `pnpm test:coverage` / `pnpm test:coverage:core` / `pnpm smoke` / `pnpm typecheck` / `pnpm lint` run on PRs and `main` via [CI](.github/workflows/ci.yml). The full-stack gate exercises the real Next API, SQLite, and worker seams. The real-LLM golden regression is a manual workflow ([`eval.yml`](.github/workflows/eval.yml)). Root [`package.json`](package.json) is the command source of truth, and CI tests verify that the workflow remains wired to those scripts.
+### Executor
 
-Pushing a `v*` tag triggers the [Release workflow](.github/workflows/release.yml): it builds and starts the standalone Next.js server, probes `/api/health` with SQLite pointed at a persistent path, then publishes a runnable GitHub Release archive. A deployment target only needs Node.js 24 and `CHATTY_DB_PATH` mounted on durable storage.
+Every [tool call][] passes an allow / require_approval / deny [permission][permission mode] gate — high-risk tools (e.g. refunds) never auto-execute. The reply, trace, and continuity [memory][memory system] commit to SQLite within one [turn][].
+
+## Tool calling
+
+Each scheduled task exposes only its required tools as Agents SDK function [tools][tool]. `search_knowledge` runs agentic retrieval over SQLite FTS5 (steps 5–9 above); `check_availability` / `create_handoff` / `schedule_followup` cover the rest. No [MCP][] or [skills][skill] here — those belong to the multi-agent sibling project, not this single-agent harness.
 
 ## Data note
 
-This repo is open source, but the business comes from a real shop: real customer information and shop-private data are never committed, and examples use placeholders throughout (a sample rental shop / 18800000000). See [AGENTS.md](AGENTS.md) for the convention.
+Open source, but the business comes from a real shop: real customer/shop data is never committed; examples use placeholders (a sample rental shop / 18800000000). See [AGENTS.md](AGENTS.md).
 
 ## License
 
-Released under the [MIT](LICENSE) license.
+[MIT](LICENSE).
+
+<!-- AI coding dictionary (https://www.aihero.dev/ai-coding-dictionary) — terms kept in English and linked, not translated. -->
+[agent]: https://www.aihero.dev/ai-coding-dictionary/agent
+[harness]: https://www.aihero.dev/ai-coding-dictionary/harness
+[model]: https://www.aihero.dev/ai-coding-dictionary/model
+[context]: https://www.aihero.dev/ai-coding-dictionary/context
+[memory system]: https://www.aihero.dev/ai-coding-dictionary/memory-system
+[session]: https://www.aihero.dev/ai-coding-dictionary/session
+[turn]: https://www.aihero.dev/ai-coding-dictionary/turn
+[compaction]: https://www.aihero.dev/ai-coding-dictionary/compaction
+[token]: https://www.aihero.dev/ai-coding-dictionary/token
+[tool]: https://www.aihero.dev/ai-coding-dictionary/tool
+[tool call]: https://www.aihero.dev/ai-coding-dictionary/tool-call
+[permission mode]: https://www.aihero.dev/ai-coding-dictionary/permission-mode
+[cache tokens]: https://www.aihero.dev/ai-coding-dictionary/cache-tokens
+[MCP]: https://www.aihero.dev/ai-coding-dictionary/mcp
+[skill]: https://www.aihero.dev/ai-coding-dictionary/skill
