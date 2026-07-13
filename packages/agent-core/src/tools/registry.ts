@@ -1,5 +1,5 @@
 import type { RuntimeTool, JsonValue } from "@rental/shared";
-import { getProductTool, checkAvailabilityTool } from "./catalog-stubs.js";
+import { checkAvailabilityTool } from "./catalog-stubs.js";
 import {
   createHandoffTool,
   createScheduleFollowupTool,
@@ -106,9 +106,9 @@ export class PolicyDenyError extends Error {
 /**
  * Builds the default MVP tool registry: the three actions the harness
  * scheduler actually dispatches (check_availability / create_handoff /
- * schedule_followup) plus get_product for catalog lookups and the schema-only
- * high-risk issue_refund that anchors the approval gate. Passing a knowledge
- * searcher additionally registers search_knowledge (agentic search, B2).
+ * schedule_followup) plus the schema-only high-risk issue_refund that anchors
+ * the approval gate. Passing a knowledge searcher additionally registers
+ * search_knowledge (agentic search, B2).
  */
 export function createDefaultToolRegistry(
   knowledge?: KnowledgeSearcher,
@@ -120,7 +120,6 @@ export function createDefaultToolRegistry(
   },
 ): ToolRegistry {
   const registry = new ToolRegistry()
-    .register(getProductTool)
     .register(checkAvailabilityTool)
     .register(createHandoffTool)
     .register(createScheduleFollowupTool(workflow?.scheduleFollowup))

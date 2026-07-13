@@ -37,27 +37,6 @@ function jsonResult(value: JsonValue): JsonValue {
   return value;
 }
 
-// --- get_product(productId) -------------------------------------------------
-
-export const getProductTool: RuntimeTool<
-  Record<string, JsonValue>,
-  JsonValue
-> = {
-  name: "get_product",
-  description:
-    "Lookup a product by id. Returns name, price, currency, shipping and pricing notes.",
-  risk: "low",
-  approvalRequired: false,
-  async execute(input) {
-    const id = String(input.productId ?? "");
-    const product = getProduct(id);
-    if (!product) {
-      return jsonResult({ found: false, productId: id });
-    }
-    return jsonResult({ found: true, ...product });
-  },
-};
-
 // --- check_availability(productId, size, rentalPeriod) ----------------------
 // Stub: always returns available (no real inventory system in the MVP).
 // Real inventory replaces this behind the same interface.
