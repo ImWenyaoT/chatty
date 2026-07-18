@@ -4,10 +4,14 @@ import type {
   SessionRepository,
   TraceRepository,
   ControlPlaneRepository,
+  CommerceRepository,
+  DurableTaskRepository,
+  DurableTask,
 } from "@rental/db";
 import {
   createDefaultToolRegistry,
   runCustomerServiceHarnessStep,
+  type CommerceToolBackend,
 } from "@rental/agent-core";
 import type {
   HarnessTrace,
@@ -29,6 +33,8 @@ export type CustomerServiceTurnRepos = {
   memory: MemoryRepository;
   knowledge: KnowledgeRepository;
   control: ControlPlaneRepository;
+  commerce?: CommerceRepository;
+  tasks?: DurableTaskRepository;
 };
 
 export type CustomerServiceTurnResponse = PlaygroundResponse;
@@ -82,6 +88,11 @@ export async function runCustomerServiceTurn(
   const conversationId =
     input.conversationId ??
     `${input.customerId}:${input.productId ?? "general"}`;
+  const taskWaitFor = options.handoffResolution ? "human" : "customer";
+  const waitingTask = repos.tasks?.findWaiting(conversationId, taskWaitFor);
+  let durableTask: DurableTask | undefined = waitingTask
+    ? repos.tasks?.resume(waitingTask.id, taskWaitFor)
+    : undefined;
 
   let session = repos.sessions.findByConversation(conversationId);
   if (!session) {
@@ -138,15 +149,24 @@ export async function runCustomerServiceTurn(
   );
   cancellationPoll.unref();
   try {
-    const snapshot = repos.memory.snapshot({
+    const memoryEligible =
+      (repos.commerce?.countConfirmedOrders(input.customerId) ?? 0) >= 2;
+    const rawSnapshot = repos.memory.snapshot({
       customerId: input.customerId,
       conversationId,
       productId: input.productId,
     });
-    const promotedMemories = repos.control.listMemoryCandidates(
-      input.customerId,
-      "promoted",
-    );
+    const snapshot = memoryEligible
+      ? rawSnapshot
+      : {
+          ...rawSnapshot,
+          customerMemory: undefined,
+          bodyProfiles: [],
+          globalSummary: "",
+        };
+    const promotedMemories = memoryEligible
+      ? repos.control.listMemoryCandidates(input.customerId, "promoted")
+      : [];
     const checkpointBefore = repos.control.latestCheckpoint(conversationId);
     const priorTraces = repos.traces.queryBySession(session.id);
     if (promotedMemories.length) {
@@ -202,21 +222,85 @@ export async function runCustomerServiceTurn(
       harness = await runCustomerServiceHarnessStep({
         event,
         memory: projectedSnapshot,
-        registry: createDefaultToolRegistry(repos.knowledge, {
-          scheduleFollowup: (args, capabilityOptions) => {
-            capabilityOptions?.signal?.throwIfAborted();
-            const job = repos.control.enqueueJob({
-              id: id("job"),
-              type: "scheduled_followup",
-              conversationId,
-              customerId: input.customerId,
-              payload: args,
-              dueAt: typeof args.dueAt === "string" ? args.dueAt : now(),
-              idempotencyKey: `followup:${conversationId}:${String(args.dueAt)}`,
-            });
-            return { ok: true, jobId: job.id, dueAt: job.dueAt };
+        registry: createDefaultToolRegistry(
+          repos.knowledge,
+          {
+            createHandoff: (args, capabilityOptions): JsonValue => {
+              capabilityOptions?.signal?.throwIfAborted();
+              if (!repos.tasks) {
+                return {
+                  ok: true,
+                  handoffId: `HO-${conversationId}`,
+                  conversationId,
+                };
+              }
+              durableTask ??= repos.tasks.create({
+                id: id("task"),
+                conversationId,
+                subject: "等待人工处理",
+                description: String(args.reason ?? "需要人工处理"),
+                context: {
+                  customerId: input.customerId,
+                  productId: input.productId ?? null,
+                  question: input.question,
+                  reason: args.reason ?? null,
+                  priorActions: args.context ?? null,
+                },
+              });
+              durableTask = repos.tasks.wait(durableTask.id, "human", {
+                context: durableTask.context,
+              });
+              return {
+                ok: true,
+                handoffId: durableTask.id,
+                taskId: durableTask.id,
+                status: durableTask.status,
+                conversationId,
+              };
+            },
+            scheduleFollowup: (args, capabilityOptions): JsonValue => {
+              capabilityOptions?.signal?.throwIfAborted();
+              if (repos.tasks) {
+                durableTask ??= repos.tasks.create({
+                  id: id("task"),
+                  conversationId,
+                  subject: "定时跟进",
+                  description: String(args.reason ?? "到时跟进客户"),
+                  context: {
+                    customerId: input.customerId,
+                    productId: input.productId ?? null,
+                    question: input.question,
+                    reason: args.reason ?? null,
+                  },
+                });
+                durableTask = repos.tasks.wait(durableTask.id, "time", {
+                  dueAt: typeof args.dueAt === "string" ? args.dueAt : now(),
+                  context: durableTask.context,
+                });
+                return {
+                  ok: true,
+                  followupId: durableTask.id,
+                  taskId: durableTask.id,
+                  dueAt: durableTask.dueAt ?? null,
+                  status: durableTask.status,
+                };
+              }
+              const job = repos.control.enqueueJob({
+                id: id("job"),
+                type: "scheduled_followup",
+                conversationId,
+                customerId: input.customerId,
+                payload: args,
+                dueAt: typeof args.dueAt === "string" ? args.dueAt : now(),
+                idempotencyKey: `followup:${conversationId}:${String(args.dueAt)}`,
+              });
+              return { ok: true, jobId: job.id, dueAt: job.dueAt };
+            },
           },
-        }),
+          repos.commerce
+            ? createCommerceToolBackend(repos.commerce, id)
+            : undefined,
+        ),
         sessionStatus: session.status,
         sdkRunner: llm.sdkRunner,
         runId,
@@ -288,6 +372,78 @@ export async function runCustomerServiceTurn(
       currentStep: result.terminality,
       productId: input.productId,
     });
+    if (repos.tasks) {
+      if (harness.trace.action.action === "handoff" && !durableTask) {
+        durableTask = repos.tasks.create({
+          id: id("task"),
+          conversationId,
+          subject: "等待人工处理",
+          description: result.reply ?? "需要人工处理",
+          context: {
+            customerId: input.customerId,
+            productId: input.productId ?? null,
+            question: input.question,
+            reason: harness.trace.action.toolArgs?.reason ?? null,
+            priorActions: result.toolCalls as unknown as JsonValue,
+          },
+        });
+        durableTask = repos.tasks.wait(durableTask.id, "human", {
+          context: durableTask.context,
+        });
+      } else if (
+        harness.trace.action.action === "schedule_followup" &&
+        !durableTask
+      ) {
+        durableTask = repos.tasks.create({
+          id: id("task"),
+          conversationId,
+          subject: "定时跟进",
+          description: String(
+            harness.trace.action.toolArgs?.reason ?? "到时跟进客户",
+          ),
+          context: {
+            customerId: input.customerId,
+            productId: input.productId ?? null,
+            question: input.question,
+          },
+        });
+        durableTask = repos.tasks.wait(durableTask.id, "time", {
+          dueAt: String(harness.trace.action.toolArgs?.dueAt ?? now()),
+          context: durableTask.context,
+        });
+      } else if (
+        result.terminality === "reply_and_wait" &&
+        harness.trace.action.action === "ask_missing_info"
+      ) {
+        durableTask ??= repos.tasks.create({
+          id: id("task"),
+          conversationId,
+          subject: "等待客户补充信息",
+          description: result.reply ?? "",
+          context: {
+            customerId: input.customerId,
+            productId: input.productId ?? null,
+            originalQuestion: input.question,
+            missingFields: harness.trace.action.toolArgs?.missingFields ?? [],
+          },
+        });
+        durableTask = repos.tasks.wait(durableTask.id, "customer", {
+          context: durableTask.context,
+        });
+      } else if (durableTask?.status === "in_progress") {
+        durableTask = options.handoffResolution
+          ? repos.tasks.complete(durableTask.id, {
+              kind: "human_resolution",
+              resolutionId: `resolution:${event.eventId}`,
+              traceId,
+            })
+          : repos.tasks.complete(durableTask.id, {
+              kind: "customer_message",
+              eventId: event.eventId,
+              traceId,
+            });
+      }
+    }
     if (result.nextStatus === "waiting_for_human") {
       runController.transition(runId, "waiting_for_handoff");
       runController.event(runId, "handoff_requested", { traceId });
@@ -299,17 +455,19 @@ export async function runCustomerServiceTurn(
       question: input.question,
       reply: result.reply,
     });
-    repos.control.scheduleMemoryExtraction({
-      id: id("job"),
-      conversationId,
-      customerId: input.customerId,
-      payload: {
-        sessionId: session.id,
-        productId: input.productId ?? "general",
-      },
-      now: now(),
-      coolingMs: 24 * 60 * 60 * 1000,
-    });
+    if (memoryEligible) {
+      repos.control.scheduleMemoryExtraction({
+        id: id("job"),
+        conversationId,
+        customerId: input.customerId,
+        payload: {
+          sessionId: session.id,
+          productId: input.productId ?? "general",
+        },
+        now: now(),
+        coolingMs: 24 * 60 * 60 * 1000,
+      });
+    }
 
     const response: CustomerServiceTurnResponse = {
       reply: result.reply ?? "",
@@ -319,6 +477,9 @@ export async function runCustomerServiceTurn(
       terminality: result.terminality,
       harnessTrace,
       runId,
+      ...(durableTask
+        ? { taskId: durableTask.id, taskStatus: durableTask.status }
+        : {}),
     };
     if (result.nextStatus !== "waiting_for_human") {
       if (!runController.saveResult(runId, response as unknown as JsonValue)) {
@@ -357,6 +518,54 @@ export async function runCustomerServiceTurn(
     }
     throw error;
   }
+}
+
+function createCommerceToolBackend(
+  commerce: CommerceRepository,
+  id: (prefix: string) => string,
+): CommerceToolBackend {
+  const scopedOrder = (input: Record<string, JsonValue>) => {
+    const orderId = String(input.orderId ?? "");
+    const order = commerce.getOrder(orderId);
+    if (
+      !order ||
+      order.customerId !== String(input.customerId ?? "") ||
+      order.conversationId !== String(input.conversationId ?? "")
+    ) {
+      throw new Error(`order not found in trusted customer scope: ${orderId}`);
+    }
+    return order;
+  };
+  return {
+    checkAvailability: (input) =>
+      commerce.checkAvailability(input) as unknown as JsonValue,
+    createOrder: (input) =>
+      commerce.createOrder({
+        id: id("order"),
+        idempotencyKey: `order:${String(input.requestId ?? "")}`,
+        customerId: String(input.customerId ?? ""),
+        conversationId: String(input.conversationId ?? ""),
+        productId: String(input.productId ?? ""),
+        size: String(input.size ?? ""),
+        fulfillmentMode:
+          input.fulfillmentMode === "buyout" ? "buyout" : "rental",
+        quantity: Number(input.quantity ?? 1),
+        ...(typeof input.startDate === "string"
+          ? { startDate: input.startDate }
+          : {}),
+        ...(typeof input.endDate === "string"
+          ? { endDate: input.endDate }
+          : {}),
+      }) as unknown as JsonValue,
+    confirmOrder: (input) => {
+      const order = scopedOrder(input);
+      return commerce.confirmOrder(order.id) as unknown as JsonValue;
+    },
+    cancelOrder: (input) => {
+      const order = scopedOrder(input);
+      return commerce.cancelOrder(order.id) as unknown as JsonValue;
+    },
+  };
 }
 
 /** Resumes one durable human handoff through the Customer Service Turn execution seam. */

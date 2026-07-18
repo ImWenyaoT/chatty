@@ -9,7 +9,7 @@ import {
   toAgentsSdkFunctionTool,
 } from "./agents-sdk-adapter.js";
 
-function repeatedToolCallModel(toolCallCount = 1): {
+function toolThenReplyModel(toolCallCount = 1): {
   model: Model;
   requests: ModelRequest[];
 } {
@@ -17,15 +17,10 @@ function repeatedToolCallModel(toolCallCount = 1): {
   const model = {
     async getResponse(request: ModelRequest) {
       requests.push(request);
-      if (
-        request.tools.length === 0 ||
-        request.modelSettings.toolChoice === "none"
-      ) {
-        const hasProjectedToolResult = JSON.stringify(request.input).includes(
-          "## 已获得工具结果",
-        );
-        const mustFinish =
-          request.systemInstructions?.includes("工具阶段已经结束");
+      const hasToolResult = /押金以订单页面为准|检索结果-/.test(
+        JSON.stringify(request.input),
+      );
+      if (hasToolResult) {
         return {
           usage: new Usage(),
           output: [
@@ -36,10 +31,7 @@ function repeatedToolCallModel(toolCallCount = 1): {
               content: [
                 {
                   type: "output_text" as const,
-                  text:
-                    mustFinish && hasProjectedToolResult
-                      ? "押金以订单页面为准。"
-                      : '<｜｜DSML｜｜tool_calls><｜｜DSML｜｜invoke name="search_knowledge">',
+                  text: "押金以订单页面为准。",
                 },
               ],
             },
@@ -61,8 +53,8 @@ function repeatedToolCallModel(toolCallCount = 1): {
   return { model, requests };
 }
 
-test("customer-service runner forces a final model reply after one tool round", async () => {
-  const { model, requests } = repeatedToolCallModel();
+test("customer-service runner uses the SDK loop to return tool results to the model", async () => {
+  const { model, requests } = toolThenReplyModel();
   let searches = 0;
   let telemetryCalls = 0;
   const runCustomerService = createAgentsSdkCustomerServiceTextRunner({
@@ -98,13 +90,14 @@ test("customer-service runner forces a final model reply after one tool round", 
   assert.equal(searches, 1);
   assert.equal(requests.length, 2);
   assert.equal(telemetryCalls, 2);
-  assert.equal(requests[1].tools.length, 0);
-  assert.equal(requests[1].modelSettings.toolChoice, "none");
-  assert.match(JSON.stringify(requests[1].input), /## 已获得工具结果/);
+  assert.equal(requests[1].tools.length, 1);
+  // SDK resets a forced/explicit choice after a tool call; undefined is auto semantics.
+  assert.equal(requests[1].modelSettings.toolChoice, undefined);
+  assert.match(JSON.stringify(requests[1].input), /押金以订单页面为准/);
 });
 
 test("customer-service runner preserves every result when a provider emits multiple tool calls", async () => {
-  const { model, requests } = repeatedToolCallModel(2);
+  const { model, requests } = toolThenReplyModel(2);
   let searches = 0;
   const runCustomerService = createAgentsSdkCustomerServiceTextRunner({
     instructions: "先检索事实，再直接回答用户。",
@@ -131,9 +124,7 @@ test("customer-service runner preserves every result when a provider emits multi
 
   assert.equal(searches, 2);
   const finalInput = JSON.stringify(requests[1].input);
-  assert.match(finalInput, /工具结果 1/);
   assert.match(finalInput, /检索结果-1/);
-  assert.match(finalInput, /工具结果 2/);
   assert.match(finalInput, /检索结果-2/);
 });
 

@@ -1,4 +1,5 @@
 export * from "./customer-harness.js";
+export * from "./agent-instructions.js";
 export * from "./customer-service-sdk-runner.js";
 export * from "./search-execution.js";
 export * from "./tools/registry.js";

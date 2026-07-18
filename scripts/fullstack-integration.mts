@@ -39,9 +39,21 @@ const server = spawn(
     stdio: ["ignore", "pipe", "pipe"],
   },
 );
+let serverStderr = "";
+server.stderr.on("data", (chunk) => {
+  serverStderr += String(chunk);
+});
+const serverExited = new Promise<number | null>((resolveExit) => {
+  server.once("exit", (code) => resolveExit(code));
+});
 
 async function waitUntilReady() {
   for (let attempt = 0; attempt < 80; attempt += 1) {
+    if (server.exitCode !== null) {
+      throw new Error(
+        `Next server exited with code ${server.exitCode}: ${serverStderr.trim()}`,
+      );
+    }
     try {
       const response = await fetch(`${origin}/api/health`);
       if (response.ok) return;
@@ -87,10 +99,8 @@ try {
   assert.equal(response.status, 200);
   assert.equal((await response.json()).ok, true);
 } finally {
-  server.kill("SIGTERM");
-  await new Promise<void>((resolveExit) =>
-    server.once("exit", () => resolveExit()),
-  );
+  if (server.exitCode === null) server.kill("SIGTERM");
+  await serverExited;
 }
 
 const db = openDatabase(dbPath);

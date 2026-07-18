@@ -28,6 +28,8 @@ const extractionSchema = z
           confidence: z.number().min(0).max(1),
           sensitivity: z.enum(["normal", "sensitive"]),
           sourceTraceId: z.string(),
+          evidenceKind: z.enum(["explicit", "inferred"]),
+          durability: z.enum(["stable", "transaction_only"]),
         })
         .strict(),
     ),
@@ -60,7 +62,7 @@ export async function runMemoryExtraction(input: {
   const env = readLlmEnv();
   const runExtraction = createAgentsSdkStructuredRunner({
     instructions:
-      "Extract only durable customer facts useful across rental conversations. Do not store secrets, payment data, temporary requests, or guesses. Every memory must cite a supplied trace ID. Return an empty memories array when nothing is worth retaining.",
+      "Extract only durable customer facts useful across conversations. Mark direct customer statements explicit and model conclusions inferred. Mark one-time order needs transaction_only; they must not enter long-term memory. Do not store secrets or payment data. Every memory must cite a supplied trace ID. Return an empty memories array when nothing is worth retaining.",
     input: JSON.stringify(traces),
     model: createDeepSeekAgentsModelFromEnv(),
     modelName: env.chatModel,
@@ -75,7 +77,8 @@ export async function runMemoryExtraction(input: {
   const candidates = extracted.memories.flatMap((memory) => {
     if (
       !validTraceIds.has(memory.sourceTraceId) ||
-      memory.sensitivity === "sensitive"
+      memory.sensitivity === "sensitive" ||
+      memory.durability !== "stable"
     )
       return [];
     return [
@@ -87,6 +90,7 @@ export async function runMemoryExtraction(input: {
         value: memory.value as JsonValue,
         confidence: memory.confidence,
         sensitivity: memory.sensitivity,
+        evidenceKind: memory.evidenceKind,
       },
     ];
   });

@@ -1,29 +1,41 @@
-import {
-  readQuestionFromEvent,
-  type JsonValue,
-  type RuntimeToolCall,
-} from "@rental/shared";
+import { type JsonValue, type RuntimeToolCall } from "@rental/shared";
 import { z } from "zod";
 import {
   CUSTOMER_SERVICE_SDK_INSTRUCTIONS,
   type CustomerServiceActionKind,
   type CustomerServiceSdkRunner,
-  type CustomerServiceTaskKind,
-  type CustomerServiceToolChoice,
 } from "./customer-harness.js";
 import { executeSearchRequest } from "./search-execution.js";
 import { ApprovalRequiredError, PolicyDenyError } from "./tools/registry.js";
 
-/**
- * Zod schemas for the four customer-service tools the SDK lane can expose.
- * Standard-endpoint (non-strict) function calling; the executor's policy gate
- * and bad-argument retries own argument correctness (see ADR 0001 §2).
- */
 export const SDK_TOOL_SCHEMAS = {
+  request_customer_information: z
+    .object({
+      message: z.string(),
+      missingFields: z.array(z.string()),
+    })
+    .strict(),
   search_knowledge: z.object({ query: z.string() }).strict(),
   check_availability: z
-    .object({ size: z.string(), startDate: z.string(), endDate: z.string() })
+    .object({
+      size: z.string(),
+      quantity: z.number().int().positive().default(1),
+      fulfillmentMode: z.enum(["rental", "buyout"]).default("rental"),
+      startDate: z.string().nullable().default(null),
+      endDate: z.string().nullable().default(null),
+    })
     .strict(),
+  create_order: z
+    .object({
+      size: z.string(),
+      quantity: z.number().int().positive().default(1),
+      fulfillmentMode: z.enum(["rental", "buyout"]),
+      startDate: z.string().nullable().default(null),
+      endDate: z.string().nullable().default(null),
+    })
+    .strict(),
+  confirm_order: z.object({ orderId: z.string() }).strict(),
+  cancel_order: z.object({ orderId: z.string() }).strict(),
   create_handoff: z
     .object({ reason: z.string(), context: z.string().nullable() })
     .strict(),
@@ -32,7 +44,22 @@ export const SDK_TOOL_SCHEMAS = {
     .strict(),
 } as const;
 
-/** One SDK-exposed tool; structurally compatible with the llm adapter's function-tool shape. */
+const TOOL_DESCRIPTIONS: Record<keyof typeof SDK_TOOL_SCHEMAS, string> = {
+  request_customer_information:
+    "Ask the customer only for information required to complete the current task.",
+  search_knowledge:
+    "Search verified seller knowledge for policy, price, sizing, care, and product facts.",
+  check_availability:
+    "Check real availability for a product, size, and rental period.",
+  create_order:
+    "Create a pending rental or buyout order only after the fulfillment mode and required fields are clear.",
+  confirm_order: "Confirm a stored order and apply its inventory allocation.",
+  cancel_order: "Cancel a stored order and release its inventory allocation.",
+  create_handoff:
+    "Create a traceable human handoff with the problem and collected context.",
+  schedule_followup: "Create a traceable follow-up task for a future time.",
+};
+
 export type CustomerServiceSdkTool = {
   name: string;
   description: string;
@@ -41,46 +68,24 @@ export type CustomerServiceSdkTool = {
   execute: (raw: unknown) => Promise<JsonValue>;
 };
 
-/**
- * Injected SDK model/tool-loop factory. The caller (apps/web or eval) binds a
- * DeepSeek Agents SDK runner here; agent-core stays SDK-free and only assembles
- * the bounded customer-service run. Returns a thunk producing the final reply.
- */
 export type SdkStructuredRunFactory = (opts: {
   instructions: string;
   input: string;
   tools: CustomerServiceSdkTool[];
-  toolChoice: CustomerServiceToolChoice;
+  toolChoice: "auto";
   toolUseBehavior: "run_llm_again";
   maxTurns: number;
   signal?: AbortSignal;
 }) => () => Promise<{ reply: string }>;
 
-/** Renders task, tool policy, and dynamic context in a cache-friendly stable order. */
-export function buildSdkPrompt(
-  runtime: Parameters<CustomerServiceSdkRunner>[0],
-): string {
-  const [task, ...dynamicFragments] = runtime.context.fragments;
-  const render = (fragment: (typeof runtime.context.fragments)[number]) =>
-    `## ${fragment.label}\n${fragment.content}`;
-  return [
-    task ? render(task) : "",
-    `## 当前工具策略\n允许工具：${runtime.runPolicy.toolNames.join(", ") || "无"}\n工具选择：${runtime.runPolicy.toolChoice}`,
-    ...dynamicFragments.map(render),
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-}
-
-/** Derives the auditable action summary from the deterministic scheduled task. */
-export function actionForTask(
-  kind: CustomerServiceTaskKind,
-): CustomerServiceActionKind {
-  if (kind === "collect_missing_info") return "ask_missing_info";
-  if (kind === "answer_question") return "answer_question";
-  if (kind === "check_availability") return "check_availability";
-  if (kind === "handoff") return "handoff";
-  return "schedule_followup";
+function actionForTool(name: string): CustomerServiceActionKind {
+  if (name === "request_customer_information") return "ask_missing_info";
+  if (name === "check_availability") return "check_availability";
+  if (["create_order", "confirm_order", "cancel_order"].includes(name))
+    return "manage_order";
+  if (name === "create_handoff") return "handoff";
+  if (name === "schedule_followup") return "schedule_followup";
+  return "answer_question";
 }
 
 function policyErrorResult(error: unknown): JsonValue | undefined {
@@ -90,11 +95,18 @@ function policyErrorResult(error: unknown): JsonValue | undefined {
     : undefined;
 }
 
+function isFailedToolResult(result: JsonValue | undefined): boolean {
+  return (
+    result !== null &&
+    typeof result === "object" &&
+    !Array.isArray(result) &&
+    typeof result.error === "string"
+  );
+}
+
 /**
- * Builds the single production customer-service SDK runner. The harness owns task
- * scheduling, tool policy, prompt context, registry/policy gating, and trace; the
- * injected `runStructured` owns model/tool orchestration. Shared by apps/web and
- * eval so both exercise the identical lane (ADR 0001 Phase 3 #1).
+ * Builds Chatty's one model-directed Agents SDK runner. The Model chooses from
+ * the bounded tool set; the Harness validates, authorizes, executes, and audits.
  */
 export function createCustomerServiceSdkRunner(
   runStructured: SdkStructuredRunFactory,
@@ -105,22 +117,78 @@ export function createCustomerServiceSdkRunner(
     const toolCalls: RuntimeToolCall[] = [];
     const toolResults: JsonValue[] = [];
     const searchedQueries: string[] = [];
-    const tools: CustomerServiceSdkTool[] = runtime.runPolicy.toolNames.map(
-      (name) => {
-        const capability = runtime.registry.get(name);
-        if (!capability)
-          throw new Error(`required SDK tool is not registered: ${name}`);
-        return {
+    const forceHandoff = async (
+      failedTool: string,
+      error: unknown,
+    ): Promise<JsonValue> => {
+      runtime.signal?.throwIfAborted();
+      const capability = runtime.registry.get("create_handoff");
+      if (!capability) throw error;
+      const args: Record<string, JsonValue> = {
+        conversationId: runtime.event.conversationId,
+        reason: `Harness enforced escalation after ${failedTool} failed`,
+        context: String(error),
+      };
+      const call: RuntimeToolCall = {
+        toolName: "create_handoff",
+        arguments: args,
+        risk: capability.risk,
+        approvalRequired: capability.approvalRequired,
+      };
+      toolCalls.push(call);
+      runtime.emitEvent?.("tool_attempted", call as unknown as JsonValue);
+      const result = await runtime.registry.invoke("create_handoff", args, {
+        signal: runtime.signal,
+      });
+      toolResults.push(result);
+      runtime.emitEvent?.("tool_completed", {
+        toolName: "create_handoff",
+        result,
+      });
+      return result;
+    };
+    const toolNames = Object.keys(SDK_TOOL_SCHEMAS) as Array<
+      keyof typeof SDK_TOOL_SCHEMAS
+    >;
+    const tools: CustomerServiceSdkTool[] = toolNames.flatMap((name) => {
+      const local = name === "request_customer_information";
+      const capability = local ? undefined : runtime.registry.get(name);
+      if (!local && !capability) return [];
+      return [
+        {
           name,
-          description: capability.description,
-          // DeepSeek 标准端点走非-strict function calling；Agents SDK 要求 zod 参数
-          // 必须 strict，故给 SDK 传纯 JSON schema，参数校验仍由下面的 zod .parse 兜底。
+          description: TOOL_DESCRIPTIONS[name],
           parameters: z.toJSONSchema(SDK_TOOL_SCHEMAS[name]) as Record<
             string,
             unknown
           >,
-          needsApproval: capability.approvalRequired,
+          needsApproval: capability?.approvalRequired ?? false,
           execute: async (raw: unknown): Promise<JsonValue> => {
+            if (name === "request_customer_information") {
+              const args = SDK_TOOL_SCHEMAS[name].parse(
+                raw,
+              ) as unknown as Record<string, JsonValue>;
+              const call: RuntimeToolCall = {
+                toolName: name,
+                arguments: args,
+                risk: "low",
+                approvalRequired: false,
+              };
+              const result: JsonValue = {
+                ok: true,
+                waitingFor: "customer",
+                ...args,
+              };
+              toolCalls.push(call);
+              toolResults.push(result);
+              runtime.emitEvent?.(
+                "tool_attempted",
+                call as unknown as JsonValue,
+              );
+              runtime.emitEvent?.("tool_completed", { toolName: name, result });
+              return result;
+            }
+
             if (name === "search_knowledge") {
               let result;
               try {
@@ -128,9 +196,6 @@ export function createCustomerServiceSdkRunner(
                   toolName: name,
                   input: raw,
                   registry: runtime.registry,
-                  question: readQuestionFromEvent(runtime.event),
-                  productId:
-                    runtime.event.productId ?? runtime.memory.productId,
                   searchedQueries,
                   sessionStatus: runtime.sessionStatus,
                   policy: runtime.policy,
@@ -144,14 +209,8 @@ export function createCustomerServiceSdkRunner(
                   },
                 });
               } catch (error) {
-                const denied = policyErrorResult(error);
-                if (!denied) throw error;
-                toolResults.push(denied);
-                runtime.emitEvent?.("tool_completed", {
-                  toolName: name,
-                  result: denied,
-                });
-                return denied;
+                runtime.signal?.throwIfAborted();
+                return forceHandoff(name, policyErrorResult(error) ?? error);
               }
               if (result.kind === "retry") return result.output;
               searchedQueries.push(String(result.toolCall.arguments.query));
@@ -163,15 +222,25 @@ export function createCustomerServiceSdkRunner(
               });
               return result.output;
             }
-            const parsed = SDK_TOOL_SCHEMAS[name].parse(
-              raw,
-            ) as unknown as Record<string, JsonValue>;
+
             const args = {
-              ...parsed,
-              ...(name === "check_availability"
+              ...(SDK_TOOL_SCHEMAS[name].parse(raw) as unknown as Record<
+                string,
+                JsonValue
+              >),
+              ...(name === "check_availability" || name === "create_order"
                 ? {
                     productId:
                       runtime.event.productId ?? runtime.memory.productId ?? "",
+                  }
+                : {}),
+              ...(["create_order", "confirm_order", "cancel_order"].includes(
+                name,
+              )
+                ? {
+                    customerId: runtime.event.customerId,
+                    conversationId: runtime.event.conversationId,
+                    requestId: runtime.event.eventId,
                   }
                 : {}),
               ...(name === "create_handoff" || name === "schedule_followup"
@@ -181,12 +250,13 @@ export function createCustomerServiceSdkRunner(
             const call: RuntimeToolCall = {
               toolName: name,
               arguments: args,
-              risk: capability.risk,
-              approvalRequired: capability.approvalRequired,
+              risk: capability!.risk,
+              approvalRequired: capability!.approvalRequired,
             };
             toolCalls.push(call);
             runtime.emitEvent?.("tool_attempted", call as unknown as JsonValue);
             let result: JsonValue;
+            let forcedHandoff = false;
             try {
               result = await runtime.registry.invokeWithPolicy(
                 name,
@@ -196,35 +266,55 @@ export function createCustomerServiceSdkRunner(
                 { signal: runtime.signal },
               );
             } catch (error) {
-              const denied = policyErrorResult(error);
-              if (!denied) throw error;
-              result = denied;
+              runtime.signal?.throwIfAborted();
+              result = await forceHandoff(
+                name,
+                policyErrorResult(error) ?? error,
+              );
+              forcedHandoff = true;
             }
-            toolResults.push(result);
-            runtime.emitEvent?.("tool_completed", { toolName: name, result });
+            if (!forcedHandoff) {
+              toolResults.push(result);
+              runtime.emitEvent?.("tool_completed", { toolName: name, result });
+            }
             return result;
           },
-        };
-      },
-    );
+        },
+      ];
+    });
+
     const runSdk = runStructured({
       instructions: CUSTOMER_SERVICE_SDK_INSTRUCTIONS,
-      input: buildSdkPrompt(runtime),
+      input: runtime.context.prompt,
       tools,
-      toolChoice: runtime.runPolicy.toolChoice,
-      toolUseBehavior: runtime.runPolicy.toolUseBehavior,
-      maxTurns: runtime.runPolicy.maxTurns,
+      toolChoice: "auto",
+      toolUseBehavior: "run_llm_again",
+      maxTurns: 4,
       signal: runtime.signal,
     });
     runtime.emitEvent?.("model_called", { model: modelName });
     const output = await runSdk();
+    if (!output.reply.trim())
+      throw new Error("customer-service agent returned an empty reply");
+    const selectedTool = toolCalls[toolCalls.length - 1];
+    const action = selectedTool
+      ? actionForTool(selectedTool.toolName)
+      : "answer_question";
+    if (
+      selectedTool &&
+      isFailedToolResult(toolResults[toolResults.length - 1])
+    ) {
+      throw new Error(
+        `customer-service task did not complete successfully: ${selectedTool.toolName}`,
+      );
+    }
     return {
       reply: output.reply,
       action: {
-        action: actionForTask(runtime.task.kind),
+        action,
         reply: output.reply,
-        toolName: toolCalls[0]?.toolName,
-        toolArgs: toolCalls[0]?.arguments,
+        toolName: selectedTool?.toolName,
+        toolArgs: selectedTool?.arguments,
       },
       toolCalls,
       toolResults,

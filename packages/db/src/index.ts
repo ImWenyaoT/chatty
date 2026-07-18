@@ -7,3 +7,5 @@ export * from "./memory-repository.js";
 export * from "./knowledge-index.js";
 export * from "./knowledge-repository.js";
 export * from "./control-plane-repository.js";
+export * from "./durable-task-repository.js";
+export * from "./commerce-repository.js";

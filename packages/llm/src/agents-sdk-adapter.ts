@@ -118,8 +118,8 @@ export function toAgentsSdkFunctionTool(
 
 /**
  * Creates an SDK-backed compose loop. The SDK owns model/tool orchestration;
- * callers still own business task scheduling, prompt construction, trace
- * persistence, and DeepSeek fallback policy.
+ * callers still own bounded tool definitions, prompt context, trace
+ * persistence, and DeepSeek configuration.
  */
 export function createAgentsSdkToolLoopFn(options: AgentsSdkToolLoopOptions) {
   setTracingDisabled(true);
@@ -156,56 +156,16 @@ export function createAgentsSdkToolLoopFn(options: AgentsSdkToolLoopOptions) {
  * Runs one bounded customer-service turn as a plain tool loop and returns the
  * final reply. Unlike the structured runner it does NOT set the Agents SDK
  * `outputType`: DeepSeek does not support `response_format: json_schema` on any
- * endpoint, and its `json_object` structured output does not converge when tools
- * are present (the SDK loops to maxTurns). The model replies as plain short text;
- * the reply is extracted leniently, tolerating an optional `{reply}` JSON wrap.
+ * endpoint. The SDK owns the normal model → tool → result → model loop; the
+ * reply is extracted leniently, tolerating an optional `{reply}` JSON wrap.
  */
 export function createAgentsSdkCustomerServiceTextRunner(
   options: AgentsSdkToolLoopOptions,
 ): () => Promise<{ reply: string }> {
   return async () => {
-    let toolResult: string | undefined;
-    const stopAfterToolRound: ToolUseBehavior = (_context, results) => {
-      const outputs = results
-        .filter((entry) => entry.type === "function_output")
-        .map((entry, index) => {
-          const output =
-            typeof entry.output === "string"
-              ? entry.output
-              : JSON.stringify(entry.output);
-          return `工具结果 ${index + 1}：\n${output}`;
-        });
-      if (outputs.length === 0) {
-        return { isFinalOutput: false, isInterrupted: undefined };
-      }
-      toolResult = outputs.join("\n\n");
-      return {
-        isFinalOutput: true,
-        isInterrupted: undefined,
-        finalOutput: toolResult,
-      };
-    };
-    const runToolRound = createAgentsSdkToolLoopFn({
-      ...options,
-      toolUseBehavior: stopAfterToolRound,
-    });
-    const input = options.input ?? options.instructions;
-    const firstOutput = await runToolRound(input);
-    if (toolResult === undefined) {
-      return { reply: extractCustomerServiceReply(firstOutput) };
-    }
-    const runFinalReply = createAgentsSdkToolLoopFn({
-      ...options,
-      instructions: `${options.instructions}\n工具阶段已经结束。必须基于已有工具结果直接回复用户；不要再次调用、模拟或输出任何工具调用。`,
-      tools: [],
-      toolChoice: "none",
-      toolUseBehavior: "run_llm_again",
-      maxTurns: 1,
-    });
-    const finalOutput = await runFinalReply(
-      `${input}\n\n## 已获得工具结果\n${toolResult}`,
-    );
-    return { reply: extractCustomerServiceReply(finalOutput) };
+    const runAgent = createAgentsSdkToolLoopFn(options);
+    const output = await runAgent(options.input ?? options.instructions);
+    return { reply: extractCustomerServiceReply(output) };
   };
 }
 

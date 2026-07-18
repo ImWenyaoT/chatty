@@ -42,6 +42,10 @@ export type PlaygroundResponse = {
   status: AgentSessionStatus;
   terminality: AgentStepTerminality;
   harnessTrace: HarnessTrace;
+  /** Present only when this turn creates, resumes, or completes unresolved work. */
+  taskId?: string;
+  taskStatus?:
+    "pending" | "in_progress" | "waiting" | "completed" | "cancelled";
 };
 
 export type PlaygroundHistoryMessage = {

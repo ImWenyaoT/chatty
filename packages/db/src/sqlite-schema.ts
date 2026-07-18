@@ -32,6 +32,51 @@ CREATE TABLE IF NOT EXISTS product_memories (
 CREATE INDEX IF NOT EXISTS idx_product_memories_customer
   ON product_memories (customer_id, product_id);
 
+CREATE TABLE IF NOT EXISTS products (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1))
+);
+
+CREATE TABLE IF NOT EXISTS product_variants (
+  product_id TEXT NOT NULL,
+  size TEXT NOT NULL,
+  quantity INTEGER NOT NULL CHECK (quantity >= 0),
+  PRIMARY KEY (product_id, size),
+  FOREIGN KEY (product_id) REFERENCES products(id)
+);
+
+INSERT OR IGNORE INTO products (id, name, active)
+VALUES ('SUIT-001', '黑色双排扣西装', 1);
+
+INSERT OR IGNORE INTO product_variants (product_id, size, quantity)
+VALUES
+  ('SUIT-001', 'M', 1),
+  ('SUIT-001', 'L', 2),
+  ('SUIT-001', 'XL', 1);
+
+CREATE TABLE IF NOT EXISTS orders (
+  id TEXT PRIMARY KEY,
+  idempotency_key TEXT NOT NULL UNIQUE,
+  customer_id TEXT NOT NULL,
+  conversation_id TEXT NOT NULL,
+  product_id TEXT NOT NULL,
+  size TEXT NOT NULL,
+  fulfillment_mode TEXT NOT NULL CHECK (fulfillment_mode IN ('rental', 'buyout')),
+  quantity INTEGER NOT NULL CHECK (quantity > 0),
+  start_date TEXT,
+  end_date TEXT,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'confirmed', 'cancelled')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (product_id, size) REFERENCES product_variants(product_id, size)
+);
+
+CREATE INDEX IF NOT EXISTS idx_orders_availability
+  ON orders (product_id, size, status, fulfillment_mode, start_date, end_date);
+CREATE INDEX IF NOT EXISTS idx_orders_customer_status
+  ON orders (customer_id, status, updated_at);
+
 CREATE TABLE IF NOT EXISTS agent_traces (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL,
@@ -92,6 +137,26 @@ CREATE TABLE IF NOT EXISTS workflow_events (
   UNIQUE (run_id, sequence)
 );
 
+-- 未在当前 Agent loop 内完成的客户目标。同步 turn 只留下 Trace，
+-- 只有等待客户、人工、时间或依赖的工作才进入此表。
+CREATE TABLE IF NOT EXISTS durable_tasks (
+  id TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL,
+  wait_for TEXT,
+  due_at TEXT,
+  blocked_by_json TEXT NOT NULL DEFAULT '[]',
+  context_json TEXT NOT NULL DEFAULT '{}',
+  completion_evidence_json TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_durable_tasks_conversation
+  ON durable_tasks (conversation_id, status, updated_at);
+
 CREATE TABLE IF NOT EXISTS conversation_event_queue (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   conversation_id TEXT NOT NULL,
@@ -124,6 +189,8 @@ CREATE TABLE IF NOT EXISTS memory_candidates (
   value_json TEXT NOT NULL,
   confidence REAL NOT NULL,
   sensitivity TEXT NOT NULL,
+  evidence_kind TEXT NOT NULL DEFAULT 'explicit' CHECK (evidence_kind IN ('explicit', 'inferred')),
+  verified_by TEXT,
   status TEXT NOT NULL,
   usage_count INTEGER NOT NULL DEFAULT 0,
   last_used_at TEXT,

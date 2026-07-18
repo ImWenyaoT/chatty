@@ -3,6 +3,8 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import {
   createKnowledgeRepository,
+  createCommerceRepository,
+  createDurableTaskRepository,
   createControlPlaneRepository,
   createMemoryRepository,
   createSessionRepository,
@@ -16,6 +18,8 @@ import {
   type TraceRepository,
   type TraceReviewRepository,
   type ControlPlaneRepository,
+  type CommerceRepository,
+  type DurableTaskRepository,
 } from "@rental/db";
 import { resolveChattyDatabasePath } from "./database-path.mjs";
 
@@ -31,6 +35,8 @@ interface Repos {
   memory: MemoryRepository;
   knowledge: KnowledgeRepository;
   control: ControlPlaneRepository;
+  commerce: CommerceRepository;
+  tasks: DurableTaskRepository;
 }
 
 let repos: Repos | undefined;
@@ -57,6 +63,8 @@ function ensureInitialized(): Repos {
     memory: createMemoryRepository(db),
     knowledge: createKnowledgeRepository(db),
     control: createControlPlaneRepository(db),
+    commerce: createCommerceRepository(db),
+    tasks: createDurableTaskRepository(db),
   };
   return repos;
 }

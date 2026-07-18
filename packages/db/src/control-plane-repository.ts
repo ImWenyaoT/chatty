@@ -76,6 +76,8 @@ export interface MemoryCandidate {
   value: JsonValue;
   confidence: number;
   sensitivity: string;
+  evidenceKind: "explicit" | "inferred";
+  verifiedBy?: "customer_confirmation" | "corroboration" | "human_review";
   status: "candidate" | "promoted" | "pruned" | "rejected";
   usageCount: number;
   lastUsedAt?: string;
@@ -121,6 +123,8 @@ export interface ExtractedMemoryCandidate {
   value: JsonValue;
   confidence: number;
   sensitivity: "normal" | "sensitive";
+  evidenceKind?: "explicit" | "inferred";
+  verifiedBy?: "customer_confirmation" | "corroboration" | "human_review";
 }
 
 export class ConversationBusyError extends Error {
@@ -613,13 +617,17 @@ export function createControlPlaneRepository(db: Db) {
     },
 
     insertMemoryCandidate(
-      input: Omit<MemoryCandidate, "usageCount" | "createdAt" | "updatedAt">,
+      input: Omit<
+        MemoryCandidate,
+        "usageCount" | "createdAt" | "updatedAt" | "evidenceKind" | "verifiedBy"
+      > &
+        Pick<Partial<MemoryCandidate>, "evidenceKind" | "verifiedBy">,
     ): MemoryCandidate {
       const ts = nowIso();
       db.prepare(
         `INSERT OR IGNORE INTO memory_candidates
-         (id, customer_id, conversation_id, source_trace_id, category, memory_key, value_json, confidence, sensitivity, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, customer_id, conversation_id, source_trace_id, category, memory_key, value_json, confidence, sensitivity, evidence_kind, verified_by, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         input.id,
         input.customerId,
@@ -630,6 +638,8 @@ export function createControlPlaneRepository(db: Db) {
         JSON.stringify(input.value),
         input.confidence,
         input.sensitivity,
+        input.evidenceKind ?? "explicit",
+        input.verifiedBy ?? null,
         input.status,
         ts,
         ts,
@@ -692,8 +702,8 @@ export function createControlPlaneRepository(db: Db) {
         const insert = db.prepare(
           `INSERT INTO memory_candidates
            (id, customer_id, conversation_id, source_trace_id, category, memory_key, value_json,
-            confidence, sensitivity, status, created_at, updated_at)
-           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, 'candidate', ?, ?
+            confidence, sensitivity, evidence_kind, verified_by, status, created_at, updated_at)
+           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'candidate', ?, ?
            WHERE NOT EXISTS (
              SELECT 1 FROM memory_candidates WHERE customer_id = ? AND conversation_id = ?
              AND source_trace_id = ? AND category = ? AND memory_key = ? AND value_json = ?
@@ -711,6 +721,8 @@ export function createControlPlaneRepository(db: Db) {
             JSON.stringify(candidate.value),
             candidate.confidence,
             candidate.sensitivity,
+            candidate.evidenceKind ?? "explicit",
+            candidate.verifiedBy ?? null,
             ts,
             ts,
             input.customerId,
@@ -768,6 +780,50 @@ export function createControlPlaneRepository(db: Db) {
             `candidate cannot be promoted and pruned: ${overlap}`,
           );
         const ts = nowIso();
+        if (input.promotedIds.length > 0) {
+          const confirmed = (
+            db
+              .prepare(
+                "SELECT COUNT(*) AS count FROM orders WHERE customer_id = ? AND status = 'confirmed'",
+              )
+              .get(input.customerId) as { count: number }
+          ).count;
+          if (confirmed < 2) {
+            throw new Error("long-term memory requires a repeat customer");
+          }
+          const promotable = db.prepare(
+            `SELECT mc.evidence_kind, mc.verified_by,
+                    EXISTS(
+                      SELECT 1 FROM agent_traces t
+                      JOIN agent_sessions s ON s.id = t.session_id
+                      WHERE t.id = mc.source_trace_id AND s.customer_id = mc.customer_id
+                    ) AS source_exists
+             FROM memory_candidates mc
+             WHERE mc.id = ? AND mc.customer_id = ? AND mc.status = 'candidate'`,
+          );
+          for (const candidateId of input.promotedIds) {
+            const candidate = promotable.get(candidateId, input.customerId) as
+              | {
+                  evidence_kind: "explicit" | "inferred";
+                  verified_by: string | null;
+                  source_exists: number;
+                }
+              | undefined;
+            if (!candidate?.source_exists) {
+              throw new Error(
+                `memory candidate lacks source Trace: ${candidateId}`,
+              );
+            }
+            if (
+              candidate.evidence_kind === "inferred" &&
+              !candidate.verified_by
+            ) {
+              throw new Error(
+                `inferred memory is not verified: ${candidateId}`,
+              );
+            }
+          }
+        }
         const update = db.prepare(
           `UPDATE memory_candidates SET status = ?, updated_at = ?
            WHERE id = ? AND customer_id = ? AND status = 'candidate'`,
@@ -1301,6 +1357,8 @@ interface MemoryCandidateRow {
   value_json: string;
   confidence: number;
   sensitivity: string;
+  evidence_kind: "explicit" | "inferred";
+  verified_by: MemoryCandidate["verifiedBy"] | null;
   status: MemoryCandidate["status"];
   usage_count: number;
   last_used_at: string | null;
@@ -1394,6 +1452,8 @@ function mapMemoryCandidate(row: MemoryCandidateRow): MemoryCandidate {
     value: JSON.parse(row.value_json) as JsonValue,
     confidence: row.confidence,
     sensitivity: row.sensitivity,
+    evidenceKind: row.evidence_kind,
+    verifiedBy: row.verified_by ?? undefined,
     status: row.status,
     usageCount: row.usage_count,
     lastUsedAt: row.last_used_at ?? undefined,

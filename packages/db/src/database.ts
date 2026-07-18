@@ -73,6 +73,21 @@ function ensureControlPlaneColumns(db: Db): void {
       "ALTER TABLE background_jobs ADD COLUMN claim_fence INTEGER NOT NULL DEFAULT 0",
     );
   }
+  const memoryColumns = new Set(
+    (
+      db.prepare("PRAGMA table_info(memory_candidates)").all() as {
+        name: string;
+      }[]
+    ).map((column) => column.name),
+  );
+  if (!memoryColumns.has("evidence_kind")) {
+    db.exec(
+      "ALTER TABLE memory_candidates ADD COLUMN evidence_kind TEXT NOT NULL DEFAULT 'explicit'",
+    );
+  }
+  if (!memoryColumns.has("verified_by")) {
+    db.exec("ALTER TABLE memory_candidates ADD COLUMN verified_by TEXT");
+  }
 }
 
 /**

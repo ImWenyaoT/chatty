@@ -5,7 +5,9 @@ import { join } from "node:path";
 import { test } from "node:test";
 import {
   createKnowledgeRepository,
+  createCommerceRepository,
   createControlPlaneRepository,
+  createDurableTaskRepository,
   createMemoryRepository,
   createSessionRepository,
   createTraceRepository,
@@ -17,7 +19,10 @@ import {
   type TraceRepository,
   type TraceReviewRepository,
   type ControlPlaneRepository,
+  type DurableTaskRepository,
+  type CommerceRepository,
 } from "@rental/db";
+import type { CustomerServiceSdkRunner } from "@rental/agent-core";
 import {
   recoverCustomerServiceTurns,
   resumeCustomerServiceHandoff,
@@ -34,6 +39,8 @@ function createTestRepos(): CustomerServiceTurnRepos & {
   memory: MemoryRepository;
   knowledge: KnowledgeRepository;
   control: ControlPlaneRepository;
+  tasks: DurableTaskRepository;
+  commerce: CommerceRepository;
 } {
   const db = openDatabase(":memory:");
   return {
@@ -43,8 +50,227 @@ function createTestRepos(): CustomerServiceTurnRepos & {
     memory: createMemoryRepository(db),
     knowledge: createKnowledgeRepository(db),
     control: createControlPlaneRepository(db),
+    tasks: createDurableTaskRepository(db),
+    commerce: createCommerceRepository(db),
   };
 }
+
+test("customer reply resumes and completes the same SQLite Durable Task", async () => {
+  const path = join(
+    mkdtempSync(join(tmpdir(), "chatty-customer-wait-")),
+    "tasks.sqlite",
+  );
+  const firstDb = openDatabase(path);
+  const firstRepos = {
+    sessions: createSessionRepository(firstDb),
+    traces: createTraceRepository(firstDb),
+    memory: createMemoryRepository(firstDb),
+    knowledge: createKnowledgeRepository(firstDb),
+    control: createControlPlaneRepository(firstDb),
+    tasks: createDurableTaskRepository(firstDb),
+  };
+  let sequence = 0;
+  const first = await runCustomerServiceTurn(
+    {
+      customerId: "customer-wait",
+      conversationId: "conversation-wait",
+      question: "我想订这件",
+    },
+    {
+      repos: firstRepos,
+      idGenerator: (prefix) => `${prefix}-wait-${++sequence}`,
+      llmRuntimeFactory: () => ({
+        mode: "agents-sdk",
+        sdkRunner: async () => ({
+          reply: "请问需要什么尺码？",
+          action: {
+            action: "ask_missing_info" as const,
+            reply: "请问需要什么尺码？",
+            toolName: "request_customer_information" as const,
+            toolArgs: { fields: ["size"], question: "请问需要什么尺码？" },
+          },
+          toolCalls: [],
+          toolResults: [],
+          outputValidated: true as const,
+        }),
+        summary: () => createEmptyLlmSummary(),
+      }),
+    },
+  );
+
+  assert.ok(first.taskId);
+  assert.equal(first.taskStatus, "waiting");
+  firstDb.close();
+
+  const resumedDb = openDatabase(path);
+  const resumedRepos = {
+    sessions: createSessionRepository(resumedDb),
+    traces: createTraceRepository(resumedDb),
+    memory: createMemoryRepository(resumedDb),
+    knowledge: createKnowledgeRepository(resumedDb),
+    control: createControlPlaneRepository(resumedDb),
+    tasks: createDurableTaskRepository(resumedDb),
+  };
+  const resumed = await runCustomerServiceTurn(
+    {
+      customerId: "customer-wait",
+      conversationId: "conversation-wait",
+      question: "L 码",
+    },
+    {
+      repos: resumedRepos,
+      idGenerator: (prefix) => `${prefix}-resume-${++sequence}`,
+      llmRuntimeFactory: () => ({
+        mode: "agents-sdk",
+        sdkRunner: async () => ({
+          reply: "好的，已记录 L 码。",
+          action: {
+            action: "answer_question" as const,
+            reply: "好的，已记录 L 码。",
+          },
+          toolCalls: [],
+          toolResults: [],
+          outputValidated: true as const,
+        }),
+        summary: () => createEmptyLlmSummary(),
+      }),
+    },
+  );
+
+  assert.equal(resumed.taskId, first.taskId);
+  assert.equal(resumed.taskStatus, "completed");
+  resumedDb.close();
+});
+
+test("persisted customer turn uses SQLite availability and keeps the receipt in Trace", async () => {
+  const repos = createTestRepos();
+  const result = await runCustomerServiceTurn(
+    {
+      customerId: "customer-stock",
+      conversationId: "conversation-stock",
+      productId: "SUIT-001",
+      question: "8 月 1 到 3 日 L 码有两件吗？",
+    },
+    {
+      repos,
+      llmRuntimeFactory: () => ({
+        mode: "agents-sdk",
+        sdkRunner: async (runtime) => {
+          const args = {
+            productId: runtime.event.productId!,
+            size: "L",
+            quantity: 2,
+            fulfillmentMode: "rental",
+            startDate: "2026-08-01",
+            endDate: "2026-08-03",
+          };
+          const receipt = await runtime.registry.invoke(
+            "check_availability",
+            args,
+          );
+          return {
+            reply: "L 码有两件可租。",
+            action: {
+              action: "check_availability" as const,
+              reply: "L 码有两件可租。",
+              toolName: "check_availability",
+              toolArgs: args,
+            },
+            toolCalls: [
+              {
+                toolName: "check_availability",
+                arguments: args,
+                risk: "low" as const,
+                approvalRequired: false,
+              },
+            ],
+            toolResults: [receipt],
+            outputValidated: true as const,
+          };
+        },
+        summary: () => createEmptyLlmSummary(),
+      }),
+    },
+  );
+
+  assert.equal(
+    (result.harnessTrace.toolResults?.[0] as { availableQuantity: number })
+      .availableQuantity,
+    2,
+  );
+  const trace = repos.traces
+    .queryBySession(result.sessionId)
+    .find((item) => item.id === result.traceId);
+  assert.match(JSON.stringify(trace?.output), /availableQuantity/);
+  assert.equal(repos.tasks.listByConversation("conversation-stock").length, 0);
+});
+
+test("long-term Customer Memory starts only after the second confirmed order", async () => {
+  const repos = createTestRepos();
+  repos.memory.upsertCustomer("repeat-customer", {
+    globalSummary: "偏好黑色",
+  });
+  const confirmBuyout = (id: string, size: string) => {
+    repos.commerce.confirmOrder(
+      repos.commerce.createOrder({
+        id,
+        idempotencyKey: `idem-${id}`,
+        customerId: "repeat-customer",
+        conversationId: `order-${id}`,
+        productId: "SUIT-001",
+        size,
+        fulfillmentMode: "buyout",
+        quantity: 1,
+      }).id,
+    );
+  };
+  const seenMemory: unknown[] = [];
+  const options = {
+    repos,
+    llmRuntimeFactory: () => ({
+      mode: "agents-sdk" as const,
+      sdkRunner: async (runtime: Parameters<CustomerServiceSdkRunner>[0]) => {
+        seenMemory.push(runtime.memory.customerMemory);
+        return {
+          reply: "您好。",
+          action: { action: "answer_question" as const, reply: "您好。" },
+          toolCalls: [],
+          toolResults: [],
+          outputValidated: true as const,
+        };
+      },
+      summary: () => createEmptyLlmSummary(),
+    }),
+  };
+
+  confirmBuyout("first", "M");
+  await runCustomerServiceTurn(
+    {
+      customerId: "repeat-customer",
+      conversationId: "memory-before-second",
+      question: "你好",
+    },
+    options,
+  );
+  assert.doesNotMatch(JSON.stringify(seenMemory[0]), /偏好黑色/);
+  assert.equal(repos.control.listJobs().length, 0);
+
+  confirmBuyout("second", "XL");
+  await runCustomerServiceTurn(
+    {
+      customerId: "repeat-customer",
+      conversationId: "memory-after-second",
+      question: "又见面了",
+    },
+    options,
+  );
+  assert.match(JSON.stringify(seenMemory[1]), /偏好黑色/);
+  assert.equal(
+    repos.control.listJobs().filter((job) => job.type === "memory_extract")
+      .length,
+    1,
+  );
+});
 
 test("resumeCustomerServiceHandoff reopens SQLite and completes through the public turn seam", async () => {
   const path = join(
@@ -59,6 +285,7 @@ test("resumeCustomerServiceHandoff reopens SQLite and completes through the publ
     memory: createMemoryRepository(firstDb),
     knowledge: createKnowledgeRepository(firstDb),
     control: createControlPlaneRepository(firstDb),
+    tasks: createDurableTaskRepository(firstDb),
   };
   const handedOff = await runCustomerServiceTurn(
     {
@@ -94,6 +321,7 @@ test("resumeCustomerServiceHandoff reopens SQLite and completes through the publ
     firstRepos.control.getRun(handedOff.runId)?.status,
     "waiting_for_handoff",
   );
+  assert.equal(handedOff.taskStatus, "waiting");
   firstDb.close();
 
   const resumedDb = openDatabase(path);
@@ -103,6 +331,7 @@ test("resumeCustomerServiceHandoff reopens SQLite and completes through the publ
     memory: createMemoryRepository(resumedDb),
     knowledge: createKnowledgeRepository(resumedDb),
     control: createControlPlaneRepository(resumedDb),
+    tasks: createDurableTaskRepository(resumedDb),
   };
   const resumed = await resumeCustomerServiceHandoff(handedOff.runId, {
     repos: resumedRepos,
@@ -123,6 +352,8 @@ test("resumeCustomerServiceHandoff reopens SQLite and completes through the publ
       summary: () => createEmptyLlmSummary(),
     }),
   });
+  assert.equal(resumed.taskId, handedOff.taskId);
+  assert.equal(resumed.taskStatus, "completed");
 
   assert.equal(resumed.runId, handedOff.runId);
   assert.equal(

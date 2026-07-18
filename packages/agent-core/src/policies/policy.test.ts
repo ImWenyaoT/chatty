@@ -5,6 +5,7 @@ import {
   createDefaultToolRegistry,
   ApprovalRequiredError,
   PolicyDenyError,
+  ToolRegistry,
 } from "../tools/registry.js";
 import type { RuntimeToolCall } from "@rental/shared";
 
@@ -60,11 +61,20 @@ test("invokeWithPolicy allows low-risk tool to execute", async () => {
 });
 
 test("invokeWithPolicy throws ApprovalRequiredError for medium-risk tool", async () => {
+  const tools = new ToolRegistry().register({
+    name: "send_compensation_offer",
+    description: "Send a customer-facing compensation offer",
+    risk: "medium",
+    approvalRequired: false,
+    async execute() {
+      return { ok: true };
+    },
+  });
   await assert.rejects(
     () =>
-      createDefaultToolRegistry().invokeWithPolicy(
-        "create_handoff",
-        { conversationId: "c:SUIT-001", reason: "x" },
+      tools.invokeWithPolicy(
+        "send_compensation_offer",
+        { reason: "x" },
         policy,
         { sessionStatus: "active" },
       ),

@@ -20,6 +20,39 @@ function stores() {
   const db = openDatabase(
     join(mkdtempSync(join(tmpdir(), "chatty-memory-")), "harness.sqlite"),
   );
+  db.prepare(
+    `INSERT INTO agent_sessions
+     (id, customer_id, product_id, conversation_id, status, current_step, created_at, updated_at)
+     VALUES ('session-1', 'customer-1', 'SUIT-001', 'conversation-1', 'active', 'test', ?, ?)`,
+  ).run(now, now);
+  db.prepare(
+    `INSERT INTO agent_traces
+     (id, session_id, event_type, input_json, tool_calls_json, references_json, created_at)
+     VALUES ('trace-1', 'session-1', 'agent_reply_sent', '{}', '[]', '[]', ?)`,
+  ).run(now);
+  const insertOrder = db.prepare(
+    `INSERT INTO orders
+     (id, idempotency_key, customer_id, conversation_id, product_id, size,
+      fulfillment_mode, quantity, start_date, end_date, status, created_at, updated_at)
+     VALUES (?, ?, 'customer-1', 'conversation-1', 'SUIT-001', 'L',
+      'rental', 1, ?, ?, 'confirmed', ?, ?)`,
+  );
+  insertOrder.run(
+    "order-1",
+    "memory-order-1",
+    "2026-08-01",
+    "2026-08-02",
+    now,
+    now,
+  );
+  insertOrder.run(
+    "order-2",
+    "memory-order-2",
+    "2026-08-03",
+    "2026-08-04",
+    now,
+    now,
+  );
   return {
     control: createControlPlaneRepository(db),
     memory: createMemoryRepository(db),
@@ -237,6 +270,49 @@ test("global consolidation lease reclaim fences stale owner and commits promotio
     "promoted",
   );
   assert.equal(memory.getCustomer("customer-1")?.globalSummary, "偏好黑色");
+});
+
+test("unverified inferred preference cannot become Long-term Customer Memory", () => {
+  const { control } = stores();
+  control.insertMemoryCandidate({
+    id: "candidate-inferred",
+    customerId: "customer-1",
+    conversationId: "conversation-1",
+    sourceTraceId: "trace-1",
+    category: "preference",
+    key: "color",
+    value: "black",
+    confidence: 0.8,
+    sensitivity: "normal",
+    evidenceKind: "inferred",
+    status: "candidate",
+  });
+  control.scheduleMemoryConsolidation({
+    id: "consolidate-inferred",
+    customerId: "customer-1",
+    now,
+  });
+  const job = control.claimDueJob("worker-inferred", now)!;
+  assert.throws(
+    () =>
+      control.completeMemoryConsolidation(
+        job.id,
+        "worker-inferred",
+        job.claimFence,
+        {
+          customerId: "customer-1",
+          globalSummary: "偏好黑色",
+          promotedIds: ["candidate-inferred"],
+          prunedIds: [],
+        },
+        now,
+      ),
+    /inferred memory is not verified/,
+  );
+  assert.equal(
+    control.listMemoryCandidates("customer-1")[0].status,
+    "candidate",
+  );
 });
 
 test("expired consolidation cannot commit and no-output preserves the existing summary", () => {

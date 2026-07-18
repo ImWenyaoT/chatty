@@ -14,6 +14,7 @@ export default tseslint.config(
       "**/coverage/**",
       "**/*.svg",
       "**/.remember/**",
+      "learn-chatty/**",
       "pnpm-lock.yaml",
     ],
   },

@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { scheduleCustomerServiceTask } from "@rental/agent-core";
 import { createControlPlaneRepository, openDatabase } from "@rental/db";
 import type { MemorySnapshot } from "@rental/shared";
 import { prepareTurnContext } from "./context-control";
@@ -45,6 +44,7 @@ test("compaction persists the included trace boundary and actual projected token
       value: "L",
       confidence: 1,
       sensitivity: "normal",
+      evidenceKind: "explicit" as const,
       status: "promoted" as const,
       usageCount: 1,
       createdAt: "2026-07-11T00:00:00.000Z",
@@ -140,7 +140,7 @@ test("context preparation skips checkpoint work below the budget", async () => {
   ]);
 });
 
-test("projected context preserves body profiles for harness memory recall", async () => {
+test("projected context preserves verified body profiles for the agent", async () => {
   const control = createControlPlaneRepository(openDatabase(":memory:"));
   const result = await prepareTurnContext({
     control,
@@ -159,22 +159,13 @@ test("projected context preserves body profiles for harness memory recall", asyn
     memories: [],
   });
 
-  const task = scheduleCustomerServiceTask({
-    event: {
-      eventId: "event-1",
-      type: "user_message",
-      customerId: "customer-1",
-      conversationId: "conversation-1",
-      source: "customer",
-      payload: { question: "我身高体重多少来着？" },
-      occurredAt: "2026-07-12T00:00:00.000Z",
+  assert.deepEqual(result.snapshot.customerMemory, {
+    summary: {
+      bodyProfiles: [{ profileId: "default", heightCm: 178, weightKg: 70 }],
     },
-    memory: result.snapshot,
+    checkpoint: null,
+    longTerm: [],
   });
-
-  assert.equal(task.kind, "answer_question");
-  assert.match(task.goal, /身高 178 cm/);
-  assert.match(task.goal, /体重 70 kg/);
 });
 
 test("compaction preserves the previous checkpoint when generation or save fails", async () => {

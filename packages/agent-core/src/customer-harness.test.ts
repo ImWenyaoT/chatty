@@ -3,10 +3,9 @@ import { test } from "node:test";
 import type { ConversationEvent, MemorySnapshot } from "@rental/shared";
 import {
   buildCustomerServiceContext,
-  createCustomerServiceRunPolicy,
+  createCustomerServiceSdkRunner,
   createDefaultToolRegistry,
   runCustomerServiceHarnessStep,
-  scheduleCustomerServiceTask,
 } from "./index.js";
 
 function userEvent(
@@ -36,198 +35,143 @@ function memory(overrides: Partial<MemorySnapshot> = {}): MemorySnapshot {
   };
 }
 
-test("scheduler maps complete rental context to availability", () => {
-  const task = scheduleCustomerServiceTask({
-    event: userEvent("5月10到5月12，身高 179 体重 70kg，有 L 吗"),
-    memory: memory(),
-  });
-  assert.equal(task.kind, "check_availability");
-  assert.equal(task.terminality, "tool_then_continue");
-  assert.deepEqual(task.requiredContext, [
-    "productId",
-    "rentalPeriod",
-    "bodyMeasurements",
-  ]);
-});
-
-test("run policies expose one bounded SDK tool strategy", () => {
-  const cases = [
-    ["collect_missing_info", [], "none", 1],
-    ["answer_question", ["search_knowledge"], "search_knowledge", 4],
-    ["check_availability", ["check_availability"], "check_availability", 3],
-    ["handoff", ["create_handoff"], "create_handoff", 3],
-    ["follow_up", ["schedule_followup"], "schedule_followup", 3],
-  ] as const;
-  for (const [kind, toolNames, toolChoice, maxTurns] of cases) {
-    const policy = createCustomerServiceRunPolicy(
-      {
-        kind,
-        goal: kind,
-        requiredContext: [],
-        risk: kind === "handoff" ? "medium" : "low",
-        terminality: kind === "handoff" ? "handoff_and_wait" : "reply_and_wait",
-      },
-      { requireKnowledgeSearch: true },
-    );
-    assert.deepEqual(policy.toolNames, toolNames);
-    assert.equal(policy.toolChoice, toolChoice);
-    assert.equal(policy.maxTurns, maxTurns);
-  }
-});
-
-test("answer tasks keep search optional unless facts require grounding", () => {
-  const task = scheduleCustomerServiceTask({
-    event: userEvent("这款多少钱一天？"),
-    memory: memory(),
-  });
-  assert.equal(createCustomerServiceRunPolicy(task).toolChoice, "auto");
-  assert.equal(
-    createCustomerServiceRunPolicy(task, { requireKnowledgeSearch: true })
-      .toolChoice,
-    "search_knowledge",
-  );
-});
-
-test("scheduler routes safety, fact, link, period, and opening-hours turns", () => {
-  const cases = [
-    ["我要投诉，给我退款", "handoff"],
-    ["西装押金规则是什么？", "answer_question"],
-    ["就是当前链接这款吗", "answer_question"],
-    ["5月9号到10号用", "collect_missing_info"],
-    ["门店营业到几点？", "answer_question"],
-    ["衣服穿完还需要我自己洗吗？", "answer_question"],
-  ] as const;
-  for (const [question, expected] of cases) {
-    assert.equal(
-      scheduleCustomerServiceTask({
-        event: userEvent(question),
-        memory: memory(),
-      }).kind,
-      expected,
-      question,
-    );
-  }
-});
-
-test("a greeting in history does not masquerade as rental context", () => {
-  const task = scheduleCustomerServiceTask({
-    event: userEvent("我想租这款黑色西装"),
-    memory: memory({
-      recentMessages: [
-        "legacy-noise",
-        { role: "user", content: "你好 在吗" },
-        { role: "assistant", content: "在的" },
-      ],
-    }),
-  });
-
-  assert.equal(task.kind, "collect_missing_info");
-  assert.match(task.goal, /档期/);
-});
-
-test("missing product questions collect only the product", () => {
-  const event = { ...userEvent("这款多少钱一天？"), productId: undefined };
-  const task = scheduleCustomerServiceTask({
-    event,
-    memory: memory({ productId: undefined }),
-  });
-  assert.equal(task.kind, "collect_missing_info");
-  assert.match(task.goal, /只询问款式或商品编号/);
-  assert.match(task.goal, /不询问日期、身高或体重/);
-});
-
-test("body-memory recall is honest for absent, complete, and partial profiles", () => {
-  const event = {
-    ...userEvent("我身高体重多少来着？"),
-    productId: undefined,
-  };
-  const absent = scheduleCustomerServiceTask({
-    event,
-    memory: memory({ productId: undefined }),
-  });
-  assert.match(absent.goal, /还没有记录身高体重/);
-
-  const complete = scheduleCustomerServiceTask({
-    event,
-    memory: memory({
-      productId: undefined,
-      customerMemory: {
-        summary: {
-          bodyProfiles: [{ profileId: "default", heightCm: 178, weightKg: 70 }],
-        },
-      },
-    }),
-  });
-  assert.equal(complete.kind, "answer_question");
-  assert.match(complete.goal, /178/);
-  assert.match(complete.goal, /70/);
-
-  const partial = scheduleCustomerServiceTask({
-    event,
-    memory: memory({
-      productId: undefined,
-      customerMemory: {
-        summary: { bodyProfiles: [{ profileId: "default", heightCm: 178 }] },
-      },
-    }),
-  });
-  assert.match(partial.goal, /身高 178/);
-  assert.match(partial.goal, /体重还没有记录/);
-});
-
-test("clarification repairs do not expose tools", () => {
-  const task = scheduleCustomerServiceTask({
-    event: userEvent("没听懂"),
-    memory: memory({
-      recentMessages: [{ role: "assistant", content: "请提供身高体重" }],
-    }),
-  });
-  assert.equal(task.kind, "collect_missing_info");
-  assert.match(task.goal, /先道歉/);
-  assert.match(task.goal, /换一种更简单的说法/);
-  assert.deepEqual(createCustomerServiceRunPolicy(task).toolNames, []);
-});
-
-test("context builder keeps ordered inspectable fragments", () => {
-  const event = userEvent("这款多少钱");
-  const snapshot = memory({
-    recentMessages: [{ role: "assistant", content: "上一轮回复" }],
-  });
-  const task = scheduleCustomerServiceTask({ event, memory: snapshot });
+test("context exposes user, memory, and product facts without preclassifying intent", () => {
   const context = buildCustomerServiceContext({
-    event,
-    memory: snapshot,
-    task,
+    event: userEvent("我身高体重多少来着？"),
+    memory: memory({
+      recentMessages: [{ role: "assistant", content: "上一轮回复" }],
+      customerMemory: {
+        bodyProfiles: [{ profileId: "default", heightCm: 178, weightKg: 70 }],
+      },
+    }),
   });
+
   assert.deepEqual(
     context.fragments.map((fragment) => fragment.kind),
-    ["task", "user_message", "memory", "product"],
+    ["user_message", "memory", "product"],
   );
+  assert.doesNotMatch(context.prompt, /当前客服任务|当前工具策略/);
+  assert.match(context.prompt, /178/);
   assert.match(context.prompt, /SUIT-001/);
 });
 
-test("the harness step has one required SDK lane and returns auditable trace", async () => {
-  let toolChoice: string | undefined;
+test("the harness returns the model-selected task as an auditable outcome", async () => {
+  const sdkRunner = createCustomerServiceSdkRunner((options) => async () => {
+    assert.equal(options.toolChoice, "auto");
+    assert.doesNotMatch(options.input, /当前客服任务|当前工具策略/);
+    assert.match(options.input, /五月十日至十二日是否可预订大码/);
+    assert.deepEqual(options.tools.map((tool) => tool.name).sort(), [
+      "check_availability",
+      "create_handoff",
+      "request_customer_information",
+      "schedule_followup",
+      "search_knowledge",
+    ]);
+    const availability = options.tools.find(
+      (tool) => tool.name === "check_availability",
+    );
+    assert.ok(availability);
+    await availability.execute({
+      size: "L",
+      startDate: "2026-05-10",
+      endDate: "2026-05-12",
+    });
+    return { reply: "L 码这几天有货，可以继续下单。" };
+  });
+
   const result = await runCustomerServiceHarnessStep({
-    event: userEvent("这款多少钱一天？"),
+    event: userEvent("SUIT-001 在五月十日至十二日是否可预订大码？"),
+    memory: memory(),
+    registry: createDefaultToolRegistry({ search: () => [] }, undefined, {
+      checkAvailability: (input) => ({ ...input, available: true }),
+    }),
+    sdkRunner,
+  });
+
+  assert.equal(result.trace.task.kind, "check_availability");
+  assert.equal(result.trace.action.action, "check_availability");
+  assert.equal(result.step.nextStatus, "waiting_for_user");
+  assert.deepEqual(result.step.memoryPatch, {
+    lastHarnessTask: "check_availability",
+    lastHarnessAction: "check_availability",
+  });
+});
+
+test("missing information becomes a model-selected waiting-for-customer action", async () => {
+  const sdkRunner = createCustomerServiceSdkRunner((options) => async () => {
+    const request = options.tools.find(
+      (tool) => tool.name === "request_customer_information",
+    );
+    assert.ok(request);
+    await request.execute({
+      message: "请告诉我想租的商品编号。",
+      missingFields: ["productId"],
+    });
+    return { reply: "请告诉我想租的商品编号。" };
+  });
+
+  const result = await runCustomerServiceHarnessStep({
+    event: userEvent("我想租一套西装", undefined),
+    memory: memory({ productId: undefined }),
+    registry: createDefaultToolRegistry(),
+    sdkRunner,
+  });
+
+  assert.equal(result.trace.task.kind, "collect_missing_info");
+  assert.equal(result.trace.action.action, "ask_missing_info");
+  assert.equal(result.step.nextStatus, "waiting_for_user");
+});
+
+test("human in the loop creates a traceable handoff instead of an empty instruction", async () => {
+  const sdkRunner = createCustomerServiceSdkRunner((options) => async () => {
+    const handoff = options.tools.find(
+      (tool) => tool.name === "create_handoff",
+    );
+    assert.ok(handoff);
+    await handoff.execute({
+      reason: "退款争议需要负责人处理",
+      context: "客户要求核对订单 ORD-1001 的退款状态",
+    });
+    return { reply: "已创建退款处理工单，负责人会接续处理。" };
+  });
+
+  const result = await runCustomerServiceHarnessStep({
+    event: userEvent("订单 ORD-1001 的退款一直没到账"),
     memory: memory(),
     registry: createDefaultToolRegistry(),
-    sdkRunner: async (runtime) => {
-      toolChoice = runtime.runPolicy.toolChoice;
-      return {
-        reply: "第一天租金 199 元。",
-        action: { action: "answer_question", reply: "第一天租金 199 元。" },
-        toolCalls: [],
-        toolResults: [],
-        outputValidated: true,
-      };
-    },
+    sdkRunner,
   });
-  assert.equal(toolChoice, "search_knowledge");
-  assert.equal(result.step.reply, "第一天租金 199 元。");
+
+  assert.equal(result.trace.action.action, "handoff");
+  assert.equal(result.step.nextStatus, "waiting_for_human");
+  assert.deepEqual(result.trace.toolResults[0], {
+    ok: true,
+    handoffId: "HO-c:SUIT-001",
+    conversationId: "c:SUIT-001",
+    reason: "退款争议需要负责人处理",
+    context: "客户要求核对订单 ORD-1001 的退款状态",
+    createdAt: "2026-06-26T00:00:00.000Z",
+  });
+});
+
+test("a direct answer remains an answer task when no business tool is needed", async () => {
+  const result = await runCustomerServiceHarnessStep({
+    event: userEvent("你好"),
+    memory: memory(),
+    registry: createDefaultToolRegistry(),
+    sdkRunner: async () => ({
+      reply: "你好，请问想处理什么问题？",
+      action: {
+        action: "answer_question",
+        reply: "你好，请问想处理什么问题？",
+      },
+      toolCalls: [],
+      toolResults: [],
+      outputValidated: true,
+    }),
+  });
+
+  assert.equal(result.trace.task.kind, "answer_question");
+  assert.equal(result.step.reply, "你好，请问想处理什么问题？");
   assert.equal(result.trace.sdk?.outputValidated, true);
-  assert.deepEqual(result.step.memoryPatch, {
-    lastHarnessTask: "answer_question",
-    lastHarnessAction: "answer_question",
-  });
 });

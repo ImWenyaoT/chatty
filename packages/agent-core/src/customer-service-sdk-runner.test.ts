@@ -1,148 +1,67 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import type { ConversationEvent, MemorySnapshot } from "@rental/shared";
+import { createDefaultPolicy } from "./policies/policy.js";
 import {
-  actionForTask,
-  buildSdkPrompt,
   createCustomerServiceSdkRunner,
   type SdkStructuredRunFactory,
 } from "./customer-service-sdk-runner.js";
-import {
-  createCustomerServiceRunPolicy,
-  type CustomerServiceSdkRunner,
-  type CustomerServiceTask,
-} from "./customer-harness.js";
+import type { CustomerServiceSdkRunner } from "./customer-harness.js";
 import { createDefaultToolRegistry } from "./tools/registry.js";
-import { createDefaultPolicy } from "./policies/policy.js";
 
-test("buildSdkPrompt renders task first, then tool policy, then dynamic context", () => {
-  const runtime = {
-    context: {
-      fragments: [
-        {
-          kind: "task",
-          label: "当前客服任务",
-          content: "answer_question: 回答问题",
-        },
-        { kind: "user_message", label: "用户本轮消息", content: "押金多少" },
-      ],
-    },
-    runPolicy: { toolNames: ["search_knowledge"], toolChoice: "auto" },
-  } as unknown as Parameters<typeof buildSdkPrompt>[0];
-
-  const blocks = buildSdkPrompt(runtime).split("\n\n");
-  // 稳定顺序（cache-friendly）：task → 工具策略 → 动态片段。
-  assert.equal(blocks[0], "## 当前客服任务\nanswer_question: 回答问题");
-  assert.equal(
-    blocks[1],
-    "## 当前工具策略\n允许工具：search_knowledge\n工具选择：auto",
-  );
-  assert.equal(blocks[2], "## 用户本轮消息\n押金多少");
-});
-
-test("buildSdkPrompt marks an empty tool pool as 无", () => {
-  const runtime = {
-    context: {
-      fragments: [
-        {
-          kind: "task",
-          label: "当前客服任务",
-          content: "collect_missing_info: 收集信息",
-        },
-      ],
-    },
-    runPolicy: { toolNames: [], toolChoice: "none" },
-  } as unknown as Parameters<typeof buildSdkPrompt>[0];
-
-  assert.match(buildSdkPrompt(runtime), /允许工具：无\n工具选择：none/);
-});
-
-test("actionForTask maps every scheduled task kind to its auditable action", () => {
-  assert.equal(actionForTask("collect_missing_info"), "ask_missing_info");
-  assert.equal(actionForTask("answer_question"), "answer_question");
-  assert.equal(actionForTask("check_availability"), "check_availability");
-  assert.equal(actionForTask("handoff"), "handoff");
-  assert.equal(actionForTask("follow_up"), "schedule_followup");
-});
-
-/** Builds a check_availability runtime around the real registry/policy for the runner. */
-function checkAvailabilityRuntime(): Parameters<CustomerServiceSdkRunner>[0] {
-  const task: CustomerServiceTask = {
-    kind: "check_availability",
-    goal: "查库存",
-    terminality: "tool_then_continue",
-    requiredContext: [],
-    risk: "low",
-  };
+function runtime(
+  question = "4月29到30号，L码有货吗",
+): Parameters<CustomerServiceSdkRunner>[0] {
+  const event = {
+    eventId: "e-1",
+    type: "user_message",
+    customerId: "cust-1",
+    conversationId: "conv-1",
+    productId: "SUIT-001",
+    source: "customer",
+    payload: { question },
+    occurredAt: "2026-04-01T00:00:00.000Z",
+  } as ConversationEvent;
+  const memory = {
+    customerId: "cust-1",
+    conversationId: "conv-1",
+    productId: "SUIT-001",
+    recentMessages: [],
+  } as MemorySnapshot;
   return {
-    task,
-    runPolicy: createCustomerServiceRunPolicy(task),
     context: {
       fragments: [
-        { kind: "task", label: "当前客服任务", content: "check_availability" },
+        { kind: "user_message", label: "用户本轮消息", content: question },
+        { kind: "product", label: "商品上下文", content: "productId=SUIT-001" },
       ],
-      prompt: "",
+      prompt: `## 用户本轮消息\n${question}\n\n## 商品上下文\nproductId=SUIT-001`,
     },
-    event: {
-      eventId: "e-1",
-      type: "user_message",
-      customerId: "cust-1",
-      conversationId: "conv-1",
-      productId: "SUIT-001",
-      source: "customer",
-      payload: { question: "4月29到30号，L码有货吗" },
-      occurredAt: "2026-04-01T00:00:00.000Z",
-    } as ConversationEvent,
-    memory: {
-      customerId: "cust-1",
-      conversationId: "conv-1",
-      productId: "SUIT-001",
-      recentMessages: [],
-    } as MemorySnapshot,
-    registry: createDefaultToolRegistry(),
+    event,
+    memory,
+    registry: createDefaultToolRegistry(
+      {
+        search: (query) => [
+          { section: `${query} 参考`, text: "第一天 199 元；建议 L 码" },
+        ],
+      },
+      undefined,
+      {
+        checkAvailability: (input) => ({ ...input, available: true }),
+      },
+    ),
     sessionStatus: "active",
     policy: createDefaultPolicy(),
   };
 }
 
-function answerQuestionRuntime(): Parameters<CustomerServiceSdkRunner>[0] {
-  const task: CustomerServiceTask = {
-    kind: "answer_question",
-    goal: "回答尺码问题",
-    terminality: "reply_and_wait",
-    requiredContext: [],
-    risk: "low",
-  };
-  const knowledge = {
-    search: (query: string) => [
-      { section: `${query} 参考`, text: "身高 175-181、体重 66-80 建议 L" },
-    ],
-  };
-  return {
-    ...checkAvailabilityRuntime(),
-    task,
-    runPolicy: createCustomerServiceRunPolicy(task),
-    context: {
-      fragments: [
-        { kind: "task", label: "当前客服任务", content: "answer_question" },
-        {
-          kind: "user_message",
-          label: "用户本轮消息",
-          content: "我 178cm 72kg，这套建议什么码？",
-        },
-      ],
-      prompt: "",
-    },
-    registry: createDefaultToolRegistry(knowledge),
-  };
-}
-
-test("createCustomerServiceSdkRunner assembles tools, injects ids, and maps the audit action", async () => {
-  // 假注入：模拟模型调用唯一工具后给出回复；不触网络、不启 SDK。
-  const fakeRun: SdkStructuredRunFactory = (opts) => async () => {
-    assert.equal(opts.tools.length, 1);
-    assert.equal(opts.tools[0].name, "check_availability");
-    await opts.tools[0].execute({
+test("the model can select availability and the harness injects trusted ids", async () => {
+  const fakeRun: SdkStructuredRunFactory = (options) => async () => {
+    assert.equal(options.toolChoice, "auto");
+    const availability = options.tools.find(
+      (tool) => tool.name === "check_availability",
+    );
+    assert.ok(availability);
+    await availability.execute({
       size: "L",
       startDate: "2026-04-29",
       endDate: "2026-04-30",
@@ -150,163 +69,194 @@ test("createCustomerServiceSdkRunner assembles tools, injects ids, and maps the 
     return { reply: "L 码这两天有货，可以下单。" };
   };
 
-  const runner = createCustomerServiceSdkRunner(fakeRun);
-  const result = await runner(checkAvailabilityRuntime());
+  const result = await createCustomerServiceSdkRunner(fakeRun)(runtime());
 
-  assert.equal(result.reply, "L 码这两天有货，可以下单。");
   assert.equal(result.action.action, "check_availability");
-  assert.equal(result.outputValidated, true);
-  assert.equal(result.toolCalls[0].toolName, "check_availability");
-  // productId 由 harness 从 event 注入，不信任模型自带。
-  assert.equal(result.toolCalls[0].arguments.productId, "SUIT-001");
+  assert.deepEqual(result.toolCalls[0].arguments, {
+    size: "L",
+    quantity: 1,
+    fulfillmentMode: "rental",
+    startDate: "2026-04-29",
+    endDate: "2026-04-30",
+    productId: "SUIT-001",
+  });
   assert.equal(result.toolResults.length, 1);
 });
 
-test("createCustomerServiceSdkRunner routes knowledge search through the shared execution seam", async () => {
-  const runtime = answerQuestionRuntime();
-  const events: Array<{ type: string; payload: unknown }> = [];
-  runtime.emitEvent = (type, payload) => events.push({ type, payload });
-  const fakeRun: SdkStructuredRunFactory = (opts) => async () => {
-    const search = opts.tools.find((tool) => tool.name === "search_knowledge");
-    assert.ok(search);
-    const first = await search.execute({ query: "尺码推荐" });
-    const duplicate = await search.execute({ query: "尺码表" });
-    assert.match(JSON.stringify(first), /建议 L/);
-    assert.equal(duplicate, "已搜索过 SUIT-001 尺码。请基于已有结果直接回答。");
-    return { reply: "建议选 L 码。" };
-  };
+test("order tools receive trusted customer, conversation, product, and request ids", async () => {
+  const current = runtime("L 码买断一件");
+  current.registry = createDefaultToolRegistry(undefined, undefined, {
+    checkAvailability: () => ({ available: true }),
+    createOrder: (input) => ({ ok: true, orderId: "order-1", ...input }),
+  });
+  const result = await createCustomerServiceSdkRunner((options) => async () => {
+    const create = options.tools.find((tool) => tool.name === "create_order");
+    assert.ok(create);
+    await create.execute({
+      size: "L",
+      quantity: 1,
+      fulfillmentMode: "buyout",
+      startDate: null,
+      endDate: null,
+    });
+    return { reply: "买断订单已创建。" };
+  })(current);
 
-  const result = await createCustomerServiceSdkRunner(fakeRun)(runtime);
-
-  assert.deepEqual(
-    result.toolCalls.map((call) => call.arguments),
-    [{ query: "SUIT-001 尺码" }],
-  );
-  assert.equal(result.toolResults.length, 1);
-  const knowledge = runtime.context.fragments.filter(
-    (fragment) => fragment.kind === "knowledge",
-  );
-  assert.equal(knowledge.length, 1);
-  assert.equal(knowledge[0].label, "知识库检索：SUIT-001 尺码");
-  assert.match(knowledge[0].content, /建议 L/);
-  assert.deepEqual(
-    events.map((event) => event.type),
-    ["model_called", "tool_attempted", "tool_completed"],
-  );
+  assert.equal(result.action.action, "manage_order");
+  assert.deepEqual(result.toolCalls[0].arguments, {
+    size: "L",
+    quantity: 1,
+    fulfillmentMode: "buyout",
+    startDate: null,
+    endDate: null,
+    productId: "SUIT-001",
+    customerId: "cust-1",
+    conversationId: "conv-1",
+    requestId: "e-1",
+  });
 });
 
-test("createCustomerServiceSdkRunner grounds a price reply in the SQLite search evidence", async () => {
-  const runtime = answerQuestionRuntime();
-  runtime.event = {
-    ...runtime.event,
-    payload: { question: "这款多少钱一天？" },
-  };
-  runtime.context = {
-    ...runtime.context,
-    fragments: [
-      { kind: "task", label: "当前客服任务", content: "answer_question" },
-      {
-        kind: "user_message",
-        label: "用户本轮消息",
-        content: "这款多少钱一天？",
-      },
-    ],
-  };
-  runtime.runPolicy = createCustomerServiceRunPolicy(runtime.task, {
-    requireKnowledgeSearch: true,
-  });
-  runtime.registry = createDefaultToolRegistry({
-    search: () => [
-      {
-        section: "黑色双排扣西装 › 租赁价格",
-        text: "第一天租赁价格 199 元；续租每天 99.5 元。",
-      },
-    ],
-  });
-  const fakeRun: SdkStructuredRunFactory = (opts) => async () => {
-    assert.equal(opts.toolChoice, "search_knowledge");
-    const search = opts.tools.find((tool) => tool.name === "search_knowledge");
+test("knowledge search uses the model query and records evidence once", async () => {
+  const current = runtime("这款多少钱一天？");
+  const events: string[] = [];
+  current.emitEvent = (type) => events.push(type);
+  const fakeRun: SdkStructuredRunFactory = (options) => async () => {
+    const search = options.tools.find(
+      (tool) => tool.name === "search_knowledge",
+    );
     assert.ok(search);
-    const evidence = await search.execute({ query: "价格" });
-    assert.match(JSON.stringify(evidence), /199 元/);
-    return { reply: "这款第一天 199 元，续租每天 99.5 元。" };
+    const first = await search.execute({ query: "SUIT-001 价格" });
+    const duplicate = await search.execute({ query: "SUIT-001 价格" });
+    assert.match(JSON.stringify(first), /199 元/);
+    assert.match(String(duplicate), /已搜索过/);
+    return { reply: "这款第一天 199 元。" };
   };
 
-  const result = await createCustomerServiceSdkRunner(fakeRun)(runtime);
+  const result = await createCustomerServiceSdkRunner(fakeRun)(current);
 
-  assert.equal(result.reply, "这款第一天 199 元，续租每天 99.5 元。");
+  assert.equal(result.action.action, "answer_question");
   assert.deepEqual(
     result.toolCalls.map((call) => call.arguments),
-    [{ query: "价格" }],
+    [{ query: "SUIT-001 价格" }],
   );
-  assert.match(JSON.stringify(result.toolResults), /199 元/);
-  assert.match(
-    runtime.context.fragments.find((fragment) => fragment.kind === "knowledge")
-      ?.content ?? "",
-    /199 元/,
+  assert.equal(
+    current.context.fragments.find((fragment) => fragment.kind === "knowledge")
+      ?.label,
+    "知识库检索：SUIT-001 价格",
   );
+  assert.deepEqual(events, [
+    "model_called",
+    "tool_attempted",
+    "tool_completed",
+  ]);
 });
 
-test("createCustomerServiceSdkRunner audits a knowledge search before cancellation", async () => {
-  const runtime = answerQuestionRuntime();
-  runtime.signal = AbortSignal.abort(new Error("search cancelled"));
-  const events: Array<{ type: string; payload: unknown }> = [];
-  runtime.emitEvent = (type, payload) => events.push({ type, payload });
-  const fakeRun: SdkStructuredRunFactory = (opts) => async () => {
-    const search = opts.tools.find((tool) => tool.name === "search_knowledge");
+test("requesting missing information is an explicit harness action", async () => {
+  const fakeRun: SdkStructuredRunFactory = (options) => async () => {
+    const request = options.tools.find(
+      (tool) => tool.name === "request_customer_information",
+    );
+    assert.ok(request);
+    await request.execute({
+      message: "请提供商品编号。",
+      missingFields: ["productId"],
+    });
+    return { reply: "请提供商品编号。" };
+  };
+
+  const result = await createCustomerServiceSdkRunner(fakeRun)(
+    runtime("我想租衣服"),
+  );
+  assert.equal(result.action.action, "ask_missing_info");
+  assert.equal(result.toolCalls[0].toolName, "request_customer_information");
+});
+
+test("a cancelled search is audited before execution stops", async () => {
+  const current = runtime("尺码怎么选？");
+  current.signal = AbortSignal.abort(new Error("search cancelled"));
+  const events: string[] = [];
+  current.emitEvent = (type) => events.push(type);
+  const fakeRun: SdkStructuredRunFactory = (options) => async () => {
+    const search = options.tools.find(
+      (tool) => tool.name === "search_knowledge",
+    );
     assert.ok(search);
-    await search.execute({ query: "尺码推荐" });
+    await search.execute({ query: "SUIT-001 尺码" });
     return { reply: "unreachable" };
   };
 
   await assert.rejects(
-    createCustomerServiceSdkRunner(fakeRun)(runtime),
+    createCustomerServiceSdkRunner(fakeRun)(current),
     /search cancelled/,
   );
-  assert.deepEqual(
-    events.map((event) => event.type),
-    ["model_called", "tool_attempted"],
-  );
-  assert.deepEqual((events[1].payload as { arguments: unknown }).arguments, {
-    query: "SUIT-001 尺码",
-  });
+  assert.deepEqual(events, ["model_called", "tool_attempted"]);
 });
 
-test("createCustomerServiceSdkRunner records a denied knowledge search as a tool result", async () => {
-  const runtime = answerQuestionRuntime();
-  runtime.sessionStatus = "closed";
-  const fakeRun: SdkStructuredRunFactory = (opts) => async () => {
-    const search = opts.tools.find((tool) => tool.name === "search_knowledge");
+test("a denied tool call becomes a Harness-enforced Handoff", async () => {
+  const current = runtime("押金规则是什么？");
+  current.sessionStatus = "closed";
+  const fakeRun: SdkStructuredRunFactory = (options) => async () => {
+    const search = options.tools.find(
+      (tool) => tool.name === "search_knowledge",
+    );
     assert.ok(search);
-    const denied = await search.execute({ query: "押金" });
-    assert.deepEqual(denied, {
-      error: "PolicyDenyError",
-      message: "policy denied tool search_knowledge: session closed",
-    });
-    return { reply: "当前会话已关闭，无法继续查询。" };
+    await search.execute({ query: "押金" });
+    return { reply: "我已经查过了。" };
   };
 
-  const result = await createCustomerServiceSdkRunner(fakeRun)(runtime);
-
-  assert.equal(result.toolCalls.length, 1);
-  assert.deepEqual(result.toolResults, [
-    {
-      error: "PolicyDenyError",
-      message: "policy denied tool search_knowledge: session closed",
-    },
-  ]);
+  const result = await createCustomerServiceSdkRunner(fakeRun)(current);
+  assert.equal(result.action.action, "handoff");
+  assert.equal(result.toolCalls.at(-1)?.toolName, "create_handoff");
 });
 
-test("createCustomerServiceSdkRunner throws when a policy tool is not registered", async () => {
-  const runtime = checkAvailabilityRuntime();
-  runtime.registry = createDefaultToolRegistry();
-  // 把 runPolicy 指向一个未注册工具名，装配阶段必须显式失败而非静默跳过。
-  runtime.runPolicy = {
-    ...runtime.runPolicy,
-    toolNames: ["not_a_tool" as never],
-  };
-  const runner = createCustomerServiceSdkRunner(() => async () => ({
-    reply: "x",
-  }));
-  await assert.rejects(runner(runtime), /not registered/);
+test("a business-tool failure is converted into one Harness-enforced Handoff", async () => {
+  const current = runtime("查一下库存");
+  let persisted = false;
+  current.registry = createDefaultToolRegistry(
+    undefined,
+    {
+      createHandoff: (input) => {
+        persisted = true;
+        return { ok: true, taskId: "task-human", ...input };
+      },
+    },
+    {
+      checkAvailability: () => {
+        throw new Error("inventory unavailable");
+      },
+    },
+  );
+  const result = await createCustomerServiceSdkRunner((options) => async () => {
+    const availability = options.tools.find(
+      (tool) => tool.name === "check_availability",
+    );
+    assert.ok(availability);
+    await availability.execute({
+      size: "L",
+      quantity: 1,
+      fulfillmentMode: "rental",
+      startDate: "2026-08-01",
+      endDate: "2026-08-02",
+    });
+    return { reply: "库存系统暂不可用，已创建人工处理任务。" };
+  })(current);
+
+  assert.equal(result.action.action, "handoff");
+  assert.equal(result.toolCalls.at(-1)?.toolName, "create_handoff");
+  assert.equal(persisted, true);
+});
+
+test("only registered bounded business tools are exposed", async () => {
+  const current = runtime();
+  current.registry = createDefaultToolRegistry();
+  const runner = createCustomerServiceSdkRunner((options) => async () => {
+    assert.deepEqual(options.tools.map((tool) => tool.name).sort(), [
+      "create_handoff",
+      "request_customer_information",
+      "schedule_followup",
+    ]);
+    return { reply: "请告诉我想处理什么问题。" };
+  });
+
+  await runner(current);
 });

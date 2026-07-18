@@ -16,7 +16,14 @@ const EXPECTED_TOOLS = [
 ];
 
 function registry() {
-  return createDefaultToolRegistry();
+  return createDefaultToolRegistry(undefined, undefined, {
+    checkAvailability: (input) => ({
+      ...input,
+      available: true,
+      availableQuantity: 2,
+      productName: "黑色双排扣西装",
+    }),
+  });
 }
 
 test("default registry registers exactly the 4 MVP tools", () => {
@@ -31,13 +38,20 @@ test("check_availability answers for a known product", async () => {
   const out = await registry().invoke("check_availability", {
     productId: "SUIT-001",
     size: "L",
+    startDate: "2026-08-01",
+    endDate: "2026-08-03",
   });
-  const r = out as { available: boolean; productId: string };
+  const r = out as {
+    available: boolean;
+    availableQuantity: number;
+    productId: string;
+  };
   assert.equal(r.available, true);
+  assert.equal(r.availableQuantity, 2);
   assert.equal(r.productId, "SUIT-001");
 });
 
-test("create_handoff is medium risk but runs without hard approval gate", async () => {
+test("create_handoff is low risk so the agent can always create a real work item", async () => {
   const out = await registry().invoke("create_handoff", {
     conversationId: "c:SUIT-001",
     reason: "投诉",
@@ -46,6 +60,7 @@ test("create_handoff is medium risk but runs without hard approval gate", async 
   const r = out as { ok: boolean; handoffId: string };
   assert.equal(r.ok, true);
   assert.equal(r.handoffId, "HO-c:SUIT-001");
+  assert.equal(registry().get("create_handoff")?.risk, "low");
 });
 
 test("schedule_followup echoes a deterministic receipt", async () => {

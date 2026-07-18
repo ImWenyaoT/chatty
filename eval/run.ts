@@ -29,6 +29,7 @@ import {
 } from "@rental/agent-core";
 import {
   createKnowledgeRepository,
+  createCommerceRepository,
   createMemoryRepository,
   type Db,
   type MemoryRepository,
@@ -40,7 +41,7 @@ import {
   createDeepSeekAgentsModelFromEnv,
   readLlmEnv,
 } from "@rental/llm";
-import type { ConversationEvent } from "@rental/shared";
+import type { ConversationEvent, JsonValue } from "@rental/shared";
 import YAML from "yaml";
 import { evaluateCustomerServiceReply } from "./judge.js";
 import { parseEvalTimeoutMs, withEvalDeadline } from "./deadline.js";
@@ -260,10 +261,40 @@ async function openHarnessSession(
   );
   const db = openDatabase(dbPath);
   if (existsSync(KNOWLEDGE_DIR)) syncKnowledgeIndex(db, KNOWLEDGE_DIR);
+  const commerce = createCommerceRepository(db);
   return {
     db,
     memory: createMemoryRepository(db),
-    registry: createDefaultToolRegistry(createKnowledgeRepository(db)),
+    registry: createDefaultToolRegistry(
+      createKnowledgeRepository(db),
+      undefined,
+      {
+        checkAvailability: (input) =>
+          commerce.checkAvailability(input) as unknown as JsonValue,
+        createOrder: (input) =>
+          commerce.createOrder({
+            id: `order-${String(input.requestId)}`,
+            idempotencyKey: `eval-order-${String(input.requestId)}`,
+            customerId: String(input.customerId),
+            conversationId: String(input.conversationId),
+            productId: String(input.productId),
+            size: String(input.size),
+            fulfillmentMode:
+              input.fulfillmentMode === "buyout" ? "buyout" : "rental",
+            quantity: Number(input.quantity ?? 1),
+            ...(typeof input.startDate === "string"
+              ? { startDate: input.startDate }
+              : {}),
+            ...(typeof input.endDate === "string"
+              ? { endDate: input.endDate }
+              : {}),
+          }) as unknown as JsonValue,
+        confirmOrder: (input) =>
+          commerce.confirmOrder(String(input.orderId)) as unknown as JsonValue,
+        cancelOrder: (input) =>
+          commerce.cancelOrder(String(input.orderId)) as unknown as JsonValue,
+      },
+    ),
     sdkRunner: createHarnessSdkRunner(),
     conversationId:
       scenario.conversationId ??

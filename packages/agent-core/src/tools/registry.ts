@@ -1,5 +1,9 @@
 import type { RuntimeTool, JsonValue } from "@rental/shared";
-import { checkAvailabilityTool } from "./catalog-stubs.js";
+import {
+  createCheckAvailabilityTool,
+  createCommerceMutationTools,
+  type CommerceToolBackend,
+} from "./catalog-stubs.js";
 import {
   createHandoffTool,
   createScheduleFollowupTool,
@@ -104,26 +108,33 @@ export class PolicyDenyError extends Error {
 }
 
 /**
- * Builds the default MVP tool registry: the three actions the harness
- * scheduler actually dispatches (check_availability / create_handoff /
- * schedule_followup) plus the schema-only high-risk issue_refund that anchors
- * the approval gate. Passing a knowledge searcher additionally registers
- * search_knowledge (agentic search, B2).
+ * Builds the bounded MVP business-tool registry. The Model selects among
+ * registered tools; the registry owns real execution and policy enforcement.
+ * Passing a knowledge searcher additionally registers search_knowledge.
  */
 export function createDefaultToolRegistry(
   knowledge?: KnowledgeSearcher,
   workflow?: {
+    createHandoff?: (
+      input: Record<string, JsonValue>,
+      options?: { signal?: AbortSignal },
+    ) => Promise<JsonValue> | JsonValue;
     scheduleFollowup?: (
       input: Record<string, JsonValue>,
       options?: { signal?: AbortSignal },
     ) => Promise<JsonValue> | JsonValue;
   },
+  commerce?: CommerceToolBackend,
 ): ToolRegistry {
   const registry = new ToolRegistry()
-    .register(checkAvailabilityTool)
-    .register(createHandoffTool)
+    .register(createHandoffTool(workflow?.createHandoff))
     .register(createScheduleFollowupTool(workflow?.scheduleFollowup))
     .register(issueRefundTool);
+  if (commerce) {
+    registry.register(createCheckAvailabilityTool(commerce));
+    for (const tool of createCommerceMutationTools(commerce))
+      registry.register(tool);
+  }
   if (knowledge) registry.register(createSearchKnowledgeTool(knowledge));
   return registry;
 }
