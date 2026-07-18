@@ -82,9 +82,24 @@ test("the harness returns the model-selected task as an auditable outcome", asyn
   const result = await runCustomerServiceHarnessStep({
     event: userEvent("SUIT-001 在五月十日至十二日是否可预订大码？"),
     memory: memory(),
-    registry: createDefaultToolRegistry({ search: () => [] }, undefined, {
-      checkAvailability: (input) => ({ ...input, available: true }),
-    }),
+    registry: createDefaultToolRegistry(
+      { search: () => [] },
+      {
+        createHandoff: (input) => ({
+          ok: true,
+          taskId: "task-human",
+          ...input,
+        }),
+        scheduleFollowup: (input) => ({
+          ok: true,
+          taskId: "task-time",
+          ...input,
+        }),
+      },
+      {
+        checkAvailability: (input) => ({ ...input, available: true }),
+      },
+    ),
     sdkRunner,
   });
 
@@ -138,7 +153,13 @@ test("human in the loop creates a traceable handoff instead of an empty instruct
   const result = await runCustomerServiceHarnessStep({
     event: userEvent("订单 ORD-1001 的退款一直没到账"),
     memory: memory(),
-    registry: createDefaultToolRegistry(),
+    registry: createDefaultToolRegistry(undefined, {
+      createHandoff: (input) => ({
+        ok: true,
+        taskId: "task-human",
+        ...input,
+      }),
+    }),
     sdkRunner,
   });
 
@@ -146,11 +167,10 @@ test("human in the loop creates a traceable handoff instead of an empty instruct
   assert.equal(result.step.nextStatus, "waiting_for_human");
   assert.deepEqual(result.trace.toolResults[0], {
     ok: true,
-    handoffId: "HO-c:SUIT-001",
+    taskId: "task-human",
     conversationId: "c:SUIT-001",
     reason: "退款争议需要负责人处理",
     context: "客户要求核对订单 ORD-1001 的退款状态",
-    createdAt: "2026-06-26T00:00:00.000Z",
   });
 });
 

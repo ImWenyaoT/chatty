@@ -68,12 +68,14 @@ test("customer reply resumes and completes the same SQLite Durable Task", async 
     knowledge: createKnowledgeRepository(firstDb),
     control: createControlPlaneRepository(firstDb),
     tasks: createDurableTaskRepository(firstDb),
+    commerce: createCommerceRepository(firstDb),
   };
   let sequence = 0;
   const first = await runCustomerServiceTurn(
     {
       customerId: "customer-wait",
       conversationId: "conversation-wait",
+      productId: "SUIT-001",
       question: "我想订这件",
     },
     {
@@ -110,11 +112,13 @@ test("customer reply resumes and completes the same SQLite Durable Task", async 
     knowledge: createKnowledgeRepository(resumedDb),
     control: createControlPlaneRepository(resumedDb),
     tasks: createDurableTaskRepository(resumedDb),
+    commerce: createCommerceRepository(resumedDb),
   };
   const resumed = await runCustomerServiceTurn(
     {
       customerId: "customer-wait",
       conversationId: "conversation-wait",
+      productId: "SUIT-001",
       question: "L 码",
     },
     {
@@ -122,16 +126,32 @@ test("customer reply resumes and completes the same SQLite Durable Task", async 
       idGenerator: (prefix) => `${prefix}-resume-${++sequence}`,
       llmRuntimeFactory: () => ({
         mode: "agents-sdk",
-        sdkRunner: async () => ({
-          reply: "好的，已记录 L 码。",
-          action: {
-            action: "answer_question" as const,
-            reply: "好的，已记录 L 码。",
-          },
-          toolCalls: [],
-          toolResults: [],
-          outputValidated: true as const,
-        }),
+        sdkRunner: async (runtime) => {
+          const args = { productId: "SUIT-001", size: "L", quantity: 1 };
+          const receipt = await runtime.registry.invoke(
+            "check_availability",
+            args,
+          );
+          return {
+            reply: "L 码有货。",
+            action: {
+              action: "check_availability" as const,
+              reply: "L 码有货。",
+              toolName: "check_availability",
+              toolArgs: args,
+            },
+            toolCalls: [
+              {
+                toolName: "check_availability",
+                arguments: args,
+                risk: "low" as const,
+                approvalRequired: false,
+              },
+            ],
+            toolResults: [receipt],
+            outputValidated: true as const,
+          };
+        },
         summary: () => createEmptyLlmSummary(),
       }),
     },
@@ -272,6 +292,64 @@ test("long-term Customer Memory starts only after the second confirmed order", a
   );
 });
 
+test("repeated follow-up tool calls in one Agent loop reuse one Durable Task", async () => {
+  const repos = createTestRepos();
+  const dueAt = "2026-08-01T00:00:00.000Z";
+  const result = await runCustomerServiceTurn(
+    {
+      customerId: "followup-customer",
+      conversationId: "followup-conversation",
+      question: "8 月 1 日提醒我",
+    },
+    {
+      repos,
+      llmRuntimeFactory: () => ({
+        mode: "agents-sdk",
+        sdkRunner: async (runtime) => {
+          const args = {
+            conversationId: runtime.event.conversationId,
+            dueAt,
+            reason: "客户要求回访",
+          };
+          const first = await runtime.registry.invoke(
+            "schedule_followup",
+            args,
+          );
+          const replay = await runtime.registry.invoke(
+            "schedule_followup",
+            args,
+          );
+          assert.deepEqual(replay, first);
+          return {
+            reply: "已安排回访。",
+            action: {
+              action: "schedule_followup" as const,
+              reply: "已安排回访。",
+              toolName: "schedule_followup",
+              toolArgs: args,
+            },
+            toolCalls: [],
+            toolResults: [first, replay],
+            outputValidated: true as const,
+          };
+        },
+        summary: () => createEmptyLlmSummary(),
+      }),
+    },
+  );
+
+  assert.equal(result.taskStatus, "waiting");
+  assert.equal(
+    repos.tasks.listByConversation("followup-conversation").length,
+    1,
+  );
+  assert.equal(
+    repos.control.listJobs().filter((job) => job.type === "scheduled_followup")
+      .length,
+    1,
+  );
+});
+
 test("resumeCustomerServiceHandoff reopens SQLite and completes through the public turn seam", async () => {
   const path = join(
     mkdtempSync(join(tmpdir(), "chatty-handoff-")),
@@ -298,21 +376,33 @@ test("resumeCustomerServiceHandoff reopens SQLite and completes through the publ
       idGenerator: (prefix) => `${prefix}-handoff-${++sequence}`,
       llmRuntimeFactory: () => ({
         mode: "agents-sdk",
-        sdkRunner: async () => ({
-          reply: "已转人工处理。",
-          action: {
-            action: "handoff" as const,
+        sdkRunner: async (runtime) => {
+          const args = {
+            conversationId: "conversation-handoff",
+            reason: "退款",
+            context: null,
+          };
+          const receipt = await runtime.registry.invoke("create_handoff", args);
+          return {
             reply: "已转人工处理。",
-            toolName: "create_handoff" as const,
-            toolArgs: {
-              conversationId: "conversation-handoff",
-              reason: "退款",
+            action: {
+              action: "handoff" as const,
+              reply: "已转人工处理。",
+              toolName: "create_handoff" as const,
+              toolArgs: args,
             },
-          },
-          toolCalls: [],
-          toolResults: [],
-          outputValidated: true as const,
-        }),
+            toolCalls: [
+              {
+                toolName: "create_handoff",
+                arguments: args,
+                risk: "low" as const,
+                approvalRequired: false,
+              },
+            ],
+            toolResults: [receipt],
+            outputValidated: true as const,
+          };
+        },
         summary: () => createEmptyLlmSummary(),
       }),
     },
@@ -333,6 +423,13 @@ test("resumeCustomerServiceHandoff reopens SQLite and completes through the publ
     control: createControlPlaneRepository(resumedDb),
     tasks: createDurableTaskRepository(resumedDb),
   };
+  const decoy = resumedRepos.tasks.create({
+    id: "newer-human-task",
+    conversationId: "conversation-handoff",
+    subject: "另一个人工任务",
+    context: { runId: "another-run" },
+  });
+  resumedRepos.tasks.wait(decoy.id, "human");
   const resumed = await resumeCustomerServiceHandoff(handedOff.runId, {
     repos: resumedRepos,
     handoffResolution: "这款西装多少钱一天？",
@@ -354,6 +451,15 @@ test("resumeCustomerServiceHandoff reopens SQLite and completes through the publ
   });
   assert.equal(resumed.taskId, handedOff.taskId);
   assert.equal(resumed.taskStatus, "completed");
+  assert.equal(resumedRepos.tasks.get(decoy.id)?.status, "waiting");
+  assert.equal(
+    (
+      resumedRepos.tasks.get(handedOff.taskId!)?.completionEvidence as {
+        resolution: string;
+      }
+    ).resolution,
+    "这款西装多少钱一天？",
+  );
 
   assert.equal(resumed.runId, handedOff.runId);
   assert.equal(

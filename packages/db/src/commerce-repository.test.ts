@@ -19,7 +19,6 @@ test("availability reads seeded product and size quantities from SQLite", () => 
       productName: "黑色双排扣西装",
       size: "L",
       quantity: 1,
-      fulfillmentMode: "rental",
       startDate: "2026-08-01",
       endDate: "2026-08-03",
     },

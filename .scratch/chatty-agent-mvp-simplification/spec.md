@@ -54,7 +54,7 @@ The Model receives Context and the bounded tool set, understands intent, and cho
 - Inventory is quantity-based per product and size. Rental and buyout are supported as Fulfillment Modes without introducing individual-garment warehouse lifecycle modelling.
 - Business tools own their domain transactions and return structured receipts. The Harness injects trusted customer, conversation, and product identifiers rather than accepting Model-supplied identity fields.
 - A synchronous Agent loop leaves a Trace. A Durable Task is created only for work waiting on a customer, time, human, or prerequisite.
-- The Durable Task System starts from `learn-claude-code` s12: persisted task records, a small lifecycle, prerequisite relationships, and Model-visible task tools. Single-Agent Chatty does not add multi-agent claim coordination unless required for a human Handoff owner.
+- The Durable Task System starts from `learn-claude-code` s12: persisted task records, a small lifecycle, prerequisite relationships, and the domain tools `request_customer_information`, `create_handoff`, and `schedule_followup`. Generic task CRUD remains Harness-only. Single-Agent Chatty does not add multi-agent claim coordination unless required for a human Handoff owner.
 - Existing cancellation, idempotency, restart recovery, Handoff resume, and delayed-delivery behaviour is retained behind smaller module boundaries. Internal control-plane types are not themselves compatibility contracts and may be replaced.
 - Model-selected and Harness-enforced Handoffs create the same Durable Task shape. Human resolution is trusted input attached to that task; the same Agent resumes and produces the customer response.
 - Tool/business failures are returned to the Agent while safe recovery remains. Permission gates and exhausted recovery are Harness concerns. A failed receipt cannot be reported as completed.
@@ -69,6 +69,7 @@ The Model receives Context and the bounded tool set, understands intent, and cho
 - Tests assert external behaviour and persisted evidence, not private helper structure.
 - The primary core seam is one injected call to the public Harness step: a Conversation Event and Memory Snapshot enter; a reply, tool calls, completion state, memory patch, and Trace leave.
 - The primary persisted seam is one customer-service turn against a disposable SQLite database. It proves Agent choice, business-tool state change, Trace, Durable Task/Handoff, and Memory eligibility without requiring the web UI.
+- Legacy run/event rows are retained only as an Execution Control Compatibility layer for observable idempotent replay, cancellation, FIFO, and recovery behaviour; they are not Customer Durable Tasks.
 - The public Next.js API contract remains covered by full-stack tests, but frontend styling is not part of this work.
 - The Model/API boundary is mocked in deterministic tests by injecting an SDK runner; the actual Agents SDK loop is tested with its model seam, not replaced by a fake Chatty loop.
 - Opt-in DeepSeek contract tests and golden evals prove real provider/tool compatibility without making ordinary unit tests depend on network credentials.

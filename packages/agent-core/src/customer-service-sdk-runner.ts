@@ -20,7 +20,7 @@ export const SDK_TOOL_SCHEMAS = {
     .object({
       size: z.string(),
       quantity: z.number().int().positive().default(1),
-      fulfillmentMode: z.enum(["rental", "buyout"]).default("rental"),
+      fulfillmentMode: z.enum(["rental", "buyout"]).nullable().default(null),
       startDate: z.string().nullable().default(null),
       endDate: z.string().nullable().default(null),
     })
@@ -88,13 +88,6 @@ function actionForTool(name: string): CustomerServiceActionKind {
   return "answer_question";
 }
 
-function policyErrorResult(error: unknown): JsonValue | undefined {
-  return error instanceof ApprovalRequiredError ||
-    error instanceof PolicyDenyError
-    ? { error: error.name, message: error.message }
-    : undefined;
-}
-
 function isFailedToolResult(result: JsonValue | undefined): boolean {
   return (
     result !== null &&
@@ -117,6 +110,7 @@ export function createCustomerServiceSdkRunner(
     const toolCalls: RuntimeToolCall[] = [];
     const toolResults: JsonValue[] = [];
     const searchedQueries: string[] = [];
+    const failedAttempts = new Map<string, number>();
     const forceHandoff = async (
       failedTool: string,
       error: unknown,
@@ -143,6 +137,33 @@ export function createCustomerServiceSdkRunner(
       toolResults.push(result);
       runtime.emitEvent?.("tool_completed", {
         toolName: "create_handoff",
+        result,
+      });
+      return result;
+    };
+    const recoverOrHandoff = async (
+      failedTool: string,
+      error: unknown,
+    ): Promise<JsonValue> => {
+      runtime.signal?.throwIfAborted();
+      if (
+        error instanceof ApprovalRequiredError ||
+        error instanceof PolicyDenyError ||
+        failedTool === "create_handoff"
+      ) {
+        return forceHandoff(failedTool, error);
+      }
+      const attempts = (failedAttempts.get(failedTool) ?? 0) + 1;
+      failedAttempts.set(failedTool, attempts);
+      if (attempts >= 2) return forceHandoff(failedTool, error);
+      const result: JsonValue = {
+        error: "tool_failed",
+        message: String(error),
+        recoverable: true,
+      };
+      toolResults.push(result);
+      runtime.emitEvent?.("tool_completed", {
+        toolName: failedTool,
         result,
       });
       return result;
@@ -209,8 +230,7 @@ export function createCustomerServiceSdkRunner(
                   },
                 });
               } catch (error) {
-                runtime.signal?.throwIfAborted();
-                return forceHandoff(name, policyErrorResult(error) ?? error);
+                return recoverOrHandoff(name, error);
               }
               if (result.kind === "retry") return result.output;
               searchedQueries.push(String(result.toolCall.arguments.query));
@@ -266,14 +286,11 @@ export function createCustomerServiceSdkRunner(
                 { signal: runtime.signal },
               );
             } catch (error) {
-              runtime.signal?.throwIfAborted();
-              result = await forceHandoff(
-                name,
-                policyErrorResult(error) ?? error,
-              );
-              forcedHandoff = true;
+              result = await recoverOrHandoff(name, error);
+              forcedHandoff =
+                toolCalls[toolCalls.length - 1]?.toolName === "create_handoff";
             }
-            if (!forcedHandoff) {
+            if (!forcedHandoff && !isFailedToolResult(result)) {
               toolResults.push(result);
               runtime.emitEvent?.("tool_completed", { toolName: name, result });
             }
@@ -296,6 +313,12 @@ export function createCustomerServiceSdkRunner(
     const output = await runSdk();
     if (!output.reply.trim())
       throw new Error("customer-service agent returned an empty reply");
+    let reply = output.reply;
+    if (isFailedToolResult(toolResults[toolResults.length - 1])) {
+      const failedTool = toolCalls[toolCalls.length - 1]?.toolName ?? "unknown";
+      await forceHandoff(failedTool, toolResults[toolResults.length - 1]);
+      reply = "业务系统暂时无法完成处理，已创建可追踪的人工处理任务。";
+    }
     const selectedTool = toolCalls[toolCalls.length - 1];
     const action = selectedTool
       ? actionForTool(selectedTool.toolName)
@@ -309,10 +332,10 @@ export function createCustomerServiceSdkRunner(
       );
     }
     return {
-      reply: output.reply,
+      reply,
       action: {
         action,
-        reply: output.reply,
+        reply,
         toolName: selectedTool?.toolName,
         toolArgs: selectedTool?.arguments,
       },

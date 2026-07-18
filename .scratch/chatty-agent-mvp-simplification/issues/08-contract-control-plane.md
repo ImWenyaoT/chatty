@@ -8,7 +8,7 @@
 
 The legacy controller remains only as the compatibility floor for already-observable cross-process cancellation, idempotent replay, FIFO input, restart recovery, and operator read models. Replacing those behaviours is Web/control-plane product work and would violate the explicit preserve-behaviour boundary. Customer-facing unresolved work no longer uses its job vocabulary; it uses the new small Durable Task system.
 
-- [ ] Synchronous turns no longer create persistent workflow-run/event records that duplicate Trace.
+- [x] Synchronous turns create no Customer Durable Task; legacy run/event rows remain only for observable execution-control compatibility.
 - [ ] Handoff and follow-up no longer depend on legacy workflow/job states.
 - [ ] Crash recovery reclaims unfinished Durable Tasks without the general lease/heartbeat/version machinery where it is unnecessary.
 - [ ] Internal Memory work remains distinct from customer-facing Durable Tasks.

@@ -60,12 +60,15 @@ export function createCommerceRepository(db: Db): CommerceRepository {
     const productId = input.productId.trim().toUpperCase();
     const size = input.size.trim().toUpperCase();
     const quantity = input.quantity ?? 1;
-    const fulfillmentMode = input.fulfillmentMode ?? "rental";
+    const fulfillmentMode = input.fulfillmentMode;
+    const usesRentalCalendar =
+      fulfillmentMode === "rental" ||
+      (!fulfillmentMode && Boolean(input.startDate || input.endDate));
     if (!Number.isInteger(quantity) || quantity < 1) {
       throw new Error("availability quantity must be a positive integer");
     }
     if (
-      fulfillmentMode === "rental" &&
+      usesRentalCalendar &&
       ((input.startDate && !input.endDate) ||
         (!input.startDate && input.endDate))
     ) {
@@ -83,12 +86,7 @@ export function createCommerceRepository(db: Db): CommerceRepository {
       .get(productId, size) as
       { product_name: string; quantity: number } | undefined;
     let reserved = 0;
-    if (
-      row &&
-      fulfillmentMode === "rental" &&
-      input.startDate &&
-      input.endDate
-    ) {
+    if (row && usesRentalCalendar && input.startDate && input.endDate) {
       const reservation = db
         .prepare(
           `SELECT COALESCE(SUM(quantity), 0) AS quantity
@@ -110,7 +108,7 @@ export function createCommerceRepository(db: Db): CommerceRepository {
       ...(row ? { productName: row.product_name } : {}),
       size,
       quantity,
-      fulfillmentMode,
+      ...(fulfillmentMode ? { fulfillmentMode } : {}),
       ...(input.startDate ? { startDate: input.startDate } : {}),
       ...(input.endDate ? { endDate: input.endDate } : {}),
     };

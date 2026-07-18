@@ -30,6 +30,7 @@ import {
 import {
   createKnowledgeRepository,
   createCommerceRepository,
+  createDurableTaskRepository,
   createMemoryRepository,
   type Db,
   type MemoryRepository,
@@ -262,12 +263,28 @@ async function openHarnessSession(
   const db = openDatabase(dbPath);
   if (existsSync(KNOWLEDGE_DIR)) syncKnowledgeIndex(db, KNOWLEDGE_DIR);
   const commerce = createCommerceRepository(db);
+  const tasks = createDurableTaskRepository(db);
   return {
     db,
     memory: createMemoryRepository(db),
     registry: createDefaultToolRegistry(
       createKnowledgeRepository(db),
-      undefined,
+      {
+        createHandoff: (input) => {
+          const taskId = `task-${scenario.name}`;
+          const task =
+            tasks.get(taskId) ??
+            tasks.create({
+              id: taskId,
+              conversationId: String(input.conversationId),
+              subject: "等待人工处理",
+              description: String(input.reason),
+              context: input,
+            });
+          if (task.status !== "waiting") tasks.wait(task.id, "human");
+          return { ok: true, taskId: task.id };
+        },
+      },
       {
         checkAvailability: (input) =>
           commerce.checkAvailability(input) as unknown as JsonValue,

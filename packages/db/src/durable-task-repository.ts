@@ -29,8 +29,12 @@ export type DurableTaskCompletionEvidence =
       receiptId: string;
       traceId?: string;
     }
-  | { kind: "customer_message"; eventId: string; traceId: string }
-  | { kind: "human_resolution"; resolutionId: string; traceId?: string };
+  | {
+      kind: "human_resolution";
+      resolutionId: string;
+      resolution: string;
+      traceId?: string;
+    };
 
 export class InvalidDurableTaskTransitionError extends Error {
   constructor(from: DurableTaskStatus, to: DurableTaskStatus) {
@@ -98,6 +102,21 @@ export function createDurableTaskRepository(db: Db) {
            ORDER BY updated_at DESC, id DESC LIMIT 1`,
         )
         .get(conversationId, waitFor) as DurableTaskRow | undefined;
+      return row ? mapTask(row) : undefined;
+    },
+
+    findWaitingHumanByRunId(
+      conversationId: string,
+      runId: string,
+    ): DurableTask | undefined {
+      const row = db
+        .prepare(
+          `SELECT * FROM durable_tasks
+           WHERE conversation_id = ? AND status = 'waiting' AND wait_for = 'human'
+             AND json_extract(context_json, '$.runId') = ?
+           ORDER BY updated_at DESC, id DESC LIMIT 1`,
+        )
+        .get(conversationId, runId) as DurableTaskRow | undefined;
       return row ? mapTask(row) : undefined;
     },
 
@@ -197,11 +216,9 @@ function assertCompletionEvidence(
     (evidence.kind === "tool_receipt" &&
       Boolean(evidence.toolName.trim()) &&
       Boolean(evidence.receiptId.trim())) ||
-    (evidence.kind === "customer_message" &&
-      Boolean(evidence.eventId.trim()) &&
-      Boolean(evidence.traceId.trim())) ||
     (evidence.kind === "human_resolution" &&
-      Boolean(evidence.resolutionId.trim()));
+      Boolean(evidence.resolutionId.trim()) &&
+      Boolean(evidence.resolution.trim()));
   if (!valid)
     throw new Error("durable task completion requires verified evidence");
 }

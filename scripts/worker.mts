@@ -22,6 +22,7 @@ async function processOne(): Promise<boolean> {
   const repos = getRepos();
   return dispatchBackgroundJob({
     control: repos.control,
+    tasks: repos.tasks,
     workerId,
     leaseMs,
     heartbeatMs,

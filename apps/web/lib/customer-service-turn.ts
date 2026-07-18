@@ -89,7 +89,17 @@ export async function runCustomerServiceTurn(
     input.conversationId ??
     `${input.customerId}:${input.productId ?? "general"}`;
   const taskWaitFor = options.handoffResolution ? "human" : "customer";
-  const waitingTask = repos.tasks?.findWaiting(conversationId, taskWaitFor);
+  const waitingTask = options.handoffResolution
+    ? repos.tasks?.findWaitingHumanByRunId(
+        conversationId,
+        options.resumeHandoffRunId ?? "",
+      )
+    : repos.tasks?.findWaiting(conversationId, "customer");
+  if (options.handoffResolution && !waitingTask) {
+    throw new Error(
+      `waiting handoff task not found for run: ${options.resumeHandoffRunId ?? "unknown"}`,
+    );
+  }
   let durableTask: DurableTask | undefined = waitingTask
     ? repos.tasks?.resume(waitingTask.id, taskWaitFor)
     : undefined;
@@ -107,11 +117,15 @@ export async function runCustomerServiceTurn(
   const traceId = id("tr");
   const event = {
     eventId: id("evt"),
-    type: "user_message" as const,
+    type: options.handoffResolution
+      ? ("human_agent_replied" as const)
+      : ("user_message" as const),
     customerId: input.customerId,
     conversationId,
     productId: input.productId,
-    source: "customer" as const,
+    source: options.handoffResolution
+      ? ("human" as const)
+      : ("customer" as const),
     payload: createTurnPayload(input),
     occurredAt: now(),
     traceId,
@@ -217,6 +231,85 @@ export async function runCustomerServiceTurn(
       throw error;
     }
 
+    const workflowCapabilities = repos.tasks
+      ? {
+          createHandoff: (
+            args: Record<string, JsonValue>,
+            capabilityOptions?: { signal?: AbortSignal },
+          ): JsonValue => {
+            capabilityOptions?.signal?.throwIfAborted();
+            const context: JsonValue = {
+              customerId: input.customerId,
+              productId: input.productId ?? null,
+              question: input.question,
+              reason: args.reason ?? null,
+              priorActions: args.context ?? null,
+              runId,
+            };
+            durableTask ??= repos.tasks!.create({
+              id: id("task"),
+              conversationId,
+              subject: "等待人工处理",
+              description: String(args.reason ?? "需要人工处理"),
+              context,
+            });
+            if (durableTask.status !== "waiting") {
+              durableTask = repos.tasks!.wait(durableTask.id, "human", {
+                context,
+              });
+            }
+            return {
+              ok: true,
+              handoffId: durableTask.id,
+              taskId: durableTask.id,
+              status: durableTask.status,
+              conversationId,
+            };
+          },
+          scheduleFollowup: (
+            args: Record<string, JsonValue>,
+            capabilityOptions?: { signal?: AbortSignal },
+          ): JsonValue => {
+            capabilityOptions?.signal?.throwIfAborted();
+            const context: JsonValue = {
+              customerId: input.customerId,
+              productId: input.productId ?? null,
+              question: input.question,
+              reason: args.reason ?? null,
+              runId,
+            };
+            durableTask ??= repos.tasks!.create({
+              id: id("task"),
+              conversationId,
+              subject: "定时跟进",
+              description: String(args.reason ?? "到时跟进客户"),
+              context,
+            });
+            if (durableTask.status !== "waiting") {
+              durableTask = repos.tasks!.wait(durableTask.id, "time", {
+                dueAt: typeof args.dueAt === "string" ? args.dueAt : now(),
+                context,
+              });
+            }
+            repos.control.enqueueJob({
+              id: id("job"),
+              type: "scheduled_followup",
+              conversationId,
+              customerId: input.customerId,
+              payload: { ...args, durableTaskId: durableTask.id },
+              dueAt: durableTask.dueAt ?? now(),
+              idempotencyKey: `durable-task:${durableTask.id}:delivery`,
+            });
+            return {
+              ok: true,
+              followupId: durableTask.id,
+              taskId: durableTask.id,
+              dueAt: durableTask.dueAt ?? null,
+              status: durableTask.status,
+            };
+          },
+        }
+      : undefined;
     let harness;
     try {
       harness = await runCustomerServiceHarnessStep({
@@ -224,79 +317,7 @@ export async function runCustomerServiceTurn(
         memory: projectedSnapshot,
         registry: createDefaultToolRegistry(
           repos.knowledge,
-          {
-            createHandoff: (args, capabilityOptions): JsonValue => {
-              capabilityOptions?.signal?.throwIfAborted();
-              if (!repos.tasks) {
-                return {
-                  ok: true,
-                  handoffId: `HO-${conversationId}`,
-                  conversationId,
-                };
-              }
-              durableTask ??= repos.tasks.create({
-                id: id("task"),
-                conversationId,
-                subject: "等待人工处理",
-                description: String(args.reason ?? "需要人工处理"),
-                context: {
-                  customerId: input.customerId,
-                  productId: input.productId ?? null,
-                  question: input.question,
-                  reason: args.reason ?? null,
-                  priorActions: args.context ?? null,
-                },
-              });
-              durableTask = repos.tasks.wait(durableTask.id, "human", {
-                context: durableTask.context,
-              });
-              return {
-                ok: true,
-                handoffId: durableTask.id,
-                taskId: durableTask.id,
-                status: durableTask.status,
-                conversationId,
-              };
-            },
-            scheduleFollowup: (args, capabilityOptions): JsonValue => {
-              capabilityOptions?.signal?.throwIfAborted();
-              if (repos.tasks) {
-                durableTask ??= repos.tasks.create({
-                  id: id("task"),
-                  conversationId,
-                  subject: "定时跟进",
-                  description: String(args.reason ?? "到时跟进客户"),
-                  context: {
-                    customerId: input.customerId,
-                    productId: input.productId ?? null,
-                    question: input.question,
-                    reason: args.reason ?? null,
-                  },
-                });
-                durableTask = repos.tasks.wait(durableTask.id, "time", {
-                  dueAt: typeof args.dueAt === "string" ? args.dueAt : now(),
-                  context: durableTask.context,
-                });
-                return {
-                  ok: true,
-                  followupId: durableTask.id,
-                  taskId: durableTask.id,
-                  dueAt: durableTask.dueAt ?? null,
-                  status: durableTask.status,
-                };
-              }
-              const job = repos.control.enqueueJob({
-                id: id("job"),
-                type: "scheduled_followup",
-                conversationId,
-                customerId: input.customerId,
-                payload: args,
-                dueAt: typeof args.dueAt === "string" ? args.dueAt : now(),
-                idempotencyKey: `followup:${conversationId}:${String(args.dueAt)}`,
-              });
-              return { ok: true, jobId: job.id, dueAt: job.dueAt };
-            },
-          },
+          workflowCapabilities,
           repos.commerce
             ? createCommerceToolBackend(repos.commerce, id)
             : undefined,
@@ -308,6 +329,16 @@ export async function runCustomerServiceTurn(
         emitEvent: (type, payload = {}) =>
           runController.event(runId, type, payload),
       });
+      if (
+        ["handoff", "schedule_followup"].includes(
+          harness.trace.action.action,
+        ) &&
+        !durableTask
+      ) {
+        throw new Error(
+          `side-effect action has no durable task receipt: ${harness.trace.action.action}`,
+        );
+      }
     } catch (error) {
       throwIfTurnCancelled(started.signal, repos.control, runId);
       repos.traces.append({
@@ -373,45 +404,7 @@ export async function runCustomerServiceTurn(
       productId: input.productId,
     });
     if (repos.tasks) {
-      if (harness.trace.action.action === "handoff" && !durableTask) {
-        durableTask = repos.tasks.create({
-          id: id("task"),
-          conversationId,
-          subject: "等待人工处理",
-          description: result.reply ?? "需要人工处理",
-          context: {
-            customerId: input.customerId,
-            productId: input.productId ?? null,
-            question: input.question,
-            reason: harness.trace.action.toolArgs?.reason ?? null,
-            priorActions: result.toolCalls as unknown as JsonValue,
-          },
-        });
-        durableTask = repos.tasks.wait(durableTask.id, "human", {
-          context: durableTask.context,
-        });
-      } else if (
-        harness.trace.action.action === "schedule_followup" &&
-        !durableTask
-      ) {
-        durableTask = repos.tasks.create({
-          id: id("task"),
-          conversationId,
-          subject: "定时跟进",
-          description: String(
-            harness.trace.action.toolArgs?.reason ?? "到时跟进客户",
-          ),
-          context: {
-            customerId: input.customerId,
-            productId: input.productId ?? null,
-            question: input.question,
-          },
-        });
-        durableTask = repos.tasks.wait(durableTask.id, "time", {
-          dueAt: String(harness.trace.action.toolArgs?.dueAt ?? now()),
-          context: durableTask.context,
-        });
-      } else if (
+      if (
         result.terminality === "reply_and_wait" &&
         harness.trace.action.action === "ask_missing_info"
       ) {
@@ -431,17 +424,25 @@ export async function runCustomerServiceTurn(
           context: durableTask.context,
         });
       } else if (durableTask?.status === "in_progress") {
-        durableTask = options.handoffResolution
-          ? repos.tasks.complete(durableTask.id, {
-              kind: "human_resolution",
-              resolutionId: `resolution:${event.eventId}`,
-              traceId,
-            })
-          : repos.tasks.complete(durableTask.id, {
-              kind: "customer_message",
-              eventId: event.eventId,
-              traceId,
-            });
+        const receipt = findSuccessfulBusinessToolReceipt(
+          harness.trace.toolCalls,
+          harness.trace.toolResults,
+          traceId,
+        );
+        if (options.handoffResolution) {
+          durableTask = repos.tasks.complete(durableTask.id, {
+            kind: "human_resolution",
+            resolutionId: `resolution:${event.eventId}`,
+            resolution: options.handoffResolution,
+            traceId,
+          });
+        } else if (receipt) {
+          durableTask = repos.tasks.complete(durableTask.id, receipt);
+        } else {
+          durableTask = repos.tasks.wait(durableTask.id, "customer", {
+            context: durableTask.context,
+          });
+        }
       }
     }
     if (result.nextStatus === "waiting_for_human") {
@@ -518,6 +519,43 @@ export async function runCustomerServiceTurn(
     }
     throw error;
   }
+}
+
+/** Returns evidence only for a successful business-system side effect/read. */
+function findSuccessfulBusinessToolReceipt(
+  calls: Array<{ toolName: string }>,
+  results: JsonValue[],
+  traceId: string,
+) {
+  const businessTools = new Set([
+    "search_knowledge",
+    "check_availability",
+    "create_order",
+    "confirm_order",
+    "cancel_order",
+  ]);
+  for (
+    let index = Math.min(calls.length, results.length) - 1;
+    index >= 0;
+    index--
+  ) {
+    const result = results[index];
+    const failed =
+      result !== null &&
+      typeof result === "object" &&
+      !Array.isArray(result) &&
+      typeof result.error === "string";
+    const toolName = calls[index]!.toolName;
+    if (businessTools.has(toolName) && !failed) {
+      return {
+        kind: "tool_receipt" as const,
+        toolName,
+        receiptId: `${traceId}:${index}`,
+        traceId,
+      };
+    }
+  }
+  return undefined;
 }
 
 function createCommerceToolBackend(

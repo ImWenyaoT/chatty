@@ -215,7 +215,7 @@ export async function runCustomerServiceHarnessStep(
   const { task, nextStatus } = outcomeForAction(executed.action.action);
   context.fragments.unshift({
     kind: "task",
-    label: "已完成客服任务",
+    label: "本轮客服动作",
     content: task.kind,
   });
   const traceId = input.event.traceId ?? input.event.eventId;

@@ -51,7 +51,9 @@ test("closed session => deny regardless of risk", () => {
 });
 
 test("invokeWithPolicy allows low-risk tool to execute", async () => {
-  const out = await createDefaultToolRegistry().invokeWithPolicy(
+  const out = await createDefaultToolRegistry(undefined, {
+    scheduleFollowup: () => ({ ok: true }),
+  }).invokeWithPolicy(
     "schedule_followup",
     { conversationId: "c:SUIT-001", dueAt: "next_business_day", reason: "x" },
     policy,
@@ -85,7 +87,9 @@ test("invokeWithPolicy throws ApprovalRequiredError for medium-risk tool", async
 test("invokeWithPolicy throws PolicyDenyError on closed session", async () => {
   await assert.rejects(
     () =>
-      createDefaultToolRegistry().invokeWithPolicy(
+      createDefaultToolRegistry(undefined, {
+        scheduleFollowup: () => ({ ok: true }),
+      }).invokeWithPolicy(
         "schedule_followup",
         {
           conversationId: "c:SUIT-001",

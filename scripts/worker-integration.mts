@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   createControlPlaneRepository,
+  createDurableTaskRepository,
   openDatabase,
 } from "../packages/db/src/index.ts";
 
@@ -14,12 +15,19 @@ const databasePath = join(directory, "worker.db");
 try {
   const seedDb = openDatabase(databasePath);
   const seedControl = createControlPlaneRepository(seedDb);
+  const seedTasks = createDurableTaskRepository(seedDb);
+  const task = seedTasks.create({
+    id: "integration-task",
+    conversationId: "conversation-integration",
+    subject: "scheduled integration follow-up",
+  });
+  seedTasks.wait(task.id, "time", { dueAt: "2020-01-01T00:00:00.000Z" });
   seedControl.enqueueJob({
     id: "integration-followup",
     type: "scheduled_followup",
     customerId: "customer-integration",
     conversationId: "conversation-integration",
-    payload: { reason: "integration fixture" },
+    payload: { reason: "integration fixture", durableTaskId: task.id },
     dueAt: "2020-01-01T00:00:00.000Z",
     idempotencyKey: "integration-followup",
   });
@@ -57,6 +65,7 @@ try {
 
   const verifyDb = openDatabase(databasePath);
   const verifyControl = createControlPlaneRepository(verifyDb);
+  const verifyTasks = createDurableTaskRepository(verifyDb);
   const job = verifyControl.getJob("integration-followup");
   const outbox = verifyControl.listOutbox();
   assert.equal(
@@ -75,6 +84,7 @@ try {
     "one-shot worker must publish exactly one delivery",
   );
   assert.equal(outbox[0].id, "outbox:integration-followup");
+  assert.equal(verifyTasks.get(task.id)?.status, "completed");
   assert.equal(
     outbox[0].runId,
     job?.runId,

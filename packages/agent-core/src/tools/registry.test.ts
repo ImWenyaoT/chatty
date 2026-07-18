@@ -16,14 +16,29 @@ const EXPECTED_TOOLS = [
 ];
 
 function registry() {
-  return createDefaultToolRegistry(undefined, undefined, {
-    checkAvailability: (input) => ({
-      ...input,
-      available: true,
-      availableQuantity: 2,
-      productName: "黑色双排扣西装",
-    }),
-  });
+  return createDefaultToolRegistry(
+    undefined,
+    {
+      createHandoff: (input) => ({
+        ok: true,
+        handoffId: "task-human",
+        ...input,
+      }),
+      scheduleFollowup: (input) => ({
+        ok: true,
+        followupId: "task-time",
+        ...input,
+      }),
+    },
+    {
+      checkAvailability: (input) => ({
+        ...input,
+        available: true,
+        availableQuantity: 2,
+        productName: "黑色双排扣西装",
+      }),
+    },
+  );
 }
 
 test("default registry registers exactly the 4 MVP tools", () => {
@@ -59,17 +74,17 @@ test("create_handoff is low risk so the agent can always create a real work item
   });
   const r = out as { ok: boolean; handoffId: string };
   assert.equal(r.ok, true);
-  assert.equal(r.handoffId, "HO-c:SUIT-001");
+  assert.equal(r.handoffId, "task-human");
   assert.equal(registry().get("create_handoff")?.risk, "low");
 });
 
-test("schedule_followup echoes a deterministic receipt", async () => {
+test("schedule_followup returns its durable adapter receipt", async () => {
   const out = await registry().invoke("schedule_followup", {
     conversationId: "c:SUIT-001",
     dueAt: "2026-06-27T00:00:00.000Z",
     reason: "物流跟进",
   });
-  assert.equal((out as { followupId: string }).followupId, "FU-c:SUIT-001");
+  assert.equal((out as { followupId: string }).followupId, "task-time");
 });
 
 test("schedule_followup observes cancellation while its capability is running", async () => {

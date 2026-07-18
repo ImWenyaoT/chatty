@@ -126,10 +126,11 @@ export function createDefaultToolRegistry(
   },
   commerce?: CommerceToolBackend,
 ): ToolRegistry {
-  const registry = new ToolRegistry()
-    .register(createHandoffTool(workflow?.createHandoff))
-    .register(createScheduleFollowupTool(workflow?.scheduleFollowup))
-    .register(issueRefundTool);
+  const registry = new ToolRegistry().register(issueRefundTool);
+  if (workflow?.createHandoff)
+    registry.register(createHandoffTool(workflow.createHandoff));
+  if (workflow?.scheduleFollowup)
+    registry.register(createScheduleFollowupTool(workflow.scheduleFollowup));
   if (commerce) {
     registry.register(createCheckAvailabilityTool(commerce));
     for (const tool of createCommerceMutationTools(commerce))

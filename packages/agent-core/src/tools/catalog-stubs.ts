@@ -38,8 +38,10 @@ export function createCheckAvailabilityTool(
         productId: String(input.productId ?? ""),
         size: String(input.size ?? ""),
         quantity: Number(input.quantity ?? 1),
-        fulfillmentMode:
-          input.fulfillmentMode === "buyout" ? "buyout" : "rental",
+        ...(input.fulfillmentMode === "rental" ||
+        input.fulfillmentMode === "buyout"
+          ? { fulfillmentMode: input.fulfillmentMode }
+          : {}),
         ...(typeof input.startDate === "string"
           ? { startDate: input.startDate }
           : {}),

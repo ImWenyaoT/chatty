@@ -44,7 +44,18 @@ function runtime(
           { section: `${query} 参考`, text: "第一天 199 元；建议 L 码" },
         ],
       },
-      undefined,
+      {
+        createHandoff: (input) => ({
+          ok: true,
+          taskId: "task-human",
+          ...input,
+        }),
+        scheduleFollowup: (input) => ({
+          ok: true,
+          taskId: "task-time",
+          ...input,
+        }),
+      },
       {
         checkAvailability: (input) => ({ ...input, available: true }),
       },
@@ -75,7 +86,7 @@ test("the model can select availability and the harness injects trusted ids", as
   assert.deepEqual(result.toolCalls[0].arguments, {
     size: "L",
     quantity: 1,
-    fulfillmentMode: "rental",
+    fulfillmentMode: null,
     startDate: "2026-04-29",
     endDate: "2026-04-30",
     productId: "SUIT-001",
@@ -231,6 +242,15 @@ test("a business-tool failure is converted into one Harness-enforced Handoff", a
       (tool) => tool.name === "check_availability",
     );
     assert.ok(availability);
+    const first = await availability.execute({
+      size: "L",
+      quantity: 1,
+      fulfillmentMode: "rental",
+      startDate: "2026-08-01",
+      endDate: "2026-08-02",
+    });
+    assert.equal((first as { recoverable: boolean }).recoverable, true);
+    assert.equal(persisted, false);
     await availability.execute({
       size: "L",
       quantity: 1,
@@ -251,9 +271,7 @@ test("only registered bounded business tools are exposed", async () => {
   current.registry = createDefaultToolRegistry();
   const runner = createCustomerServiceSdkRunner((options) => async () => {
     assert.deepEqual(options.tools.map((tool) => tool.name).sort(), [
-      "create_handoff",
       "request_customer_information",
-      "schedule_followup",
     ]);
     return { reply: "请告诉我想处理什么问题。" };
   });
