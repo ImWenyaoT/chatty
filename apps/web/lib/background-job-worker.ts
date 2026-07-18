@@ -1,7 +1,6 @@
 import type {
   BackgroundJob,
   ControlPlaneRepository,
-  DurableTaskRepository,
   ExtractedMemoryCandidate,
 } from "@rental/db";
 import type { JsonValue } from "@rental/shared";
@@ -42,7 +41,6 @@ export interface BackgroundJobExecutors {
 
 export interface DispatchBackgroundJobOptions {
   control: ControlPlaneRepository;
-  tasks?: DurableTaskRepository;
   executors: BackgroundJobExecutors;
   workerId: string;
   now?: () => Date;
@@ -102,7 +100,7 @@ export async function dispatchBackgroundJob(
     if (job.type === "scheduled_followup") {
       if (!result.followup)
         throw new Error("scheduled follow-up produced no delivery result");
-      const completed = options.control.completeFollowup(
+      options.control.completeFollowup(
         job.id,
         options.workerId,
         job.claimFence,
@@ -118,20 +116,6 @@ export async function dispatchBackgroundJob(
         },
         result.event,
       );
-      const taskId = asObject(job.payload).durableTaskId;
-      const task =
-        completed && typeof taskId === "string"
-          ? options.tasks?.get(taskId)
-          : undefined;
-      if (task?.status === "waiting" && task.waitFor === "time") {
-        options.tasks!.resume(task.id, "time");
-        options.tasks!.complete(task.id, {
-          kind: "tool_receipt",
-          toolName: "deliver_followup",
-          receiptId: `outbox:${job.id}`,
-          traceId: result.followup.runId,
-        });
-      }
     } else if (job.type === "memory_extract") {
       if (!result.extraction)
         throw new Error("memory extraction produced no commit result");

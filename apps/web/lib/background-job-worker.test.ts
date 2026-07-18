@@ -211,18 +211,11 @@ test("follow-up executor result, outbox, and completion share a stable idempoten
 
 test("atomic follow-up completion rolls back its outbox insert when completion cannot commit", () => {
   const control = createControlPlaneRepository(openDatabase(":memory:"));
-  control.appendOutbox({
-    id: "occupied-id",
-    conversationId: "other",
-    runId: "other-run",
-    payload: {},
-    idempotencyKey: "other-key",
-  });
   control.enqueueJob({
     id: "rollback-followup",
     type: "scheduled_followup",
     conversationId: "conversation-1",
-    payload: {},
+    payload: { durableTaskId: "missing-task" },
     dueAt,
     idempotencyKey: "rollback-followup",
   });
@@ -234,7 +227,7 @@ test("atomic follow-up completion rolls back its outbox insert when completion c
       "worker-1",
       claim.claimFence,
       {
-        id: "occupied-id",
+        id: "outbox:rollback-followup",
         conversationId: "conversation-1",
         runId: "run-1",
         payload: {},
@@ -243,5 +236,5 @@ test("atomic follow-up completion rolls back its outbox insert when completion c
     ),
   );
   assert.equal(control.getJob("rollback-followup")?.status, "running");
-  assert.equal(control.listOutbox().length, 1);
+  assert.equal(control.listOutbox().length, 0);
 });

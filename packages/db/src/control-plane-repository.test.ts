@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createControlPlaneRepository } from "./control-plane-repository.js";
 import { openDatabase } from "./database.js";
+import { createDurableTaskRepository } from "./durable-task-repository.js";
 
 test("workflow controller enforces one active run and idempotent replay", () => {
   const control = createControlPlaneRepository(openDatabase(":memory:"));
@@ -147,13 +148,21 @@ test("human handoff has a distinct state and explicit leased resume transition",
 });
 
 test("background jobs use leases, retries, cancellation, and idempotency", () => {
-  const control = createControlPlaneRepository(openDatabase(":memory:"));
+  const db = openDatabase(":memory:");
+  const control = createControlPlaneRepository(db);
+  const tasks = createDurableTaskRepository(db);
+  const task = tasks.create({
+    id: "task-1",
+    conversationId: "conversation-1",
+    subject: "确认尺码",
+  });
+  tasks.wait(task.id, "time", { dueAt: "2026-07-11T00:00:00.000Z" });
   const dueAt = "2026-07-11T00:00:00.000Z";
   const job = control.enqueueJob({
     id: "job-1",
     type: "scheduled_followup",
     conversationId: "conversation-1",
-    payload: { reason: "确认尺码" },
+    payload: { reason: "确认尺码", durableTaskId: task.id },
     dueAt,
     idempotencyKey: "followup-1",
   });
@@ -174,6 +183,7 @@ test("background jobs use leases, retries, cancellation, and idempotency", () =>
   control.failJob("job-1", "temporary", "2026-07-11T00:01:00.000Z");
   assert.equal(control.getJob("job-1")?.status, "pending");
   assert.equal(control.cancelJob("job-1"), true);
+  assert.equal(tasks.get(task.id)?.status, "cancelled");
 });
 
 test("retryJob resets attempts so a terminally-failed job is claimable again", () => {

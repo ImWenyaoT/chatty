@@ -1160,14 +1160,27 @@ export function createControlPlaneRepository(db: Db) {
     },
 
     cancelJob(id: string): boolean {
-      const result = db
-        .prepare(
-          `UPDATE background_jobs SET status = 'cancelled', lease_owner = NULL,
-         lease_expires_at = NULL, updated_at = ? WHERE id = ? AND status IN ('pending','running')`,
-        )
-        .run(nowIso(), id);
-      if (result.changes) this.appendJobEvent(id, "cancelled");
-      return result.changes === 1;
+      return db.transaction(() => {
+        const job = this.getJob(id);
+        const result = db
+          .prepare(
+            `UPDATE background_jobs SET status = 'cancelled', lease_owner = NULL,
+           lease_expires_at = NULL, updated_at = ? WHERE id = ? AND status IN ('pending','running')`,
+          )
+          .run(nowIso(), id);
+        if (result.changes) {
+          const taskId = jsonObject(job?.payload).durableTaskId;
+          if (typeof taskId === "string") {
+            db.prepare(
+              `UPDATE durable_tasks SET status = 'cancelled', wait_for = NULL,
+               due_at = NULL, updated_at = ?
+               WHERE id = ? AND status != 'completed'`,
+            ).run(nowIso(), taskId);
+          }
+          this.appendJobEvent(id, "cancelled");
+        }
+        return result.changes === 1;
+      })();
     },
 
     retryJob(id: string, dueAt = nowIso()): boolean {
@@ -1291,6 +1304,27 @@ export function createControlPlaneRepository(db: Db) {
           .run(input.runId, nowIso(), id, workerId, claimFence);
         if (result.changes !== 1)
           throw new Error(`background job lease lost: ${id}`);
+        const taskId = jsonObject(this.getJob(id)?.payload).durableTaskId;
+        if (typeof taskId === "string") {
+          const taskResult = db
+            .prepare(
+              `UPDATE durable_tasks SET status = 'completed', wait_for = NULL,
+               due_at = NULL, completion_evidence_json = ?, updated_at = ?
+               WHERE id = ? AND status = 'waiting' AND wait_for = 'time'`,
+            )
+            .run(
+              JSON.stringify({
+                kind: "tool_receipt",
+                toolName: "deliver_followup",
+                receiptId: input.id,
+                traceId: input.runId,
+              }),
+              ts,
+              taskId,
+            );
+          if (taskResult.changes !== 1)
+            throw new Error(`durable follow-up task is not waiting: ${taskId}`);
+        }
         this.appendJobEvent(id, "succeeded", event);
         return true;
       })();
@@ -1306,6 +1340,12 @@ export function createControlPlaneRepository(db: Db) {
       ).map(mapOutbox);
     },
   };
+}
+
+function jsonObject(value: JsonValue | undefined): Record<string, JsonValue> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value
+    : {};
 }
 
 export type ControlPlaneRepository = ReturnType<
