@@ -500,7 +500,7 @@ def test_explicit_stable_memory_is_searchable_across_sessions_with_provenance(
                 ResponseFunctionToolCall(
                     arguments=json.dumps(
                         {
-                            "fact": "客户对羊毛过敏",
+                            "fact": "我对羊毛过敏",
                             "explicitly_stated": True,
                             "stable": True,
                         },
@@ -531,7 +531,7 @@ def test_explicit_stable_memory_is_searchable_across_sessions_with_provenance(
     assert saved_body["memory_events"][0]["tool"] == "save_customer_memory"
     saved_memory = saved_body["memory_events"][0]["memories"][0]
     assert saved_memory["customer_id"] == "customer-1"
-    assert saved_memory["fact"] == "客户对羊毛过敏"
+    assert saved_memory["fact"] == "我对羊毛过敏"
     assert saved_memory["source_id"] == saved_body["trace_id"]
     assert saved_memory["created_at"].endswith("Z")
 
@@ -570,7 +570,7 @@ def test_explicit_stable_memory_is_searchable_across_sessions_with_provenance(
     search_event = found.json()["memory_events"][0]
     assert search_event["tool"] == "search_customer_memory"
     assert search_event["memories"] == [saved_memory]
-    assert "客户对羊毛过敏" in json.dumps(search_model.inputs[1], ensure_ascii=False)
+    assert "我对羊毛过敏" in json.dumps(search_model.inputs[1], ensure_ascii=False)
     assert saved_body["trace_id"] in json.dumps(search_model.inputs[1], ensure_ascii=False)
     assert other_customer.status_code == 200
     assert other_customer.json()["memories"] == []
@@ -615,3 +615,93 @@ def test_temporary_or_inferred_statement_cannot_be_saved_as_memory(tmp_path: Pat
     assert "literal_error" in json.dumps(model.inputs[1], ensure_ascii=False)
     assert memories.status_code == 200
     assert memories.json()["memories"] == []
+
+
+def test_memory_rejects_a_fact_not_quoted_from_the_customer_message(tmp_path: Path) -> None:
+    database_path = tmp_path / "chatty.sqlite"
+    model = ScriptedModel(
+        [
+            [
+                ResponseFunctionToolCall(
+                    arguments=json.dumps(
+                        {
+                            "fact": "客户偏爱羊毛",
+                            "explicitly_stated": True,
+                            "stable": True,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    call_id="inferred-memory-1",
+                    name="save_customer_memory",
+                    type="function_call",
+                )
+            ],
+            "你没有明确说过这项偏好，因此我不会保存。",
+        ]
+    )
+    app = create_app(database_path=database_path, model=model)
+
+    with TestClient(app) as client:
+        run = client.post(
+            "/runs",
+            json={"customer_id": "customer-1", "message": "羊毛看起来不错"},
+        )
+        memories = client.get("/customers/customer-1/memories", params={"query": "羊毛"})
+
+    assert run.status_code == 200
+    assert run.json()["memory_events"] == []
+    assert "verbatim" in json.dumps(model.inputs[1], ensure_ascii=False)
+    assert memories.json()["memories"] == []
+
+
+def test_memory_rejects_a_blank_fact_after_normalization(tmp_path: Path) -> None:
+    model = ScriptedModel(
+        [
+            [
+                ResponseFunctionToolCall(
+                    arguments=json.dumps(
+                        {"fact": "   ", "explicitly_stated": True, "stable": True}
+                    ),
+                    call_id="blank-memory-1",
+                    name="save_customer_memory",
+                    type="function_call",
+                )
+            ],
+            "没有可保存的客户事实。",
+        ]
+    )
+    app = create_app(database_path=tmp_path / "chatty.sqlite", model=model)
+
+    with TestClient(app) as client:
+        run = client.post(
+            "/runs",
+            json={"customer_id": "customer-1", "message": "请记住"},
+        )
+
+    assert run.status_code == 200
+    assert run.json()["memory_events"] == []
+    assert "must not be blank" in json.dumps(model.inputs[1], ensure_ascii=False)
+
+
+def test_agent_session_cannot_be_reused_by_another_customer(tmp_path: Path) -> None:
+    model = ScriptedModel(["第一位客户的回复"])
+    app = create_app(database_path=tmp_path / "chatty.sqlite", model=model)
+
+    with TestClient(app) as client:
+        first = client.post(
+            "/runs",
+            json={"customer_id": "customer-1", "message": "第一位客户的消息"},
+        )
+        second = client.post(
+            "/runs",
+            json={
+                "customer_id": "customer-2",
+                "session_id": first.json()["session_id"],
+                "message": "第二位客户的消息",
+            },
+        )
+
+    assert first.status_code == 200
+    assert second.status_code == 409
+    assert second.json() == {"detail": "session_customer_mismatch"}
+    assert len(model.inputs) == 1

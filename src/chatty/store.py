@@ -26,11 +26,25 @@ class CustomerMemory:
     created_at: str
 
 
+class SessionCustomerMismatchError(RuntimeError):
+    pass
+
+
+@contextmanager
+def sqlite_connection(database_path: Path) -> Iterator[sqlite3.Connection]:
+    connection = sqlite3.connect(database_path)
+    try:
+        with connection:
+            yield connection
+    finally:
+        connection.close()
+
+
 class MemoryStore:
     def __init__(self, database_path: str | Path) -> None:
         self.database_path = Path(database_path)
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as connection:
+        with sqlite_connection(self.database_path) as connection:
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS customer_memories (
@@ -45,14 +59,38 @@ class MemoryStore:
             )
             connection.execute(
                 """
+                CREATE TABLE IF NOT EXISTS customer_sessions (
+                    session_id TEXT PRIMARY KEY,
+                    customer_id TEXT NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
                 CREATE INDEX IF NOT EXISTS customer_memories_customer_created
                 ON customer_memories (customer_id, created_at DESC)
                 """
             )
 
+    def bind_session(self, *, session_id: str, customer_id: str) -> None:
+        with sqlite_connection(self.database_path) as connection:
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO customer_sessions (session_id, customer_id)
+                VALUES (?, ?)
+                """,
+                (session_id, customer_id),
+            )
+            row = connection.execute(
+                "SELECT customer_id FROM customer_sessions WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
+        if row is None or row[0] != customer_id:
+            raise SessionCustomerMismatchError("session belongs to another customer")
+
     def save(self, *, customer_id: str, fact: str, source_id: str) -> CustomerMemory:
         memory_id = f"memory_{uuid4().hex}"
-        with self._connect() as connection:
+        with sqlite_connection(self.database_path) as connection:
             connection.execute(
                 """
                 INSERT INTO customer_memories (memory_id, customer_id, fact, source_id)
@@ -74,7 +112,7 @@ class MemoryStore:
 
     def search(self, *, customer_id: str, query: str, limit: int) -> list[CustomerMemory]:
         escaped_query = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        with self._connect() as connection:
+        with sqlite_connection(self.database_path) as connection:
             rows = connection.execute(
                 """
                 SELECT memory_id, customer_id, fact, source_id, created_at
@@ -87,21 +125,12 @@ class MemoryStore:
             ).fetchall()
         return [CustomerMemory(*row) for row in rows]
 
-    @contextmanager
-    def _connect(self) -> Iterator[sqlite3.Connection]:
-        connection = sqlite3.connect(self.database_path)
-        try:
-            with connection:
-                yield connection
-        finally:
-            connection.close()
-
 
 class TraceStore:
     def __init__(self, database_path: str | Path) -> None:
         self.database_path = Path(database_path)
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as connection:
+        with sqlite_connection(self.database_path) as connection:
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS local_traces (
@@ -130,7 +159,7 @@ class TraceStore:
             )
 
     def start(self, trace_id: str, session_id: str, model_id: str) -> None:
-        with self._connect() as connection:
+        with sqlite_connection(self.database_path) as connection:
             connection.execute(
                 """
                 INSERT INTO local_traces (trace_id, session_id, status, summary, model_id)
@@ -146,7 +175,7 @@ class TraceStore:
         self._finish(trace_id, "failed", "Agent run failed")
 
     def get(self, trace_id: str) -> TraceSummary | None:
-        with self._connect() as connection:
+        with sqlite_connection(self.database_path) as connection:
             row = connection.execute(
                 """
                 SELECT trace_id, session_id, status, summary, model_id
@@ -167,7 +196,7 @@ class TraceStore:
         failed: bool,
     ) -> None:
         status = "failed" if failed else "completed"
-        with self._connect() as connection:
+        with sqlite_connection(self.database_path) as connection:
             connection.execute(
                 """
                 INSERT OR REPLACE INTO local_spans
@@ -185,7 +214,7 @@ class TraceStore:
             )
 
     def span_types(self, trace_id: str) -> list[str]:
-        with self._connect() as connection:
+        with sqlite_connection(self.database_path) as connection:
             rows = connection.execute(
                 """
                 SELECT DISTINCT span_type
@@ -198,7 +227,7 @@ class TraceStore:
         return [str(row[0]) for row in rows]
 
     def _finish(self, trace_id: str, status: str, summary: str) -> None:
-        with self._connect() as connection:
+        with sqlite_connection(self.database_path) as connection:
             connection.execute(
                 """
                 UPDATE local_traces
@@ -207,12 +236,3 @@ class TraceStore:
                 """,
                 (status, summary, trace_id),
             )
-
-    @contextmanager
-    def _connect(self) -> Iterator[sqlite3.Connection]:
-        connection = sqlite3.connect(self.database_path)
-        try:
-            with connection:
-                yield connection
-        finally:
-            connection.close()

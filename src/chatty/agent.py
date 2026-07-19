@@ -18,7 +18,7 @@ from agents import (
     SQLiteSession,
     function_tool,
 )
-from pydantic import Field
+from pydantic import Field, StringConstraints
 
 from chatty.knowledge import KnowledgeRecord, KnowledgeStore
 from agents.tool import Tool
@@ -75,13 +75,21 @@ def memory_tools() -> list[Tool]:
     @function_tool(use_docstring_info=False)
     async def save_customer_memory(
         context: RunContextWrapper[AgentContext],
-        fact: Annotated[str, Field(min_length=1, max_length=500)],
+        fact: Annotated[
+            str,
+            StringConstraints(strip_whitespace=True, min_length=1, max_length=500),
+        ],
         explicitly_stated: Literal[True],
         stable: Literal[True],
     ) -> str:
+        fact = fact.strip()
+        if not fact:
+            raise ValueError("memory fact must not be blank")
+        if fact.casefold() not in context.context.message.casefold():
+            raise ValueError("memory fact must be a verbatim part of the customer message")
         memory = context.context.memory_store.save(
             customer_id=context.context.customer_id,
-            fact=fact.strip(),
+            fact=fact,
             source_id=context.context.trace_id,
         )
         event = MemoryEvent(tool="save_customer_memory", memories=[memory])
@@ -94,12 +102,18 @@ def memory_tools() -> list[Tool]:
     @function_tool(use_docstring_info=False)
     async def search_customer_memory(
         context: RunContextWrapper[AgentContext],
-        query: Annotated[str, Field(min_length=1, max_length=200)],
+        query: Annotated[
+            str,
+            StringConstraints(strip_whitespace=True, min_length=1, max_length=200),
+        ],
         limit: Annotated[int, Field(ge=1, le=10)] = 5,
     ) -> str:
+        query = query.strip()
+        if not query:
+            raise ValueError("memory query must not be blank")
         memories = context.context.memory_store.search(
             customer_id=context.context.customer_id,
-            query=query.strip(),
+            query=query,
             limit=limit,
         )
         event = MemoryEvent(tool="search_customer_memory", memories=memories)
@@ -162,6 +176,7 @@ async def run_agent(
         trace_id=trace_id,
         memory_store=MemoryStore(database_path),
     )
+    context.memory_store.bind_session(session_id=session_id, customer_id=customer_id)
     agent_tools: list[Tool] = [
         search_knowledge,
         *memory_tools(),

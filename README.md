@@ -8,12 +8,12 @@
 
 面向租赁电商客服场景的 **[agent][] [harness][]** · Python / FastAPI + 薄 Next.js · DeepSeek 驱动。项目最高层公理是 **Agent = Model + Harness**：OpenAI Agents SDK 负责 Agent Loop，Chatty Harness 负责 Context、Tools、执行边界与完成验证。[model][] 默认是 `deepseek-v4-pro`。
 
-当前迁移纵切先证明 `playground → FastAPI → Runner.run → SQLiteSession` 的最小路径；订单、知识、Memory 和人工支持仍由后续 ticket 迁移，不在这个纵切中提前实现。
+当前迁移纵切已证明 `playground → FastAPI → Runner.run → SQLiteSession` 的最小路径，并提供带 Trace 来源的显式客户 Memory；订单、知识和人工支持仍由后续 ticket 迁移。
 
 - **任务终点 + 回归评测** — 从客服高频任务定义终点(回复 · 查知识 · 查库存 · 转人工 · 跟进);golden 场景 + LLM judge 做回归,把偏题回复、工具漏调、动作误判沉淀为固定测试集。
 - **Agentic 检索,不做 RAG** — 政策/费用/租期/售后等事实走 `search_knowledge` [tool call][] over SQLite FTS5:top-3 命中、有界 tool loop、query 去重、证据回填 [context][] 做核验——无 RAG pipeline、无 vector database。
 - **真实业务闭环** — SQLite 保存商品、尺码数量和租赁/买断订单；库存、下单、确认、取消、Handoff 与定时跟进都通过工具产生可核验回执，而不是固定 Demo 回复。
-- **有边界的长期工作** — 同步请求只留 Trace；等待客户、人工、时间或前置依赖时才创建 Durable Task。第二笔 confirmed order 后才启用来源可追溯的 Long-term Customer Memory。
+- **有来源的客户 Memory** — Model 只为客户原话中的稳定事实选择保存 Tool；Harness 注入客户与 Trace、绑定 Session，并以 SQLite 持久化。没有复购门槛、候选态、自动抽取或向量索引。
 - **闭环反馈** — 工具调用、审批路径与评测失败样本串成 *客服任务 → 失败归因 → prompt / 流程改动 → 回归验证*,让 agent 体验问题可追踪、可修正、可验证。
 
 ## 快速开始
@@ -28,7 +28,7 @@ pnpm install --frozen-lockfile
 pnpm dev                            # playground：http://127.0.0.1:3000
 ```
 
-运行配置只有 `OPENAI_API_KEY`、`OPENAI_BASE_URL` 和 `MODEL_ID`。示例默认使用 DeepSeek OpenAI-compatible Chat Completions、`deepseek-v4-pro`、关闭 thinking 且不启用 streaming；缺少 key 时 Run API 明确返回 503。Session 与本地 trace 摘要保存在 `data/chatty.sqlite`。
+运行配置只有 `OPENAI_API_KEY`、`OPENAI_BASE_URL` 和 `MODEL_ID`。示例默认使用 DeepSeek OpenAI-compatible Chat Completions、`deepseek-v4-pro`、关闭 thinking 且不启用 streaming；缺少 key 时 Run API 明确返回 503。Session、本地 trace 摘要和客户 Memory 保存在 `data/chatty.sqlite`。
 
 ```bash
 UV_CACHE_DIR=.cache/uv uv run ruff format --check .
@@ -42,14 +42,14 @@ UV_CACHE_DIR=.cache/uv uv run pytest -q --run-deepseek tests/test_deepseek_contr
 
 ## Monorepo
 
-根 Python 应用是新的 Agent 运行入口；`apps/web` 的 playground 只调用 FastAPI 并展示 messages、loading、error、`session_id` 与 `trace_id`。旧 TypeScript 后端仍暂存于仓库，待父 spec 的后续收缩 ticket 在可见行为被覆盖后删除。
+根 Python 应用是新的 Agent 运行入口；`apps/web` 的 playground 只调用 FastAPI，并展示 messages、loading、error、运行标识与本次 Memory Tool 结果。旧 TypeScript 后端仍暂存于仓库，待父 spec 的后续收缩 ticket 在可见行为被覆盖后删除。
 
 ```mermaid
 flowchart TD
   web["apps/web · 薄 Next.js playground"]
   api["src/chatty · FastAPI Harness"]
   sdk["OpenAI Agents SDK · Runner.run"]
-  db[("SQLiteSession + local trace summary")]
+  db[("SQLiteSession + Memory + local trace summary")]
   deepseek(("DeepSeek API"))
   legacy["旧 packages / worker / Next API<br/>等待后续迁移 ticket 收缩"]
 
@@ -61,7 +61,7 @@ flowchart TD
 
 | 路径 | 作用 |
 | --- | --- |
-| [`src/chatty`](src/chatty) | FastAPI、Agent 配置、SDK Run 与本地 trace 摘要 |
+| [`src/chatty`](src/chatty) | FastAPI、Agent 配置、SDK Run、客户 Memory 与本地 trace 摘要 |
 | [`tests`](tests) | FastAPI + disposable SQLite + 可控 SDK Model 的高层 seam |
 | [`apps/web`](apps/web) | 调用 FastAPI 的薄 playground；其他保留页暂未迁移 |
 | `packages/*`、`scripts/worker.mts` | 旧 TypeScript 后端，等待后续 ticket 删除 |
@@ -72,7 +72,7 @@ Python 门禁是 locked sync、Ruff、ty、pytest 与真实 FastAPI 进程 smoke
 
 ## 核心能力
 
-以下是父 spec 的目标能力；当前纵切只实现无 Tool 的 Agent Run、Session continuity 与最小 local trace。
+以下是父 spec 的目标能力；当前纵切实现 Agent Run、Session continuity、带来源的客户 Memory Tool 与最小 local trace。
 
 一条消息 = 一个有界 [turn][]。Model 读取 [context][] 并选择下一步工具；[harness][] 不预先替 Model 做意图分类，只掌控可见工具、可信身份、权限、执行、预算与完成验证。
 

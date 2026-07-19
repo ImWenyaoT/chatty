@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from chatty.agent import MissingApiKeyError, model_from_env, run_agent
 from chatty.knowledge import KnowledgeRecord, KnowledgeStore
 from chatty.commerce import CommerceError, CommerceStore, Order
-from chatty.store import MemoryStore, TraceStore
+from chatty.store import MemoryStore, SessionCustomerMismatchError, TraceStore
 from chatty.tracing import SQLiteTracingProcessor
 
 
@@ -114,6 +114,8 @@ def create_app(
                 customer_id=request.customer_id,
                 commerce=commerce,
             )
+        except SessionCustomerMismatchError as error:
+            raise HTTPException(status_code=409, detail="session_customer_mismatch") from error
         except Exception as error:
             trace_store.fail(trace_id)
             raise HTTPException(status_code=502, detail="llm_provider_failed") from error
