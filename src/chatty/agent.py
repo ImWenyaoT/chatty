@@ -19,6 +19,7 @@ from agents import (
     ToolCallItem,
     function_tool,
 )
+from agents.exceptions import MaxTurnsExceeded, ModelBehaviorError
 from pydantic import Field, StringConstraints
 
 from chatty.knowledge import KnowledgeRecord, KnowledgeStore
@@ -38,7 +39,7 @@ AGENT_INSTRUCTIONS = """你是 Chatty，一个简洁、可靠的客服 Agent。
 回答政策或商品事实前必须调用 search_knowledge；使用检索内容时必须原样附上至少一个 source。
 仅当客户明确要求记住其直接陈述、且该事实跨交易稳定时，调用 save_customer_memory。
 临时需求、当前订单偏好、推断或画像不得保存；需要既有客户事实时主动搜索 Memory。
-需要人工判断、授权或无法安全完成时，必须调用 request_human_support；
+需要人工判断、授权或无法安全完成时，必须调用 create_handoff；
 不能只回复“请联系客服”，只有持久化 receipt 才算已交接。
 """
 
@@ -63,7 +64,7 @@ class AgentRunResult:
     knowledge_search_results: list[KnowledgeRecord]
     memory_events: list[MemoryEvent]
     business_outcome: BusinessOutcome
-    completion_evidence: str
+    completion_evidence: str | None
     support_request_id: str | None
 
 
@@ -74,12 +75,13 @@ class AgentContext(HarnessContext):
     memory_store: MemoryStore
     support_store: SupportRequestStore
     trace_store: TraceStore
+    prior_actions: tuple[str, ...] = ()
     memory_events: list[MemoryEvent] = field(default_factory=list)
     support_request_id: str | None = None
 
 
 @function_tool
-def request_human_support(
+def create_handoff(
     ctx: RunContextWrapper[AgentContext], reason: str, context: str
 ) -> dict[str, str]:
     """Create a traceable support receipt for human judgment or authorization."""
@@ -88,23 +90,79 @@ def request_human_support(
             customer_id=ctx.context.customer_id,
             session_id=ctx.context.session_id,
             reason=reason,
-            context=context,
-            idempotency_key=f"{ctx.context.session_id}:{reason.strip()}:{context.strip()}",
+            context=_support_context(ctx.context.message, context),
+            prior_actions=ctx.context.prior_actions,
         )
     except Exception:
         ctx.context.trace_store.record_tool_event(
             ctx.context.trace_id,
             status="failed",
-            summary="request_human_support failed",
+            summary="create_handoff failed",
         )
         raise
     ctx.context.support_request_id = receipt.id
     ctx.context.trace_store.record_tool_event(
         ctx.context.trace_id,
         status="completed",
-        summary="request_human_support created receipt",
+        summary="create_handoff created receipt",
     )
     return {"support_request_id": receipt.id, "status": receipt.status}
+
+
+def _support_context(input_message: str, model_context: str) -> str:
+    return f"客户消息：{input_message.strip()}\nModel 摘要：{model_context.strip()}"
+
+
+def _handoff_result(
+    context: AgentContext,
+    *,
+    reply: str,
+    support_request_id: str,
+    knowledge_search_results: dict[str, KnowledgeRecord],
+) -> AgentRunResult:
+    return AgentRunResult(
+        reply=reply,
+        knowledge_search_results=list(knowledge_search_results.values()),
+        memory_events=context.memory_events,
+        business_outcome="not_completed",
+        completion_evidence=f"handoff:{support_request_id}",
+        support_request_id=support_request_id,
+    )
+
+
+def _force_handoff(
+    context: AgentContext,
+    *,
+    reason: str,
+    details: str,
+    knowledge_search_results: dict[str, KnowledgeRecord],
+) -> AgentRunResult:
+    try:
+        receipt = context.support_store.create(
+            customer_id=context.customer_id,
+            session_id=context.session_id,
+            reason=reason,
+            context=_support_context(context.message, details),
+            prior_actions=context.prior_actions,
+        )
+    except Exception:
+        context.trace_store.record_tool_event(
+            context.trace_id,
+            status="failed",
+            summary="Harness-enforced handoff receipt failed",
+        )
+        raise
+    context.trace_store.record_tool_event(
+        context.trace_id,
+        status="completed",
+        summary="Harness-enforced handoff receipt created",
+    )
+    return _handoff_result(
+        context,
+        reply="业务无法安全完成，已创建可追踪的人工支持请求。",
+        support_request_id=receipt.id,
+        knowledge_search_results=knowledge_search_results,
+    )
 
 
 def memory_tools() -> list[Tool]:
@@ -221,7 +279,7 @@ async def run_agent(
         search_knowledge,
         *memory_tools(),
         *build_order_tools(),
-        request_human_support,
+        create_handoff,
     ]
     agent: Agent[AgentContext] = Agent(
         name="Chatty",
@@ -237,59 +295,78 @@ async def run_agent(
         messages_table="chatty_messages",
     )
     try:
-        result = await Runner.run(
-            agent,
-            message,
-            context=context,
-            session=session,
-            run_config=RunConfig(
-                workflow_name="Chatty Agent Run",
-                trace_id=trace_id,
-                group_id=session_id,
-                trace_metadata={"model_id": model_id},
-                trace_include_sensitive_data=False,
-            ),
-        )
+        try:
+            result = await Runner.run(
+                agent,
+                message,
+                context=context,
+                session=session,
+                run_config=RunConfig(
+                    workflow_name="Chatty Agent Run",
+                    trace_id=trace_id,
+                    group_id=session_id,
+                    trace_metadata={"model_id": model_id},
+                    trace_include_sensitive_data=False,
+                ),
+            )
+        except ModelBehaviorError:
+            return _force_handoff(
+                context,
+                reason="Harness 拒绝无效操作",
+                details="Model 请求了无效或不可用的 Tool",
+                knowledge_search_results=knowledge_search_results,
+            )
+        except MaxTurnsExceeded:
+            return _force_handoff(
+                context,
+                reason="Harness 安全恢复已耗尽",
+                details="Agent 在受限 turns 内未完成处理",
+                knowledge_search_results=knowledge_search_results,
+            )
     finally:
         session.close()
     if not isinstance(result.final_output, str) or not result.final_output.strip():
-        raise InvalidAgentOutputError("Agent returned no customer-facing reply")
+        return _force_handoff(
+            context,
+            reason="Harness 安全恢复已耗尽",
+            details="Agent 未返回可验证的客户结果",
+            knowledge_search_results=knowledge_search_results,
+        )
+    attempted_support = any(
+        isinstance(item, ToolCallItem) and item.tool_name == "create_handoff"
+        for item in result.new_items
+    )
+    if attempted_support and context.support_request_id is None:
+        return _force_handoff(
+            context,
+            reason="Harness 强制升级",
+            details="create_handoff 调用失败或参数无效",
+            knowledge_search_results=knowledge_search_results,
+        )
+    if any(
+        marker in result.final_output for marker in ("人工客服", "联系人工", "转人工", "人工支持")
+    ):
+        return _force_handoff(
+            context,
+            reason="Harness 验证到未落库的人工交接声明",
+            details="Model 声明需要人工处理，但没有可验证 receipt",
+            knowledge_search_results=knowledge_search_results,
+        )
+    if context.support_request_id is not None:
+        return _handoff_result(
+            context,
+            reply=result.final_output,
+            support_request_id=context.support_request_id,
+            knowledge_search_results=knowledge_search_results,
+        )
     if knowledge_search_results and not any(
         record.source in result.final_output for record in knowledge_search_results.values()
     ):
         raise InvalidAgentOutputError("Knowledge-backed reply omitted its source")
-    attempted_support = any(
-        isinstance(item, ToolCallItem) and item.tool_name == "request_human_support"
-        for item in result.new_items
-    )
-    if attempted_support and context.support_request_id is None:
-        receipt = support_store.create(
-            customer_id=customer_id,
-            session_id=session_id,
-            reason="Harness 强制升级",
-            context="request_human_support 调用失败或参数无效",
-            idempotency_key=f"{session_id}:harness:invalid-support-tool-call",
-        )
-        trace_store.record_tool_event(
-            trace_id,
-            status="completed",
-            summary="Harness-enforced support receipt created",
-        )
-        return AgentRunResult(
-            reply="业务无法安全完成，已创建可追踪的人工支持请求。",
-            knowledge_search_results=list(knowledge_search_results.values()),
-            memory_events=context.memory_events,
-            business_outcome="not_completed",
-            completion_evidence=f"handoff:{receipt.id}",
-            support_request_id=receipt.id,
-        )
     business_outcome, completion_evidence = context.verify_business_outcome()
-    if context.support_request_id is not None:
-        business_outcome = "not_completed"
-        completion_evidence = f"handoff:{context.support_request_id}"
     reply = result.final_output
     if business_outcome == "not_completed":
-        error_code = completion_evidence.partition(":")[2] or "business_tool_failed"
+        error_code = (completion_evidence or "").partition(":")[2] or "business_tool_failed"
         reply = f"业务操作未完成：{error_code}"
     return AgentRunResult(
         reply=reply,

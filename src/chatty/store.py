@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -40,6 +41,7 @@ class SupportRequest:
     session_id: str
     reason: str
     context: str
+    prior_actions: tuple[str, ...]
     status: str
     created_at: str
     updated_at: str
@@ -160,6 +162,7 @@ class SupportRequestStore:
                     session_id TEXT NOT NULL,
                     reason TEXT NOT NULL,
                     context TEXT NOT NULL,
+                    prior_actions TEXT NOT NULL,
                     status TEXT NOT NULL,
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -174,30 +177,35 @@ class SupportRequestStore:
         session_id: str,
         reason: str,
         context: str,
-        idempotency_key: str,
+        prior_actions: tuple[str, ...],
     ) -> SupportRequest:
         reason = reason.strip()
         context = context.strip()
         if not reason or not context:
             raise ValueError("support reason and context are required")
         with sqlite_connection(self.database_path) as connection:
-            existing = connection.execute(
-                "SELECT * FROM support_requests WHERE idempotency_key = ?",
-                (idempotency_key,),
-            ).fetchone()
-            if existing:
-                return self._request(existing)
+            idempotency_key = f"{customer_id}:{session_id}:open-handoff"
             request_id = f"support_{uuid4().hex}"
             connection.execute(
                 """
-                INSERT INTO support_requests
-                    (id, idempotency_key, customer_id, session_id, reason, context, status)
-                VALUES (?, ?, ?, ?, ?, ?, 'open')
+                INSERT OR IGNORE INTO support_requests
+                    (id, idempotency_key, customer_id, session_id, reason, context,
+                     prior_actions, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'open')
                 """,
-                (request_id, idempotency_key, customer_id, session_id, reason, context),
+                (
+                    request_id,
+                    idempotency_key,
+                    customer_id,
+                    session_id,
+                    reason,
+                    context,
+                    json.dumps(prior_actions, ensure_ascii=False),
+                ),
             )
             row = connection.execute(
-                "SELECT * FROM support_requests WHERE id = ?", (request_id,)
+                "SELECT * FROM support_requests WHERE idempotency_key = ?",
+                (idempotency_key,),
             ).fetchone()
         if row is None:
             raise RuntimeError("support request was not persisted")
@@ -225,6 +233,7 @@ class SupportRequestStore:
             session_id=row["session_id"],
             reason=row["reason"],
             context=row["context"],
+            prior_actions=tuple(json.loads(row["prior_actions"])),
             status=row["status"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],

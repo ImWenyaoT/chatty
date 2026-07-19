@@ -56,9 +56,9 @@ class HarnessContext:
             BusinessToolReceipt(tool_name=tool_name, ok=False, error=_error_code(error))
         )
 
-    def verify_business_outcome(self) -> tuple[BusinessOutcome, str]:
+    def verify_business_outcome(self) -> tuple[BusinessOutcome, str | None]:
         if not self.business_receipts:
-            return "not_applicable", "no_business_tool"
+            return "not_applicable", None
         mutations = [
             receipt for receipt in self.business_receipts if receipt.tool_name in MUTATION_TOOLS
         ]

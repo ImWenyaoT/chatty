@@ -46,7 +46,7 @@ class RunResponse(BaseModel):
     trace_id: str
     status: str
     business_outcome: str
-    completion_evidence: str
+    completion_evidence: str | None
     knowledge_search_results: list[KnowledgeRecord]
     memory_events: list[MemoryEventResponse]
     needs_human: bool
@@ -65,6 +65,7 @@ class SupportRequestResponse(BaseModel):
     session_id: str
     reason: str
     context: str
+    prior_actions: tuple[str, ...]
     status: str
     created_at: str
     updated_at: str
