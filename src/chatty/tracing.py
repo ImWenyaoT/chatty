@@ -31,12 +31,16 @@ class SQLiteTracingProcessor(TracingProcessor):
         return None
 
     def on_span_end(self, span: Span[Any]) -> None:
+        span_name = getattr(span.span_data, "name", None)
         self.store.record_span(
             span_id=span.span_id,
             trace_id=span.trace_id,
             parent_id=span.parent_id,
             span_type=span.span_data.type,
             failed=span.error is not None,
+            name=span_name if isinstance(span_name, str) else None,
+            started_at=span.started_at,
+            ended_at=span.ended_at,
         )
 
     def shutdown(self) -> None:

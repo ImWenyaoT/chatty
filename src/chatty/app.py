@@ -24,6 +24,7 @@ from chatty.store import (
     SessionNotFoundError,
     SupportRequestStore,
     TraceStore,
+    TraceSummary,
 )
 from chatty.tracing import SQLiteTracingProcessor
 
@@ -87,12 +88,59 @@ class TraceResponse(BaseModel):
     summary: str
     model_id: str
     span_types: list[str]
+    created_at: str
+    updated_at: str
+    duration_ms: int
+    business_outcome: str | None
+    completion_evidence: str | None
+    knowledge_sources: list[str]
+    memory_sources: list[str]
+    support_request_id: str | None
+    spans: list["TraceSpanResponse"] = Field(default_factory=list)
 
 
 class TraceSpanResponse(BaseModel):
+    span_id: str
+    trace_id: str
+    parent_id: str | None
     span_type: str
     status: str
     summary: str
+    started_at: str | None
+    ended_at: str | None
+    duration_ms: int | None
+    error: str | None
+
+
+class TraceDashboardResponse(BaseModel):
+    traces: list[TraceResponse]
+    order_status_counts: dict[str, int]
+
+
+def trace_response(
+    trace: TraceSummary, trace_store: TraceStore, *, include_spans: bool = False
+) -> TraceResponse:
+    return TraceResponse(
+        trace_id=trace.trace_id,
+        session_id=trace.session_id,
+        status=trace.status,
+        summary=trace.summary,
+        model_id=trace.model_id,
+        span_types=trace_store.span_types(trace.trace_id),
+        created_at=trace.created_at,
+        updated_at=trace.updated_at,
+        duration_ms=trace.duration_ms,
+        business_outcome=trace.business_outcome,
+        completion_evidence=trace.completion_evidence,
+        knowledge_sources=list(trace.knowledge_sources),
+        memory_sources=list(trace.memory_sources),
+        support_request_id=trace.support_request_id,
+        spans=(
+            [TraceSpanResponse(**span.__dict__) for span in trace_store.spans(trace.trace_id)]
+            if include_spans
+            else []
+        ),
+    )
 
 
 def demo_customer_identity() -> str:
@@ -178,6 +226,7 @@ def create_app(
         except SessionCustomerMismatchError as error:
             raise HTTPException(status_code=409, detail="session_customer_mismatch") from error
         except HandoffIdempotencyConflictError as error:
+            trace_store.record_error(trace_id, code="handoff_idempotency_conflict")
             trace_store.fail(trace_id)
             raise HTTPException(
                 status_code=409,
@@ -185,6 +234,7 @@ def create_app(
                 headers={"X-Trace-ID": trace_id},
             ) from error
         except HandoffPersistenceError as error:
+            trace_store.record_error(trace_id, code="handoff_persistence_failed")
             trace_store.fail(trace_id)
             raise HTTPException(
                 status_code=500,
@@ -192,12 +242,23 @@ def create_app(
                 headers={"X-Trace-ID": trace_id},
             ) from error
         except Exception as error:
+            trace_store.record_error(trace_id, code="llm_provider_failed")
             trace_store.fail(trace_id)
             raise HTTPException(
                 status_code=502,
                 detail="llm_provider_failed",
                 headers={"X-Trace-ID": trace_id},
             ) from error
+        trace_store.record_outcome(
+            trace_id,
+            business_outcome=result.business_outcome,
+            completion_evidence=result.completion_evidence,
+            knowledge_sources=[item.source for item in result.knowledge_search_results],
+            memory_sources=[
+                memory.source_id for event in result.memory_events for memory in event.memories
+            ],
+            support_request_id=result.support_request_id,
+        )
         return RunResponse(
             reply=result.reply,
             customer_id=customer_id,
@@ -256,12 +317,24 @@ def create_app(
             memories=[MemoryResponse(**memory.__dict__) for memory in memories],
         )
 
+    @app.get("/traces", response_model=TraceDashboardResponse)
+    async def list_traces(limit: int = 50) -> TraceDashboardResponse:
+        if not 1 <= limit <= 100:
+            raise HTTPException(status_code=422, detail="invalid_trace_limit")
+        traces = [
+            trace_response(trace, trace_store) for trace in trace_store.list_recent(limit=limit)
+        ]
+        return TraceDashboardResponse(
+            traces=traces,
+            order_status_counts={key: value for key, value in commerce.status_counts().items()},
+        )
+
     @app.get("/traces/{trace_id}", response_model=TraceResponse)
     async def get_trace(trace_id: str) -> TraceResponse:
         trace = trace_store.get(trace_id)
         if trace is None:
             raise HTTPException(status_code=404, detail="trace_not_found")
-        return TraceResponse(**trace.__dict__, span_types=trace_store.span_types(trace_id))
+        return trace_response(trace, trace_store, include_spans=True)
 
     @app.get("/traces/{trace_id}/spans", response_model=list[TraceSpanResponse])
     async def get_trace_spans(trace_id: str) -> list[TraceSpanResponse]:

@@ -16,6 +16,14 @@ class TraceSummary:
     status: str
     summary: str
     model_id: str
+    created_at: str
+    updated_at: str
+    duration_ms: int
+    business_outcome: str | None
+    completion_evidence: str | None
+    knowledge_sources: tuple[str, ...]
+    memory_sources: tuple[str, ...]
+    support_request_id: str | None
 
 
 @dataclass(frozen=True)
@@ -29,9 +37,16 @@ class CustomerMemory:
 
 @dataclass(frozen=True)
 class TraceSpanSummary:
+    span_id: str
+    trace_id: str
+    parent_id: str | None
     span_type: str
     status: str
     summary: str
+    started_at: str | None
+    ended_at: str | None
+    duration_ms: int | None
+    error: str | None
 
 
 @dataclass(frozen=True)
@@ -58,6 +73,16 @@ class SessionNotFoundError(RuntimeError):
 
 class SupportRequestIdempotencyConflictError(RuntimeError):
     pass
+
+
+TRACE_PROJECTION = """
+    trace_id, session_id, status, summary, model_id,
+    created_at, updated_at,
+    MAX(0, CAST((julianday(updated_at) - julianday(created_at))
+        * 86400000 AS INTEGER)) AS duration_ms,
+    business_outcome, completion_evidence, knowledge_sources,
+    memory_sources, support_request_id
+"""
 
 
 @contextmanager
@@ -288,8 +313,15 @@ class TraceStore:
                     status TEXT NOT NULL,
                     summary TEXT NOT NULL,
                     model_id TEXT NOT NULL,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    business_outcome TEXT,
+                    completion_evidence TEXT,
+                    knowledge_sources TEXT NOT NULL DEFAULT '[]',
+                    memory_sources TEXT NOT NULL DEFAULT '[]',
+                    support_request_id TEXT,
+                    created_at TEXT NOT NULL
+                        DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                    updated_at TEXT NOT NULL
+                        DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
                 )
                 """
             )
@@ -302,10 +334,15 @@ class TraceStore:
                     span_type TEXT NOT NULL,
                     status TEXT NOT NULL,
                     summary TEXT NOT NULL,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    started_at TEXT,
+                    ended_at TEXT,
+                    error TEXT,
+                    created_at TEXT NOT NULL
+                        DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
                 )
                 """
             )
+            self._add_missing_columns(connection)
 
     def start(self, trace_id: str, session_id: str, model_id: str) -> None:
         with sqlite_connection(self.database_path) as connection:
@@ -326,14 +363,55 @@ class TraceStore:
     def get(self, trace_id: str) -> TraceSummary | None:
         with sqlite_connection(self.database_path) as connection:
             row = connection.execute(
-                """
-                SELECT trace_id, session_id, status, summary, model_id
+                f"""
+                SELECT {TRACE_PROJECTION}
                 FROM local_traces
                 WHERE trace_id = ?
                 """,
                 (trace_id,),
             ).fetchone()
-        return TraceSummary(*row) if row else None
+        return self._trace(row) if row else None
+
+    def list_recent(self, *, limit: int = 50) -> list[TraceSummary]:
+        with sqlite_connection(self.database_path) as connection:
+            rows = connection.execute(
+                f"""
+                SELECT {TRACE_PROJECTION}
+                FROM local_traces
+                ORDER BY created_at DESC, trace_id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [self._trace(row) for row in rows]
+
+    def record_outcome(
+        self,
+        trace_id: str,
+        *,
+        business_outcome: str,
+        completion_evidence: str | None,
+        knowledge_sources: list[str],
+        memory_sources: list[str],
+        support_request_id: str | None,
+    ) -> None:
+        with sqlite_connection(self.database_path) as connection:
+            connection.execute(
+                """
+                UPDATE local_traces
+                SET business_outcome = ?, completion_evidence = ?, knowledge_sources = ?,
+                    memory_sources = ?, support_request_id = ?
+                WHERE trace_id = ?
+                """,
+                (
+                    business_outcome,
+                    completion_evidence,
+                    json.dumps(sorted(set(knowledge_sources)), ensure_ascii=False),
+                    json.dumps(sorted(set(memory_sources)), ensure_ascii=False),
+                    support_request_id,
+                    trace_id,
+                ),
+            )
 
     def record_span(
         self,
@@ -343,14 +421,18 @@ class TraceStore:
         parent_id: str | None,
         span_type: str,
         failed: bool,
+        name: str | None = None,
+        started_at: str | None = None,
+        ended_at: str | None = None,
     ) -> None:
         status = "failed" if failed else "completed"
         with sqlite_connection(self.database_path) as connection:
             connection.execute(
                 """
                 INSERT OR REPLACE INTO local_spans
-                    (span_id, trace_id, parent_id, span_type, status, summary)
-                VALUES (?, ?, ?, ?, ?, ?)
+                    (span_id, trace_id, parent_id, span_type, status, summary,
+                     started_at, ended_at, error)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     span_id,
@@ -358,7 +440,10 @@ class TraceStore:
                     parent_id,
                     span_type,
                     status,
-                    f"{span_type} span {status}",
+                    f"{span_type} {name} {status}" if name else f"{span_type} span {status}",
+                    started_at,
+                    ended_at,
+                    "sdk_span_error" if failed else None,
                 ),
             )
 
@@ -375,11 +460,32 @@ class TraceStore:
                 (f"span_{uuid4().hex}", trace_id, status, summary),
             )
 
+    def record_error(self, trace_id: str, *, code: str) -> None:
+        with sqlite_connection(self.database_path) as connection:
+            connection.execute(
+                """
+                INSERT INTO local_spans
+                    (span_id, trace_id, parent_id, span_type, status, summary,
+                     started_at, ended_at, error)
+                VALUES (?, ?, NULL, 'error', 'failed', ?,
+                        strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                        strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?)
+                """,
+                (f"span_{uuid4().hex}", trace_id, code, code),
+            )
+
     def spans(self, trace_id: str) -> list[TraceSpanSummary]:
         with sqlite_connection(self.database_path) as connection:
             rows = connection.execute(
                 """
-                SELECT span_type, status, summary
+                SELECT span_id, trace_id, parent_id, span_type, status, summary,
+                       started_at, ended_at,
+                       CASE
+                           WHEN started_at IS NULL OR ended_at IS NULL THEN NULL
+                           ELSE MAX(0, CAST((julianday(ended_at) - julianday(started_at))
+                               * 86400000 AS INTEGER))
+                       END AS duration_ms,
+                       error
                 FROM local_spans
                 WHERE trace_id = ?
                 ORDER BY created_at, rowid
@@ -406,8 +512,44 @@ class TraceStore:
             connection.execute(
                 """
                 UPDATE local_traces
-                SET status = ?, summary = ?, updated_at = CURRENT_TIMESTAMP
+                SET status = ?, summary = ?,
+                    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                 WHERE trace_id = ?
                 """,
                 (status, summary, trace_id),
             )
+
+    @staticmethod
+    def _trace(row: sqlite3.Row) -> TraceSummary:
+        return TraceSummary(
+            trace_id=str(row["trace_id"]),
+            session_id=str(row["session_id"]),
+            status=str(row["status"]),
+            summary=str(row["summary"]),
+            model_id=str(row["model_id"]),
+            created_at=str(row["created_at"]),
+            updated_at=str(row["updated_at"]),
+            duration_ms=int(row["duration_ms"]),
+            business_outcome=row["business_outcome"],
+            completion_evidence=row["completion_evidence"],
+            knowledge_sources=tuple(json.loads(row["knowledge_sources"])),
+            memory_sources=tuple(json.loads(row["memory_sources"])),
+            support_request_id=row["support_request_id"],
+        )
+
+    @staticmethod
+    def _add_missing_columns(connection: sqlite3.Connection) -> None:
+        trace_columns = {row[1] for row in connection.execute("PRAGMA table_info(local_traces)")}
+        for name, declaration in {
+            "business_outcome": "TEXT",
+            "completion_evidence": "TEXT",
+            "knowledge_sources": "TEXT NOT NULL DEFAULT '[]'",
+            "memory_sources": "TEXT NOT NULL DEFAULT '[]'",
+            "support_request_id": "TEXT",
+        }.items():
+            if name not in trace_columns:
+                connection.execute(f"ALTER TABLE local_traces ADD COLUMN {name} {declaration}")
+        span_columns = {row[1] for row in connection.execute("PRAGMA table_info(local_spans)")}
+        for name in ("started_at", "ended_at", "error"):
+            if name not in span_columns:
+                connection.execute(f"ALTER TABLE local_spans ADD COLUMN {name} TEXT")

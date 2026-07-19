@@ -81,12 +81,11 @@ test("control-plane APIs serialize explicit empty and unknown state", async () =
   assert.equal(jobs.metrics.retryRate, null);
 });
 
-test("review dashboard renders explicit empty operational evidence", () => {
+test("review dashboard starts from the real Trace loading state", () => {
   Object.assign(globalThis, { React });
   const markup = renderToStaticMarkup(React.createElement(DashboardPage));
-  assert.match(markup, /暂无后台任务/);
-  assert.match(markup, /未知（无 attempt）/);
-  assert.match(markup, /暂无投递记录/);
+  assert.match(markup, /正在读取 Trace/);
+  assert.doesNotMatch(markup, /后台任务|attempt|投递记录/);
 });
 
 test("control-plane APIs expose invalid and absent transition inputs", async () => {

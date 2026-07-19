@@ -19,7 +19,6 @@ function readAppSource(path: string) {
 const layoutSource = readAppSource("app/layout.tsx");
 const homeSource = readAppSource("app/page.tsx");
 const dashboardSource = readAppSource("app/dashboard/page.tsx");
-const jobActionsSource = readAppSource("app/dashboard/JobActions.tsx");
 const ordersSource = readAppSource("app/orders/page.tsx");
 const playgroundSource = readAppSource("app/playground/page.tsx");
 const cssSource = readAppSource("app/globals.css");
@@ -158,12 +157,25 @@ test("customer service workspace keeps product language with technical observabi
   assert.doesNotMatch(playgroundSource, /固定测试/);
 });
 
-test("control-plane surfaces render durable status and explicit unknown or empty evidence", () => {
-  assert.match(dashboardSource, /job\.events/);
-  assert.match(dashboardSource, /暂无事件证据/);
-  assert.match(dashboardSource, /未知（无 attempt）/);
-  assert.match(dashboardSource, /暂无投递记录/);
-  assert.match(jobActionsSource, /updateBackgroundJob/);
+test("dashboard is a thin FastAPI client for real local traces", () => {
+  assert.match(dashboardSource, /API_BASE_URL = "http:\/\/127\.0\.0\.1:8000"/);
+  assert.match(dashboardSource, /fetch\(`\$\{API_BASE_URL\}\/traces`/);
+  assert.match(
+    dashboardSource,
+    /fetch\(`\$\{API_BASE_URL\}\/traces\/\$\{selectedId\}`/,
+  );
+  assert.match(dashboardSource, /正在读取 Trace/);
+  assert.match(dashboardSource, /暂无 Agent Run/);
+  assert.match(dashboardSource, /role="alert"/);
+  assert.match(dashboardSource, /Model \/ Tool spans/);
+  assert.match(dashboardSource, /业务完成证据/);
+  assert.match(dashboardSource, /Handoff receipt/);
+  assert.doesNotMatch(dashboardSource, /@rental\//);
+  assert.doesNotMatch(dashboardSource, /getRepos/);
+  assert.doesNotMatch(dashboardSource, /control-plane/);
+  assert.doesNotMatch(dashboardSource, /Background Jobs/);
+  assert.doesNotMatch(dashboardSource, /heartbeat|checkpoint|lease|outbox/i);
+  assert.doesNotMatch(dashboardSource, /SELLER_ORDERS|productMetrics/);
 });
 
 test("orders page is a thin FastAPI client for SQLite orders and events", () => {
@@ -201,8 +213,7 @@ test("review dashboard copy avoids generic backend-dashboard language", () => {
   assert.doesNotMatch(visibleShellCopy, /后台视图/);
   assert.doesNotMatch(visibleShellCopy, /后台观察/);
   assert.doesNotMatch(visibleShellCopy, /智能客服后台/);
-  assert.match(visibleShellCopy, /AI 落地指标/);
   assert.match(visibleShellCopy, /可复盘的数字员工/);
-  assert.match(dashboardSource, /BUSINESS IMPACT/);
+  assert.match(dashboardSource, /SQLite Trace/);
   assert.match(visibleShellCopy, /复盘视图/);
 });

@@ -137,14 +137,13 @@ def test_user_can_continue_an_agent_session_and_receive_local_trace_summary(
     assert model.settings[0].extra_body == {"thinking": {"type": "disabled"}}
     assert model.tracings[0] is ModelTracing.ENABLED_WITHOUT_DATA
     assert trace.status_code == 200
-    assert trace.json() == {
-        "trace_id": second.json()["trace_id"],
-        "session_id": first_body["session_id"],
-        "status": "completed",
-        "summary": "Agent run completed",
-        "model_id": "controllable-test-model",
-        "span_types": ["agent", "task", "turn"],
-    }
+    assert trace.json()["trace_id"] == second.json()["trace_id"]
+    assert trace.json()["session_id"] == first_body["session_id"]
+    assert trace.json()["status"] == "completed"
+    assert trace.json()["summary"] == "Agent run completed"
+    assert trace.json()["model_id"] == "controllable-test-model"
+    assert trace.json()["span_types"] == ["agent", "task", "turn"]
+    assert trace.json()["business_outcome"] == "not_applicable"
 
 
 def test_client_cannot_claim_an_unknown_session_id(tmp_path: Path) -> None:
@@ -318,9 +317,19 @@ def test_knowledge_backed_reply_without_a_source_is_not_completed(tmp_path: Path
         )
     ) as client:
         response = client.post("/runs", json={"message": "租期怎么算？"})
+        trace = client.get(f"/traces/{response.headers['x-trace-id']}")
 
     assert response.status_code == 502
     assert response.json() == {"detail": "llm_provider_failed"}
+    assert any(
+        span["span_type"] == "error"
+        and span["status"] == "failed"
+        and span["summary"] == "llm_provider_failed"
+        and span["started_at"] is not None
+        and span["ended_at"] is not None
+        and span["duration_ms"] >= 0
+        for span in trace.json()["spans"]
+    )
 
 
 def test_search_failure_reaches_the_model_as_a_structured_tool_result(tmp_path: Path) -> None:

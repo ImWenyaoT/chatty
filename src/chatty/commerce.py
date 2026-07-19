@@ -345,6 +345,17 @@ class CommerceStore:
             ).fetchall()
             return [self._get_order(str(row["id"]), connection) for row in rows]
 
+    def status_counts(self) -> dict[OrderStatus, int]:
+        counts: dict[OrderStatus, int] = {"pending": 0, "confirmed": 0, "cancelled": 0}
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT status, COUNT(*) AS count FROM orders GROUP BY status"
+            ).fetchall()
+        for row in rows:
+            status: OrderStatus = row["status"]
+            counts[status] = int(row["count"])
+        return counts
+
     def _get_order(self, order_id: str, connection: sqlite3.Connection) -> Order:
         row = connection.execute(
             """
