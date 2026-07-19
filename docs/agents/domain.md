@@ -1,45 +1,13 @@
 # Domain Docs
 
-How the engineering skills should consume this repo's domain documentation when exploring the codebase.
+工程工作开始前先完整读取根 `CONTEXT.md`。它是当前唯一的架构入口与领域词汇表；不要为 package、app、eval 或 retrieval 建立并行 `CONTEXT.md`。
 
-## Before exploring, read these
+涉及架构决策时继续读取 `docs/adr/`。ADR 保存重要决策史；以状态为 `Accepted` 且未被更新 ADR 取代的决定为当前约束。
 
-This is a multi-context monorepo. Start from the map:
-
-- **`CONTEXT-MAP.md`** at the repo root -- the entry point. It carries the shared, system-wide vocabulary and points at one `CONTEXT.md` per context (one per package/app, plus the eval and retrieval surfaces). Read the map, then the `CONTEXT.md` for each context relevant to your topic.
-- **`docs/adr/`** for system-wide decisions, and **`<context>/docs/adr/`** (e.g. `packages/agent-core/docs/adr/`) for context-scoped decisions that touch the area you're about to work in.
-
-If any of these files don't exist, continue without treating absence as an error or proposing speculative files. This instruction only suppresses expected missing-document noise; it does not permit runtime, data, or validation failures to be hidden. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
-
-## File structure
-
-Multi-context monorepo (this repo):
-
-```text
-/
-├── CONTEXT-MAP.md                          <- entry point: shared vocabulary + maps contexts -> CONTEXT.md
-├── docs/adr/                               <- system-wide decisions
-├── packages/
-│   ├── agent-core/  (@rental/agent-core)   <- harness runtime; CONTEXT.md + docs/adr/ (lazy)
-│   ├── llm/         (@rental/llm)           <- model plumbing / SDK adapter
-│   ├── db/          (@rental/db)            <- SQLite harness store
-│   └── shared/      (@rental/shared)        <- browser-safe API contracts
-├── apps/
-│   └── web/         (@chatty/web)           <- seller workspace / web demo
-├── eval/                                    <- evaluation lane
-└── packages/agent-core/search-execution + packages/db/knowledge-index + knowledge/ <- search / retrieval
-```
-
-Per-context `CONTEXT.md` and `docs/adr/` are created lazily by `/domain-modeling`; treat their absence as "not resolved yet", not an error.
-
-## Use the glossary's vocabulary
-
-When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a test name), use the term as defined in `CONTEXT-MAP.md` (or the relevant per-context `CONTEXT.md`). Don't drift to synonyms the glossary explicitly avoids.
-
-If the concept you need isn't in the glossary yet, that's a signal -- either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/domain-modeling`).
+输出中的领域概念使用根 `CONTEXT.md` 已定义的名称。项目最高公理 **Agent = Model + Harness** 优先；其下，Agent 运行与 API 术语遵循 OpenAI Developers，AI coding 术语遵循 Dictionary of AI Coding。
 
 ## Flag ADR conflicts
 
-If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
+如果工作与 ADR 冲突，必须显式指出，不能静默覆盖：
 
 > _Contradicts ADR-0007 (event-sourced orders) -- but worth reopening because..._

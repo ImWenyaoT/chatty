@@ -44,6 +44,9 @@ jobs:
       - name: Test
         run: uv run pytest -q
 
+      - name: Deterministic Agent eval
+        run: uv run python -m chatty.eval
+
       - name: FastAPI smoke
         run: |
           uv run python main.py &

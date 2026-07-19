@@ -1,146 +1,67 @@
 <p align="center"><strong>Chatty</strong></p>
-<p align="center">
-  <a href="https://github.com/ImWenyaoT/chatty/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ImWenyaoT/chatty/actions/workflows/ci.yml/badge.svg" /></a>
-</p>
-<p align="center">简体中文 | <a href="README.en.md">English</a></p>
+<p align="center"><a href="README.en.md">English</a></p>
 
----
+Chatty 是一个用于简历展示的客服 Agent MVP。项目最高公理是 **Agent = Model + Harness**：Model 理解客户意图并选择 Tool；Harness 提供可信 Context、有界 Tools、真实执行、SQLite 持久化、Trace 与完成验证。OpenAI Agents SDK 负责唯一的 Agent Loop。
 
-面向租赁电商客服场景的 **[agent][] [harness][]** · Python / FastAPI + 薄 Next.js · DeepSeek 驱动。项目最高层公理是 **Agent = Model + Harness**：OpenAI Agents SDK 负责 Agent Loop，Chatty Harness 负责 Context、Tools、执行边界与完成验证。[model][] 默认是 `deepseek-v4-pro`。
+当前可运行路径是 `Next.js → FastAPI → Runner.run → SQLite`。Model 可查询带来源的卖家知识、读取与修改订单、保存带 Trace 来源的显式客户 Memory，或创建可追踪 Handoff。Harness 不以关键词预判意图，也不把一段回复当作业务完成证据。
 
-当前 Agent MVP 已贯通 `playground → FastAPI → Runner.run → SQLite`：同一个 Agent 由 Model 自主选择知识检索、客户 Memory、库存/订单与人工交接 Tools；Harness 注入可信身份、执行边界，并验证知识来源、订单落库结果和 Handoff receipt。旧 TypeScript 平台仍保留，待 #42 在可见行为覆盖后收缩。
+## 运行
 
-- **任务终点 + 回归评测** — 从客服高频任务定义终点(回复 · 查知识 · 查库存 · 转人工 · 跟进);golden 场景 + LLM judge 做回归,把偏题回复、工具漏调、动作误判沉淀为固定测试集。
-- **Agentic 检索,不做 RAG** — 政策/费用/租期/售后等事实走 `search_knowledge` [tool call][] over SQLite FTS5:top-3 命中、有界 tool loop、query 去重、证据回填 [context][] 做核验——无 RAG pipeline、无 vector database。
-- **真实业务闭环** — SQLite 保存商品、尺码数量和租赁/买断订单；库存、下单、确认、取消、Handoff 与定时跟进都通过工具产生可核验回执，而不是固定 Demo 回复。
-- **有来源的客户 Memory** — Model 只为客户原话中的稳定事实选择保存 Tool；Harness 注入客户与 Trace、绑定 Session，并以 SQLite 持久化。没有复购门槛、候选态、自动抽取或向量索引。
-- **闭环反馈** — 工具调用、审批路径与评测失败样本串成 *客服任务 → 失败归因 → prompt / 流程改动 → 回归验证*,让 agent 体验问题可追踪、可修正、可验证。
-
-## 快速开始
+需要 Python 3.12、Node.js 24、uv 和 pnpm。
 
 ```bash
 cp .env.example .env
 uv sync --locked
-uv run --env-file .env python main.py  # FastAPI：http://127.0.0.1:8000
-
-# 另一个终端
-pnpm install --frozen-lockfile
-pnpm dev                            # playground：http://127.0.0.1:3000
+uv run --env-file .env python main.py
 ```
 
-运行配置只有 `OPENAI_API_KEY`、`OPENAI_BASE_URL` 和 `MODEL_ID`。示例默认使用 DeepSeek OpenAI-compatible Chat Completions、`deepseek-v4-pro`、关闭 thinking 且不启用 streaming；缺少 key 时 Run API 明确返回 503。Session、知识索引、库存/订单、客户 Memory、Handoff receipt 与本地 trace 摘要共存于 `data/chatty.sqlite`。
+另开终端：
 
 ```bash
+pnpm install --frozen-lockfile
+pnpm dev
+```
+
+配置只有 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`MODEL_ID`。示例使用 DeepSeek 的 OpenAI-compatible Chat Completions API 和 `deepseek-v4-pro`；thinking 已关闭。缺少 key 时 Run API 返回明确错误。
+
+## 三个页面
+
+- `http://127.0.0.1:3000/playground`：发送消息并查看回复、来源与完成证据。
+- `http://127.0.0.1:3000/dashboard`：查看真实 Agent Run、Tool、Trace 和结果。
+- `http://127.0.0.1:3000/orders`：读取 Agent 操作后的 SQLite 订单。
+
+三个页面只调用 FastAPI；业务事实来自 `data/chatty.sqlite`，不是前端 fixtures。知识输入位于 `knowledge/records.jsonl`，导入 SQLite FTS5 后由 Agent Tool 搜索。Session、订单、Memory、Handoff receipt 与本地 Trace 也存入同一 SQLite 文件。
+
+## eval 与验证
+
+确定性 eval 的用例是 `eval/cases.jsonl`。可控 Model 只替代外部 API；FastAPI、OpenAI Agents SDK Runner、Tool、SQLite、Trace 与完成验证均走真实 Agent path。
+
+```bash
+UV_CACHE_DIR=.cache/uv uv run python -m chatty.eval
 UV_CACHE_DIR=.cache/uv uv run ruff format --check .
 UV_CACHE_DIR=.cache/uv uv run ruff check .
 UV_CACHE_DIR=.cache/uv uv run ty check
 UV_CACHE_DIR=.cache/uv uv run pytest -q
+pnpm lint
+pnpm test
+pnpm typecheck
+pnpm build
+```
 
-# 有现成凭据时才运行真实 DeepSeek no-Tool contract
+有真实 DeepSeek 凭据时，显式运行 contract eval：
+
+```bash
 UV_CACHE_DIR=.cache/uv uv run pytest -q --run-deepseek tests/test_deepseek_contract.py
 ```
 
-## Monorepo
+contract eval 不输出或持久化 secret。
 
-根 Python 应用是 Agent MVP 运行入口；`apps/web` 的 Playground 只调用 FastAPI，并展示知识来源、Memory、订单完成证据与 Handoff。订单页同样是只读 FastAPI 客户端。旧 TypeScript 后端仍暂存于仓库，待 #42 在可见行为被覆盖后删除。
+## 项目边界
 
-```mermaid
-flowchart TD
-  web["apps/web · 薄 Next.js playground"]
-  api["src/chatty · FastAPI Harness"]
-  sdk["OpenAI Agents SDK · Runner.run"]
-  db[("SQLiteSession + Knowledge + Orders + Memory + Handoff + Trace")]
-  deepseek(("DeepSeek API"))
-  legacy["旧 packages / worker / Next API<br/>等待后续迁移 ticket 收缩"]
+这是用于说明 Agent/Harness 边界、真实业务副作用和可验证结果的本地简历项目，不是生产客服或生产电商系统。认证、多租户、支付、仓储、远程部署、SLA、multi-agent、RAG/vector database 与 streaming 均不在 MVP 范围内。
 
-  web -->|POST /runs| api
-  api --> sdk --> deepseek
-  api --> db
-  legacy -. 不再服务 playground .-> web
-```
-
-| 路径 | 作用 |
-| --- | --- |
-| [`src/chatty`](src/chatty) | FastAPI Harness、单 Agent/SDK Run、知识、订单、Memory、Handoff 与 Trace |
-| [`tests`](tests) | FastAPI + disposable SQLite + 可控 SDK Model 的高层 seam |
-| [`apps/web`](apps/web) | 调用 FastAPI 的薄 Playground 与只读订单页；其余旧页面保持不动 |
-| `packages/*`、`scripts/worker.mts` | 旧 TypeScript 后端，等待后续 ticket 删除 |
-
-## 质量门禁
-
-Python 门禁是 locked sync、Ruff、ty、pytest 与真实 FastAPI 进程 smoke；web 门禁是 frozen pnpm install、测试、typecheck 和 production build。旧 TypeScript 全套门禁在收缩 ticket 完成前仍继续运行。
-
-## 核心能力
-
-当前纵切实现 Agent Run、Session continuity、JSONL/FTS5 知识检索、SQLite 库存与订单、带来源的客户 Memory、可追踪 Handoff 与 local trace。
-
-一条消息 = 一个有界 [turn][]。Model 读取 [context][] 并选择下一步工具；[harness][] 不预先替 Model 做意图分类，只掌控可见工具、可信身份、权限、执行、预算与完成验证。
-
-```mermaid
-sequenceDiagram
-  autonumber
-  participant U as 客户消息
-  participant H as Harness (agent-core)
-  participant M as Model (DeepSeek·Agents SDK)
-  participant T as Tools + Policy
-  participant D as SQLite
-
-  U->>H: 一条客服消息
-  H->>D: 读 memory / checkpoint
-  H->>H: context 组装（超限则压缩为 checkpoint）
-  H->>M: 用户问题 + context + 有界工具（Agents SDK run）
-  M->>M: 识别意图并选择下一步
-  M->>T: 请求 search_knowledge
-  T->>T: run policy 门：allow / require_approval / deny
-  T->>D: FTS5 检索知识
-  T-->>M: 证据（纯文本三段式）
-  M-->>M: SDK 将工具结果送回同一 Agent loop
-  M-->>H: 最终回复
-  H->>D: 落 Trace；未完成工作才落 Durable Task
-  H-->>U: 回复 + 可观测 harnessTrace
-```
-
-### task scheduling
-
-Model 在 Harness 暴露的有界业务工具中识别意图并选择下一步；Harness 不用关键词或正则替 Model 预先分类。Harness 仍控制工具 schema、权限、业务不变量、最大 turns 和完成验证。
-
-### loop 和流程控制
-
-一个由 OpenAI Agents SDK 承载的有界 loop：Model 选择工具，SDK 执行 model → tool → result → model，Harness 负责最大 turns、权限、业务不变量与完成验证。缺 key、provider、输出校验失败都保持显式错误，绝不伪装成回复。
-
-### input 拼接 prompt
-
-[context][] 由 [memory][memory system] + 检索知识 + 上一个 checkpoint 拼成,超 [token][] 预算则 [compaction][] 成新 checkpoint。
-
-### 执行器 executor
-
-每次 [tool call][] 过 allow / require_approval / deny [permission][permission mode] 门。普通库存与订单操作由 SQLite 事务完成；需要授权、人工判断或安全恢复耗尽时，Harness 强制创建同形态的 Durable Handoff。
-
-## tool calling
-
-Harness 把当前客服 Agent 可用的最小业务工具集作为 Agents SDK function [tool][] 暴露，由 Model 根据上下文选择。`search_knowledge` 查询卖家验证知识；Memory Tools 保存/查询客户原文事实；`check_availability` 与订单 Tools 读写 SQLite；`create_handoff` 持久化人工支持 receipt。这里没有 [MCP][]、[skill][skill]、worker/queue/jobs 或 multi-agent 协议。
-
-## 数据说明
-
-本仓库开源,但业务源自真实店铺:真实客户信息与店铺隐私数据一律不入库,示例统一用占位符(示例租衣店 / 18800000000)。约定见 [AGENTS.md](AGENTS.md)。
+详细领域语言与架构入口见 [`CONTEXT.md`](CONTEXT.md)，决策史见 [`docs/adr`](docs/adr)。
 
 ## 许可
 
-以 [MIT](LICENSE) 许可发布。
-
-<!-- AI coding dictionary (https://www.aihero.dev/ai-coding-dictionary) —— 这些词保持英文并链接，不翻译。 -->
-[agent]: https://www.aihero.dev/ai-coding-dictionary/agent
-[harness]: https://www.aihero.dev/ai-coding-dictionary/harness
-[model]: https://www.aihero.dev/ai-coding-dictionary/model
-[context]: https://www.aihero.dev/ai-coding-dictionary/context
-[memory system]: https://www.aihero.dev/ai-coding-dictionary/memory-system
-[session]: https://www.aihero.dev/ai-coding-dictionary/session
-[turn]: https://www.aihero.dev/ai-coding-dictionary/turn
-[compaction]: https://www.aihero.dev/ai-coding-dictionary/compaction
-[token]: https://www.aihero.dev/ai-coding-dictionary/token
-[tool]: https://www.aihero.dev/ai-coding-dictionary/tool
-[tool call]: https://www.aihero.dev/ai-coding-dictionary/tool-call
-[permission mode]: https://www.aihero.dev/ai-coding-dictionary/permission-mode
-[cache tokens]: https://www.aihero.dev/ai-coding-dictionary/cache-tokens
-[MCP]: https://www.aihero.dev/ai-coding-dictionary/mcp
-[skill]: https://www.aihero.dev/ai-coding-dictionary/skill
+[MIT](LICENSE)

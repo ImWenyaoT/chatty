@@ -1,7 +1,8 @@
 # Model 负责 Task Scheduling，Harness 负责执行边界
 
-- 状态：Accepted（2026-07-18）
+- 状态：部分被取代（2026-07-19）
 - 取代：ADR 0001 中“由 Harness 在模型调用前确定任务与唯一工具”的部分
+- 当前决定：Model-directed Tool 选择仍有效；Durable Task、follow-up 与 Execution Control 设计由 ADR 0007 取代
 
 Chatty 将用户输入、上下文和有界业务工具交给单一 Model，由 Model 识别意图并选择下一步；Harness 只负责工具可见性、schema、权限、真实执行、业务不变量、运行保护和 Task Completion。此前的正则意图路由会提前替 Model 决策，使系统退化为“规则工作流 + LLM 文案层”，因此删除；OpenAI Agents SDK 的 `Agent`、function tools 和 `Runner` 循环作为实现下限。
 
