@@ -81,6 +81,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Web development command smoke
+        run: |
+          pnpm dev &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            curl --fail --silent http://127.0.0.1:3000/playground >/dev/null && exit 0
+            sleep 1
+          done
+          exit 1
+
       - name: Build package skeleton
         run: pnpm build:skeleton
 

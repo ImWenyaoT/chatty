@@ -96,4 +96,6 @@ def test_readme_start_commands_are_wired_to_ci_and_package_scripts() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     package = (ROOT / "package.json").read_text(encoding="utf-8")
     assert "uv run python main.py" in workflow
+    assert "pnpm dev &" in workflow
+    assert "http://127.0.0.1:3000/playground" in workflow
     assert '"dev": "pnpm --filter @chatty/web dev"' in package

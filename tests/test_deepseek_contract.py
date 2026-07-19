@@ -41,6 +41,7 @@ def test_real_deepseek_completes_a_no_tool_run(tmp_path: Path) -> None:
 
 def test_real_deepseek_uses_one_knowledge_tool_with_source_and_local_trace(
     tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     with contract_client(tmp_path) as client:
         response = client.post(
@@ -58,7 +59,8 @@ def test_real_deepseek_uses_one_knowledge_tool_with_source_and_local_trace(
     assert trace.status_code == 200
     assert "function" in trace.json()["span_types"]
     assert trace.json()["knowledge_sources"]
-    assert_secret_not_exposed(tmp_path, response.text + trace.text)
+    captured = capsys.readouterr()
+    assert_secret_not_exposed(tmp_path, response.text + trace.text + captured.out + captured.err)
 
 
 def test_real_deepseek_can_use_consecutive_tools_for_one_verified_order(
