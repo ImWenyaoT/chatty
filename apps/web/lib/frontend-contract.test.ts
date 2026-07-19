@@ -72,24 +72,24 @@ test("frontend CSS keeps focus visible and mobile touch targets large enough", (
   assert.match(cssSource, /:focus-visible/);
   assert.match(cssSource, /box-shadow: var\(--focus-ring\)/);
   assert.match(cssSource, /min-height: 44px/);
-  assert.match(cssSource, /\.support-search:focus-within/);
   assert.match(cssSource, /\.support-composer-box:focus-within/);
   assert.match(
     cssSource,
-    /@media \(max-width: 680px\)[\s\S]*\.support-conversation-list/,
+    /@media \(max-width: 620px\)[\s\S]*\.support-send-button/,
   );
-  assert.doesNotMatch(cssSource, /support-detail-panel/);
+  assert.doesNotMatch(
+    cssSource,
+    /support-(detail-panel|search|conversation-list)/,
+  );
 });
 
 test("customer service workspace follows the system color scheme", () => {
-  assert.match(
-    cssSource,
-    /@media \(prefers-color-scheme: dark\)[\s\S]*\.support-workspace/,
-  );
-  assert.match(cssSource, /\.support-workspace \{[\s\S]*color-scheme: dark;/);
+  assert.match(cssSource, /@media \(prefers-color-scheme: dark\)[\s\S]*:root/);
+  assert.match(cssSource, /:root \{[\s\S]*color-scheme: dark;/);
   assert.match(cssSource, /--accent: #78a68e/);
   assert.match(cssSource, /\.support-message\.user \.support-message-content/);
-  assert.match(cssSource, /\.support-risk/);
+  assert.match(cssSource, /\.support-context-section/);
+  assert.doesNotMatch(cssSource, /\.support-risk/);
 });
 
 test("seller workspace exposes exactly the three retained pages", () => {
