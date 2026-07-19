@@ -1,0 +1,34 @@
+{
+  "name": "chatty",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.15.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "pnpm --filter @chatty/web dev",
+    "build": "pnpm -r --if-present build",
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "eslint . && prettier . --check",
+    "lint:fix": "eslint . --fix && prettier . --write",
+    "test:frontend": "pnpm --filter @chatty/web test:frontend",
+    "test:coverage": "pnpm --filter @chatty/web test:coverage",
+    "eval": "uv run python -m chatty.eval"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/node": "^24.13.3",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^16.2.10",
+    "prettier": "^3.9.5",
+    "tsx": "^4.23.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.63.0"
+  }
+}

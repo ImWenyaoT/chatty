@@ -1,0 +1,61 @@
+node_modules/
+.pnpm-store/
+.venv/
+.cache/uv/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+dist/
+*.tsbuildinfo
+*.log
+.DS_Store
+.claude/
+.vscode/
+*.code-workspace
+.env
+.env.*
+!.env.example
+.playwright-mcp/
+.playwright-cli/
+.remember/
+
+# 目标公司 JD 是私有只读输入，仅本地引用，不入公开仓库
+docs/jd.md
+docs/*实习.pdf
+
+# 本地面试学习材料与私有整理记录，不入公开仓库
+MISSION.md
+NOTES.md
+RESOURCES.md
+assets/
+docs/chatty-agent-core-interview-guide.md
+docs/chatty-interview-qa.md
+docs/chatty-sdk-boundary-spec.md
+learning-records/
+lessons/
+reference/
+
+# 真实客户数据与运行时状态，任何情况下不入库（公开仓库红线）
+# data/ 与数据库文件覆盖 CHATTY_DB_PATH 等运行时库。
+data/
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+
+# 本地账单/usage 导出仅用于分析，不入公开仓库
+usage_data_*/
+usage_data_*.csv
+usage_data_*.json
+
+# Eval 产物：报告（pnpm eval --save 生成）与临时 SQLite，均不入库
+eval/reports/
+eval/.tmp/
+
+# Next.js (apps/web)
+.next/
+apps/web/out/
+release/
+next-env.d.ts

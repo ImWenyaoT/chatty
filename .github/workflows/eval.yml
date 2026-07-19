@@ -1,0 +1,45 @@
+name: eval
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eval-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  agent-eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+      MODEL_ID: ${{ secrets.MODEL_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup uv and Python
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          python-version: "3.12"
+
+      - name: Sync locked dependencies
+        run: uv sync --locked
+
+      - name: Deterministic Agent eval
+        run: uv run python -m chatty.eval --output eval/results.jsonl
+
+      - name: Real DeepSeek contract eval
+        run: uv run pytest -q --run-deepseek tests/test_deepseek_contract.py
+
+      - name: Upload deterministic results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: eval/results.jsonl
