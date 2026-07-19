@@ -16,7 +16,7 @@ Chatty 最初直接参考完整 Claude Code 的 Harness 形状，用它帮助识
 
 - Chatty 是单 Agent：Model 负责理解意图和选择工具，Harness 负责工具边界、可信身份、权限、执行、验证与证据。
 - 不引入 subagent、agent team、worktree、MCP、通用 workflow engine 或 Claude Code 专属基础设施。
-- 同步任务只留下业务 Trace，不创建 Customer Durable Task；兼容既有重放、取消和恢复行为的 Execution Control 记录不表示业务任务。
+- 同步任务只留下业务 Trace；当前 MVP 不实现 Durable Task、后台调度、重放、取消或恢复控制面。
 - SQLite 是 MVP 的真实本地业务系统，商品、库存、订单、Handoff 与带来源的客户 Memory 都以持久状态验证。
 - Knowledge Base、Transaction Context、Long-term Customer Memory 与 Agent Instructions 是四个不同概念，不互相代偿。
 

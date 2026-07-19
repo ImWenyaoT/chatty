@@ -38,7 +38,7 @@
 
 **Customer Memory**：客户明确表达、跨交易稳定、带 Trace 来源的事实。临时需求、推断画像和自动抽取不进入 Memory。
 
-**Business Outcome**：Tool 执行后由 Harness 依据 SQLite 状态或结构化结果验证的结果。`verified` 表示业务操作有证据，`not_completed` 表示尝试失败，`not_applicable` 表示普通回复无需业务副作用。
+**业务结果**（代码标识 `BusinessOutcome`）：Tool 执行后由 Harness 依据 SQLite 状态或结构化结果验证的结果。`verified` 表示业务操作有证据，`not_completed` 表示尝试失败，`not_applicable` 表示普通回复无需业务副作用。
 
 **Handoff**：持久化到 SQLite 的人工支持请求，包含问题、Context、既有动作与 receipt。仅回复“请联系客服”不算 Handoff。
 

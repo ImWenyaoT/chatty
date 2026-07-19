@@ -5,4 +5,4 @@
 > #34 的简化 MVP 决策与 #38 的 Memory 纵切由
 > [ADR-0006](0006-explicit-customer-memory.md) 取代本 ADR。
 
-Chatty 对所有客户保留完成当前交易所需的 Transaction Context 和可审计 Trace，但只有在第二个已支付或已确认订单成立后，客户才获得 Long-term Customer Memory 资格。此前的第二次咨询、待支付订单或重复打开会话都不触发长期记忆；资格成立后，历史 Trace 可以作为来源证据。客户明确陈述的稳定事实或偏好可在带 `sourceTraceId` 时提升，Model 推断只能作为 Memory Candidate，经过客户确认、重复证据或人工审核后才能提升；一次性交易需求始终留在 Transaction Context。
+早期方案曾以第二个已确认订单作为长期 Memory 门槛，并设计自动抽取与候选提升流程。当前 MVP 已删除这套门槛和流水线：客户明确表达、跨交易稳定且带 Trace 来源的事实可以直接保存；临时需求和推断画像不进入 Memory。完整决定见 ADR 0006。

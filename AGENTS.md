@@ -22,4 +22,4 @@ This repository has one architecture context; root `CONTEXT.md` is the only entr
 ## PR instructions
 
 - Title format: `[chatty] <Title>`
-- Always run `pnpm lint` and `pnpm test` before committing.
+- Before committing, run the current Python and web gates: Ruff format/check, ty, pytest, deterministic eval, `pnpm lint`, `pnpm test`, `pnpm typecheck`, and `pnpm build`.
