@@ -4,21 +4,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "WATCHPACK_POLLING=true node scripts/next-with-root-env.mjs dev --webpack -p 3000",
-    "build": "node scripts/next-with-root-env.mjs build --webpack",
-    "start": "node scripts/next-with-root-env.mjs start -p 3000",
-    "test": "CHATTY_DB_PATH=:memory: node --test --import tsx \"lib/**/*.test.ts\"",
-    "test:frontend": "CHATTY_DB_PATH=:memory: node --test --import tsx \"lib/frontend-contract.test.ts\"",
-    "test:coverage": "CHATTY_DB_PATH=:memory: node --experimental-test-coverage --test-coverage-include='lib/**' --test-coverage-lines=89 --test-coverage-branches=75 --test-coverage-functions=84 --test --import tsx \"lib/**/*.test.ts\"",
+    "dev": "WATCHPACK_POLLING=true next dev --webpack -p 3000",
+    "build": "next build --webpack",
+    "start": "next start -p 3000",
+    "test": "node --test --import tsx \"lib/**/*.test.ts\"",
+    "test:frontend": "node --test --import tsx \"lib/frontend-contract.test.ts\"",
+    "test:coverage": "node --experimental-test-coverage --test-coverage-include='lib/**' --test-coverage-lines=89 --test-coverage-branches=75 --test-coverage-functions=84 --test --import tsx \"lib/**/*.test.ts\"",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@rental/agent-core": "workspace:*",
-    "@rental/db": "workspace:*",
-    "@rental/llm": "workspace:*",
-    "@rental/shared": "workspace:*",
     "@tailwindcss/postcss": "^4.3.2",
-    "better-sqlite3": "^12.11.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.24.0",
@@ -26,8 +21,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwind-merge": "^3.6.0",
-    "tailwindcss": "^4.3.2",
-    "zod": "^4.0.0"
+    "tailwindcss": "^4.3.2"
   },
   "devDependencies": {
     "@testing-library/dom": "^10.4.1",

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 
 from agents import FunctionTool, RunContextWrapper, function_tool
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
@@ -17,6 +17,7 @@ from chatty.commerce import (
 
 BusinessOutcome = Literal["verified", "not_completed", "not_applicable"]
 MUTATION_TOOLS = frozenset({"create_order", "confirm_order", "cancel_order"})
+IsoDateString = Annotated[str, Field(pattern=r"^\d{4}-\d{2}-\d{2}$")]
 
 
 @dataclass(frozen=True)
@@ -117,8 +118,8 @@ def build_order_tools() -> list[FunctionTool]:
         size: str,
         fulfillment_mode: FulfillmentMode,
         quantity: int,
-        start_date: date | None,
-        end_date: date | None,
+        start_date: IsoDateString | None,
+        end_date: IsoDateString | None,
     ) -> str:
         """Check real SQLite inventory for a rental period or buyout."""
         try:
@@ -127,8 +128,8 @@ def build_order_tools() -> list[FunctionTool]:
                 size=size,
                 fulfillment_mode=fulfillment_mode,
                 quantity=quantity,
-                start_date=start_date,
-                end_date=end_date,
+                start_date=_parse_date(start_date),
+                end_date=_parse_date(end_date),
             )
             context.context.record_read_success(
                 "check_availability",
@@ -138,7 +139,7 @@ def build_order_tools() -> list[FunctionTool]:
                 ),
             )
             return _success(availability=availability.model_dump(mode="json"))
-        except CommerceError as error:
+        except (CommerceError, ValueError) as error:
             context.context.record_failure("check_availability", error)
             return _failure(error)
 
@@ -150,8 +151,8 @@ def build_order_tools() -> list[FunctionTool]:
         size: str,
         fulfillment_mode: FulfillmentMode,
         quantity: int,
-        start_date: date | None,
-        end_date: date | None,
+        start_date: IsoDateString | None,
+        end_date: IsoDateString | None,
         amount_cents: int = 0,
         channel: str = "Chatty",
         address: str = "待补充",
@@ -253,3 +254,7 @@ def _error_code(error: Exception) -> str:
     if isinstance(error, ValidationError):
         return "invalid_tool_input"
     return str(error)
+
+
+def _parse_date(value: str | None) -> date | None:
+    return date.fromisoformat(value) if value is not None else None

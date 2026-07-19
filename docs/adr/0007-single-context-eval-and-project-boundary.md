@@ -10,4 +10,4 @@ Chatty 使用根 `CONTEXT.md` 作为唯一架构与领域语言入口。`docs/ad
 
 确定性 eval 使用 JSONL cases 和可控 Model boundary，并在 CI 中运行真实 FastAPI、Runner、Tool、SQLite、Trace 与完成验证路径。真实 DeepSeek contract 只在显式 opt-in 时运行，配置仍只有 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`MODEL_ID`，thinking 关闭，secret 不进入输出或 Trace。
 
-README 只承诺本地可运行、可验证的简历项目能力，不对生产规模、可用性、安全合规或外部交付作保证。迁移遗留 TypeScript 生产代码由 #42 删除，不在本 ADR 提前处理。
+README 只承诺本地可运行、可验证的简历项目能力，不对生产规模、可用性、安全合规或外部交付作保证。#42 已删除迁移遗留的 TypeScript 生产代码与平台门禁。

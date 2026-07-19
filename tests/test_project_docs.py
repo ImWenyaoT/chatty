@@ -1,3 +1,4 @@
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -22,6 +23,88 @@ def test_single_context_has_one_architecture_entrypoint() -> None:
         encoding="utf-8"
     )
     assert "ADR 0007" in adr_0001
+
+
+def test_repository_has_only_python_backend_and_thin_web_runtime() -> None:
+    forbidden_paths = [
+        ROOT / "packages",
+        ROOT / "apps/web/app/api",
+        ROOT / "scripts/worker.mts",
+        ROOT / "scripts/worker-integration.mts",
+        ROOT / "scripts/fullstack-integration.mts",
+        ROOT / "scripts/smoke.mts",
+        ROOT / "apps/web/lib/db.ts",
+        ROOT / "apps/web/lib/background-job-worker.ts",
+        ROOT / "apps/web/lib/control-plane-read-model.ts",
+        ROOT / "apps/web/lib/customer-service-turn.ts",
+        ROOT / "apps/web/lib/harness-run-controller.ts",
+        ROOT / "apps/web/lib/llm.ts",
+        ROOT / "apps/web/lib/memory-pipeline.ts",
+    ]
+    assert [str(path.relative_to(ROOT)) for path in forbidden_paths if path.exists()] == []
+
+    workspace = (ROOT / "pnpm-workspace.yaml").read_text(encoding="utf-8")
+    assert '"apps/*"' in workspace
+    assert "packages/*" not in workspace
+
+    root_package = (ROOT / "package.json").read_text(encoding="utf-8")
+    web_package = (ROOT / "apps/web/package.json").read_text(encoding="utf-8")
+    forbidden_dependencies = (
+        "@rental/",
+        "@openai/agents",
+        "better-sqlite3",
+        "openai",
+        "zod",
+    )
+    for dependency in forbidden_dependencies:
+        assert dependency not in root_package
+        assert dependency not in web_package
+
+
+def test_web_source_cannot_own_backend_or_platform_concerns() -> None:
+    source_paths = list((ROOT / "apps/web/app").rglob("*.ts"))
+    source_paths += list((ROOT / "apps/web/app").rglob("*.tsx"))
+    source_paths.append(ROOT / "apps/web/next.config.ts")
+    web_sources = "\n".join(path.read_text(encoding="utf-8") for path in source_paths).casefold()
+    for forbidden in (
+        "better-sqlite3",
+        "@rental/",
+        "control-plane",
+        "background-job",
+        "outbox",
+        "checkpoint",
+        "provider router",
+    ):
+        assert forbidden not in web_sources
+
+
+def test_contracted_source_cannot_regrow_a_second_platform() -> None:
+    active_sources = list((ROOT / "src/chatty").glob("*.py"))
+    active_sources += list((ROOT / "apps/web/app").rglob("*.ts"))
+    active_sources += list((ROOT / "apps/web/app").rglob("*.tsx"))
+    source = "\n".join(path.read_text(encoding="utf-8") for path in active_sources)
+    web_source = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in active_sources
+        if path.is_relative_to(ROOT / "apps/web")
+    )
+
+    forbidden_path_parts = {"api", "jobs", "worker", "workers", "outbox", "checkpoints"}
+    assert not {
+        part
+        for path in active_sources
+        for part in path.relative_to(ROOT).parts
+        if part.casefold() in forbidden_path_parts
+    }
+    assert not re.search(
+        r"(?:better-sqlite3|node:sqlite|@rental/db|CHATTY_DB_PATH|"
+        r"(?:from|import)\s+[^\n]*(?:sqlite|\bdb\b))",
+        web_source,
+        re.IGNORECASE,
+    )
+    assert not re.search(r"\b(?:rag|vector database|vector db)\b", source, re.IGNORECASE)
+    assert "@openai/agents" not in source
+    assert source.count("Runner.run(") == 1
 
 
 def test_readmes_describe_only_the_current_resume_mvp() -> None:
@@ -79,6 +162,13 @@ def test_ci_keeps_all_gates_and_runs_the_deterministic_eval() -> None:
         "pnpm build",
     ):
         assert command in workflow
+    for removed_gate in (
+        "build:skeleton",
+        "test:fullstack",
+        "test:worker-integration",
+        "test:coverage:core",
+    ):
+        assert removed_gate not in workflow
 
 
 def test_manual_eval_workflow_uses_only_the_current_contract() -> None:

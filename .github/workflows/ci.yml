@@ -92,33 +92,14 @@ jobs:
           done
           exit 1
 
-      - name: Build package skeleton
-        run: pnpm build:skeleton
-
       - name: Lint and format
         run: pnpm lint
 
-      - name: Smoke test (core data path, no network)
-        run: node scripts/smoke.mts
-
-      - name: Test workspaces
+      - name: Test web
         run: pnpm test
 
-      - name: Full-stack integration
-        run: pnpm test:fullstack
-
-      - name: Core package coverage
-        run: pnpm test:coverage:core
-
-      - name: Web core coverage
-        run: pnpm test:coverage
-
-      - name: Frontend experience contract
-        run: pnpm test:frontend
-
-      - name: Typecheck workspaces
+      - name: Typecheck web
         run: pnpm typecheck
 
-      # pnpm -r build 已覆盖全部 workspace 包
-      - name: Build workspaces
+      - name: Build web
         run: pnpm build

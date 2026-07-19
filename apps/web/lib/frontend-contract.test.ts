@@ -3,11 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import {
-  MINIMUM_SELLER_WORKSPACE_ROUTE_KEYS,
-  SELLER_WORKSPACE_ROUTES,
-  sellerWorkspaceHomeRoutes,
-} from "../app/components/seller/sellerWorkspaceRoutes";
+import { SELLER_WORKSPACE_ROUTES } from "../app/components/seller/sellerWorkspaceRoutes";
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -23,35 +19,22 @@ const ordersSource = readAppSource("app/orders/page.tsx");
 const playgroundSource = readAppSource("app/playground/page.tsx");
 const cssSource = readAppSource("app/globals.css");
 const webPackageSource = readAppSource("package.json");
-const databasePathSource = readAppSource("lib/database-path.mjs");
-
-test("web runtime scripts load the repository environment explicitly", () => {
+test("web runtime contains only the thin Next.js application", () => {
   const webPackage = JSON.parse(webPackageSource) as {
     dependencies?: Record<string, string>;
     scripts?: Record<string, string>;
   };
 
-  for (const script of ["dev", "build", "start"]) {
-    assert.match(
-      webPackage.scripts?.[script] ?? "",
-      /node scripts\/next-with-root-env\.mjs/,
-    );
-  }
+  for (const script of ["dev", "build", "start"])
+    assert.match(webPackage.scripts?.[script] ?? "", /next/);
   assert.match(webPackage.scripts?.dev ?? "", /WATCHPACK_POLLING=true/);
-  assert.match(webPackage.dependencies?.["better-sqlite3"] ?? "", /^\^12\./);
-
-  const launcherSource = readAppSource("scripts/next-with-root-env.mjs");
-  assert.match(launcherSource, /dotenv\.config/);
-  assert.match(launcherSource, /\.\.\/\.\.\/\.\.\/\.env/);
-  assert.match(launcherSource, /CHATTY_DB_PATH/);
-  assert.match(launcherSource, /database-path\.mjs/);
-  assert.match(databasePathSource, /data\/chatty\.sqlite/);
+  assert.equal(webPackage.dependencies?.["better-sqlite3"], undefined);
+  assert.equal(webPackage.dependencies?.["@rental/db"], undefined);
 });
 
 test("frontend shell exposes keyboard and screen-reader navigation affordances", () => {
   assert.match(layoutSource, /className="skip-link"/);
   assert.match(layoutSource, /href="#main-content"/);
-  assert.match(homeSource, /id="main-content"/);
   assert.match(dashboardSource, /id="main-content"/);
   assert.match(ordersSource, /id="main-content"/);
   assert.match(playgroundSource, /id="main-content"/);
@@ -109,12 +92,7 @@ test("customer service workspace follows the system color scheme", () => {
   assert.match(cssSource, /\.support-risk/);
 });
 
-test("seller workspace cannot regress to a chat-only page", () => {
-  assert.deepEqual(MINIMUM_SELLER_WORKSPACE_ROUTE_KEYS, [
-    "home",
-    "playground",
-    "orders",
-  ]);
+test("seller workspace exposes exactly the three retained pages", () => {
   assert.deepEqual(
     SELLER_WORKSPACE_ROUTES.map((route) => [
       route.key,
@@ -122,16 +100,12 @@ test("seller workspace cannot regress to a chat-only page", () => {
       route.navLabel,
     ]),
     [
-      ["home", "/", "卖家首页"],
       ["playground", "/playground", "客服会话"],
       ["orders", "/orders", "订单跟进"],
       ["dashboard", "/dashboard", "复盘视图"],
     ],
   );
-  assert.deepEqual(
-    sellerWorkspaceHomeRoutes.map((route) => route.key),
-    ["playground", "orders", "dashboard"],
-  );
+  assert.match(homeSource, /redirect\(["']\/playground["']\)/);
 });
 
 test("customer service workspace keeps product language with technical observability", () => {
@@ -213,7 +187,7 @@ test("review dashboard copy avoids generic backend-dashboard language", () => {
   assert.doesNotMatch(visibleShellCopy, /后台视图/);
   assert.doesNotMatch(visibleShellCopy, /后台观察/);
   assert.doesNotMatch(visibleShellCopy, /智能客服后台/);
-  assert.match(visibleShellCopy, /可复盘的数字员工/);
   assert.match(dashboardSource, /SQLite Trace/);
+  assert.doesNotMatch(visibleShellCopy, /AI 落地指标|演示订单样本/);
   assert.match(visibleShellCopy, /复盘视图/);
 });

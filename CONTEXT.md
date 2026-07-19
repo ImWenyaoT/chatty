@@ -22,7 +22,7 @@
 - `tests`：FastAPI + disposable SQLite 的公开行为测试。
 - `docs/adr`：重要决策史和当前决策状态。
 
-迁移期间仍存在的 TypeScript 后端代码由 #42 删除。它们不是当前架构入口，也不构成并行生产运行时。
+仓库不保留 TypeScript 后端、Next.js API routes 或内部 packages；TypeScript 只用于薄 web。
 
 ## 领域语言
 

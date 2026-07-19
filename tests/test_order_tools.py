@@ -17,6 +17,17 @@ def tool_context(context: HarnessContext, name: str, arguments: str) -> ToolCont
     )
 
 
+def test_order_tool_schema_uses_provider_compatible_iso_date_strings() -> None:
+    schemas = [tool.params_json_schema for tool in build_order_tools()]
+
+    assert '"format": "date"' not in json.dumps(schemas)
+    for tool_name in ("check_availability", "create_order"):
+        schema = next(
+            tool.params_json_schema for tool in build_order_tools() if tool.name == tool_name
+        )
+        assert schema["properties"]["start_date"]["anyOf"][0]["type"] == "string"
+
+
 @pytest.mark.asyncio
 async def test_create_order_tool_rejects_model_supplied_identity_before_business_code(
     tmp_path: Path,
