@@ -759,3 +759,183 @@ def test_agent_session_cannot_be_reused_by_another_customer(tmp_path: Path) -> N
     assert second.json() == {"detail": "session_customer_mismatch"}
     assert len(model.inputs) == 1
     assert second_model.inputs == []
+
+
+def test_model_can_create_a_traceable_human_support_receipt(tmp_path: Path) -> None:
+    model = ScriptedModel(
+        [
+            ResponseFunctionToolCall(
+                arguments=json.dumps(
+                    {
+                        "reason": "退款争议需要负责人判断",
+                        "context": "客户称订单 ORD-1001 尚未退款",
+                    },
+                    ensure_ascii=False,
+                ),
+                call_id="call-support-1",
+                name="request_human_support",
+                type="function_call",
+            ),
+            "已创建人工支持请求。",
+        ]
+    )
+    app = create_app(
+        database_path=tmp_path / "chatty.sqlite",
+        model=model,
+        customer_identity=customer_identity("customer-1"),
+    )
+
+    with TestClient(app) as client:
+        run = client.post(
+            "/runs",
+            json={"customer_id": "customer-1", "message": "退款一直没到账"},
+        )
+        receipt = client.get(f"/support-requests/{run.json()['support_request_id']}")
+
+    assert run.status_code == 200
+    assert run.json()["status"] == "needs_human"
+    assert run.json()["support_request_id"].startswith("support_")
+    assert receipt.status_code == 200
+    assert receipt.json() == {
+        "id": run.json()["support_request_id"],
+        "customer_id": "customer-1",
+        "session_id": run.json()["session_id"],
+        "reason": "退款争议需要负责人判断",
+        "context": "客户称订单 ORD-1001 尚未退款",
+        "status": "open",
+        "created_at": receipt.json()["created_at"],
+        "updated_at": receipt.json()["updated_at"],
+    }
+
+
+def test_harness_forces_support_after_an_invalid_support_tool_call(tmp_path: Path) -> None:
+    model = ScriptedModel(
+        [
+            ResponseFunctionToolCall(
+                arguments=json.dumps({"reason": "", "context": ""}),
+                call_id="call-invalid-support",
+                name="request_human_support",
+                type="function_call",
+            ),
+            "请联系人工客服。",
+        ]
+    )
+    app = create_app(
+        database_path=tmp_path / "chatty.sqlite",
+        model=model,
+        customer_identity=customer_identity("customer-2"),
+    )
+
+    with TestClient(app) as client:
+        run = client.post(
+            "/runs",
+            json={"customer_id": "customer-2", "message": "处理这个不支持的操作"},
+        )
+        receipt = client.get(f"/support-requests/{run.json()['support_request_id']}")
+
+    assert run.status_code == 200
+    assert run.json()["status"] == "needs_human"
+    assert run.json()["reply"] == "业务无法安全完成，已创建可追踪的人工支持请求。"
+    assert receipt.json()["customer_id"] == "customer-2"
+    assert receipt.json()["reason"] == "Harness 强制升级"
+    assert receipt.json()["context"] == "request_human_support 调用失败或参数无效"
+
+
+def test_duplicate_support_requests_return_one_stable_receipt(tmp_path: Path) -> None:
+    def tool_call(call_id: str) -> ResponseFunctionToolCall:
+        return ResponseFunctionToolCall(
+            arguments=json.dumps({"reason": "退款争议", "context": "ORD-1001"}),
+            call_id=call_id,
+            name="request_human_support",
+            type="function_call",
+        )
+
+    model = ScriptedModel([tool_call("call-1"), "已提交。", tool_call("call-2"), "仍在处理中。"])
+    app = create_app(database_path=tmp_path / "chatty.sqlite", model=model)
+
+    with TestClient(app) as client:
+        first = client.post("/runs", json={"customer_id": "customer-1", "message": "申请人工"})
+        second = client.post(
+            "/runs",
+            json={
+                "customer_id": "customer-1",
+                "session_id": first.json()["session_id"],
+                "message": "再次申请人工",
+            },
+        )
+        receipts = client.get("/support-requests")
+
+    assert first.json()["support_request_id"] == second.json()["support_request_id"]
+    assert len(receipts.json()) == 1
+
+
+def test_plain_support_wording_is_not_a_handoff_receipt(tmp_path: Path) -> None:
+    app = create_app(
+        database_path=tmp_path / "chatty.sqlite",
+        model=ScriptedModel(["请联系人工客服。"]),
+    )
+
+    with TestClient(app) as client:
+        run = client.post("/runs", json={"message": "帮我处理"})
+        receipts = client.get("/support-requests")
+
+    assert run.json()["status"] == "responded"
+    assert run.json()["support_request_id"] is None
+    assert receipts.json() == []
+
+
+def test_support_write_failure_is_traced_and_not_reported_as_handoff(tmp_path: Path) -> None:
+    database_path = tmp_path / "chatty.sqlite"
+    model = ScriptedModel(
+        [
+            ResponseFunctionToolCall(
+                arguments=json.dumps({"reason": "需要授权", "context": "退款"}),
+                call_id="call-write-failure",
+                name="request_human_support",
+                type="function_call",
+            ),
+            "已转人工。",
+        ]
+    )
+    app = create_app(database_path=database_path, model=model)
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            """
+            CREATE TRIGGER reject_support_writes
+            BEFORE INSERT ON support_requests
+            BEGIN SELECT RAISE(FAIL, 'support store unavailable'); END
+            """
+        )
+
+    with TestClient(app) as client:
+        run = client.post("/runs", json={"message": "需要人工授权"})
+        spans = client.get(f"/traces/{run.headers['x-trace-id']}/spans")
+
+    assert run.status_code == 502
+    assert run.json() == {"detail": "llm_provider_failed"}
+    assert any(span["status"] == "failed" and "support" in span["summary"] for span in spans.json())
+
+
+def test_forced_handoff_traces_failed_tool_and_created_receipt(tmp_path: Path) -> None:
+    model = ScriptedModel(
+        [
+            ResponseFunctionToolCall(
+                arguments=json.dumps({"reason": "", "context": ""}),
+                call_id="call-invalid",
+                name="request_human_support",
+                type="function_call",
+            ),
+            "请联系客服。",
+        ]
+    )
+    app = create_app(database_path=tmp_path / "chatty.sqlite", model=model)
+
+    with TestClient(app) as client:
+        run = client.post("/runs", json={"message": "无法安全完成"})
+        spans = client.get(f"/traces/{run.json()['trace_id']}/spans")
+
+    tool_events = [span for span in spans.json() if span["span_type"] == "tool"]
+    assert [(event["status"], event["summary"]) for event in tool_events] == [
+        ("failed", "request_human_support failed"),
+        ("completed", "Harness-enforced support receipt created"),
+    ]

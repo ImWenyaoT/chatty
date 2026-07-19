@@ -19,9 +19,11 @@ type RunResponse = {
   customer_id: string;
   session_id: string;
   trace_id: string;
-  status: "completed" | "not_completed" | "responded";
+  status: "completed" | "not_completed" | "responded" | "needs_human";
   knowledge_search_results: KnowledgeResult[];
   memory_events: MemoryEvent[];
+  needs_human: boolean;
+  support_request_id: string | null;
 };
 
 type CustomerMemory = {
@@ -71,7 +73,11 @@ function isRunResponse(payload: unknown): payload is RunResponse {
     Array.isArray(candidate.knowledge_search_results) &&
     candidate.knowledge_search_results.every(isKnowledgeResult) &&
     Array.isArray(candidate.memory_events) &&
-    ["completed", "not_completed", "responded"].includes(
+    typeof candidate.needs_human === "boolean" &&
+    (candidate.support_request_id === null ||
+      typeof candidate.support_request_id === "string") &&
+    candidate.needs_human === (candidate.status === "needs_human") &&
+    ["completed", "not_completed", "responded", "needs_human"].includes(
       String(candidate.status),
     )
   );
@@ -97,6 +103,8 @@ export default function PlaygroundPage() {
     [],
   );
   const [memoryEvents, setMemoryEvents] = useState<MemoryEvent[]>([]);
+  const [runStatus, setRunStatus] = useState<RunResponse["status"]>();
+  const [supportRequestId, setSupportRequestId] = useState<string>();
   const nextId = useRef(1);
 
   async function sendMessage() {
@@ -131,6 +139,8 @@ export default function PlaygroundPage() {
       setTraceId(payload.trace_id);
       setKnowledgeResults(payload.knowledge_search_results);
       setMemoryEvents(payload.memory_events);
+      setRunStatus(payload.status);
+      setSupportRequestId(payload.support_request_id ?? undefined);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "请求失败");
     } finally {
@@ -244,6 +254,24 @@ export default function PlaygroundPage() {
               <div>
                 <dt>trace_id</dt>
                 <dd>{traceId ?? "尚未运行"}</dd>
+              </div>
+              <div>
+                <dt>状态</dt>
+                <dd>
+                  {runStatus === "needs_human"
+                    ? "需要人工处理"
+                    : runStatus === "completed"
+                      ? "已完成"
+                      : runStatus === "not_completed"
+                        ? "未完成"
+                        : runStatus === "responded"
+                          ? "已回复"
+                          : "尚未运行"}
+                </dd>
+              </div>
+              <div>
+                <dt>support_request_id</dt>
+                <dd>{supportRequestId ?? "无"}</dd>
               </div>
             </dl>
           </section>

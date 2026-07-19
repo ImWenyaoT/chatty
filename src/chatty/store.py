@@ -26,6 +26,25 @@ class CustomerMemory:
     created_at: str
 
 
+@dataclass(frozen=True)
+class TraceSpanSummary:
+    span_type: str
+    status: str
+    summary: str
+
+
+@dataclass(frozen=True)
+class SupportRequest:
+    id: str
+    customer_id: str
+    session_id: str
+    reason: str
+    context: str
+    status: str
+    created_at: str
+    updated_at: str
+
+
 class SessionCustomerMismatchError(RuntimeError):
     pass
 
@@ -33,6 +52,7 @@ class SessionCustomerMismatchError(RuntimeError):
 @contextmanager
 def sqlite_connection(database_path: Path) -> Iterator[sqlite3.Connection]:
     connection = sqlite3.connect(database_path)
+    connection.row_factory = sqlite3.Row
     try:
         with connection:
             yield connection
@@ -126,6 +146,91 @@ class MemoryStore:
         return [CustomerMemory(*row) for row in rows]
 
 
+class SupportRequestStore:
+    def __init__(self, database_path: str | Path) -> None:
+        self.database_path = Path(database_path)
+        self.database_path.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite_connection(self.database_path) as connection:
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS support_requests (
+                    id TEXT PRIMARY KEY,
+                    idempotency_key TEXT NOT NULL UNIQUE,
+                    customer_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    context TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+
+    def create(
+        self,
+        *,
+        customer_id: str,
+        session_id: str,
+        reason: str,
+        context: str,
+        idempotency_key: str,
+    ) -> SupportRequest:
+        reason = reason.strip()
+        context = context.strip()
+        if not reason or not context:
+            raise ValueError("support reason and context are required")
+        with sqlite_connection(self.database_path) as connection:
+            existing = connection.execute(
+                "SELECT * FROM support_requests WHERE idempotency_key = ?",
+                (idempotency_key,),
+            ).fetchone()
+            if existing:
+                return self._request(existing)
+            request_id = f"support_{uuid4().hex}"
+            connection.execute(
+                """
+                INSERT INTO support_requests
+                    (id, idempotency_key, customer_id, session_id, reason, context, status)
+                VALUES (?, ?, ?, ?, ?, ?, 'open')
+                """,
+                (request_id, idempotency_key, customer_id, session_id, reason, context),
+            )
+            row = connection.execute(
+                "SELECT * FROM support_requests WHERE id = ?", (request_id,)
+            ).fetchone()
+        if row is None:
+            raise RuntimeError("support request was not persisted")
+        return self._request(row)
+
+    def get(self, request_id: str) -> SupportRequest | None:
+        with sqlite_connection(self.database_path) as connection:
+            row = connection.execute(
+                "SELECT * FROM support_requests WHERE id = ?", (request_id,)
+            ).fetchone()
+        return self._request(row) if row else None
+
+    def list_all(self) -> list[SupportRequest]:
+        with sqlite_connection(self.database_path) as connection:
+            rows = connection.execute(
+                "SELECT * FROM support_requests ORDER BY created_at DESC, id DESC"
+            ).fetchall()
+        return [self._request(row) for row in rows]
+
+    @staticmethod
+    def _request(row: sqlite3.Row) -> SupportRequest:
+        return SupportRequest(
+            id=row["id"],
+            customer_id=row["customer_id"],
+            session_id=row["session_id"],
+            reason=row["reason"],
+            context=row["context"],
+            status=row["status"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+
 class TraceStore:
     def __init__(self, database_path: str | Path) -> None:
         self.database_path = Path(database_path)
@@ -212,6 +317,32 @@ class TraceStore:
                     f"{span_type} span {status}",
                 ),
             )
+
+    def record_tool_event(self, trace_id: str, *, status: str, summary: str) -> None:
+        if status not in {"completed", "failed"}:
+            raise ValueError("invalid tool event status")
+        with sqlite_connection(self.database_path) as connection:
+            connection.execute(
+                """
+                INSERT INTO local_spans
+                    (span_id, trace_id, parent_id, span_type, status, summary)
+                VALUES (?, ?, NULL, 'tool', ?, ?)
+                """,
+                (f"span_{uuid4().hex}", trace_id, status, summary),
+            )
+
+    def spans(self, trace_id: str) -> list[TraceSpanSummary]:
+        with sqlite_connection(self.database_path) as connection:
+            rows = connection.execute(
+                """
+                SELECT span_type, status, summary
+                FROM local_spans
+                WHERE trace_id = ?
+                ORDER BY created_at, rowid
+                """,
+                (trace_id,),
+            ).fetchall()
+        return [TraceSpanSummary(*row) for row in rows]
 
     def span_types(self, trace_id: str) -> list[str]:
         with sqlite_connection(self.database_path) as connection:

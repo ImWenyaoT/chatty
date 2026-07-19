@@ -16,6 +16,7 @@ from agents import (
     RunContextWrapper,
     Runner,
     SQLiteSession,
+    ToolCallItem,
     function_tool,
 )
 from pydantic import Field, StringConstraints
@@ -25,7 +26,7 @@ from agents.tool import Tool
 
 from chatty.commerce import CommerceStore
 from chatty.order_tools import BusinessOutcome, HarnessContext, build_order_tools
-from chatty.store import CustomerMemory, MemoryStore
+from chatty.store import CustomerMemory, MemoryStore, SupportRequestStore, TraceStore
 
 DEFAULT_BASE_URL = "https://api.deepseek.com"
 DEFAULT_MODEL_ID = "deepseek-v4-pro"
@@ -37,6 +38,8 @@ AGENT_INSTRUCTIONS = """你是 Chatty，一个简洁、可靠的客服 Agent。
 回答政策或商品事实前必须调用 search_knowledge；使用检索内容时必须原样附上至少一个 source。
 仅当客户明确要求记住其直接陈述、且该事实跨交易稳定时，调用 save_customer_memory。
 临时需求、当前订单偏好、推断或画像不得保存；需要既有客户事实时主动搜索 Memory。
+需要人工判断、授权或无法安全完成时，必须调用 request_human_support；
+不能只回复“请联系客服”，只有持久化 receipt 才算已交接。
 """
 
 
@@ -61,6 +64,7 @@ class AgentRunResult:
     memory_events: list[MemoryEvent]
     business_outcome: BusinessOutcome
     completion_evidence: str
+    support_request_id: str | None
 
 
 @dataclass(kw_only=True)
@@ -68,7 +72,39 @@ class AgentContext(HarnessContext):
     message: str
     trace_id: str
     memory_store: MemoryStore
+    support_store: SupportRequestStore
+    trace_store: TraceStore
     memory_events: list[MemoryEvent] = field(default_factory=list)
+    support_request_id: str | None = None
+
+
+@function_tool
+def request_human_support(
+    ctx: RunContextWrapper[AgentContext], reason: str, context: str
+) -> dict[str, str]:
+    """Create a traceable support receipt for human judgment or authorization."""
+    try:
+        receipt = ctx.context.support_store.create(
+            customer_id=ctx.context.customer_id,
+            session_id=ctx.context.session_id,
+            reason=reason,
+            context=context,
+            idempotency_key=f"{ctx.context.session_id}:{reason.strip()}:{context.strip()}",
+        )
+    except Exception:
+        ctx.context.trace_store.record_tool_event(
+            ctx.context.trace_id,
+            status="failed",
+            summary="request_human_support failed",
+        )
+        raise
+    ctx.context.support_request_id = receipt.id
+    ctx.context.trace_store.record_tool_event(
+        ctx.context.trace_id,
+        status="completed",
+        summary="request_human_support created receipt",
+    )
+    return {"support_request_id": receipt.id, "status": receipt.status}
 
 
 def memory_tools() -> list[Tool]:
@@ -149,6 +185,8 @@ async def run_agent(
     knowledge_store: KnowledgeStore,
     customer_id: str,
     commerce: CommerceStore,
+    support_store: SupportRequestStore,
+    trace_store: TraceStore,
 ) -> AgentRunResult:
     knowledge_search_results: dict[str, KnowledgeRecord] = {}
 
@@ -175,12 +213,15 @@ async def run_agent(
         message=message,
         trace_id=trace_id,
         memory_store=MemoryStore(database_path),
+        support_store=support_store,
+        trace_store=trace_store,
     )
     context.memory_store.bind_session(session_id=session_id, customer_id=customer_id)
     agent_tools: list[Tool] = [
         search_knowledge,
         *memory_tools(),
         *build_order_tools(),
+        request_human_support,
     ]
     agent: Agent[AgentContext] = Agent(
         name="Chatty",
@@ -217,7 +258,35 @@ async def run_agent(
         record.source in result.final_output for record in knowledge_search_results.values()
     ):
         raise InvalidAgentOutputError("Knowledge-backed reply omitted its source")
+    attempted_support = any(
+        isinstance(item, ToolCallItem) and item.tool_name == "request_human_support"
+        for item in result.new_items
+    )
+    if attempted_support and context.support_request_id is None:
+        receipt = support_store.create(
+            customer_id=customer_id,
+            session_id=session_id,
+            reason="Harness 强制升级",
+            context="request_human_support 调用失败或参数无效",
+            idempotency_key=f"{session_id}:harness:invalid-support-tool-call",
+        )
+        trace_store.record_tool_event(
+            trace_id,
+            status="completed",
+            summary="Harness-enforced support receipt created",
+        )
+        return AgentRunResult(
+            reply="业务无法安全完成，已创建可追踪的人工支持请求。",
+            knowledge_search_results=list(knowledge_search_results.values()),
+            memory_events=context.memory_events,
+            business_outcome="not_completed",
+            completion_evidence=f"handoff:{receipt.id}",
+            support_request_id=receipt.id,
+        )
     business_outcome, completion_evidence = context.verify_business_outcome()
+    if context.support_request_id is not None:
+        business_outcome = "not_completed"
+        completion_evidence = f"handoff:{context.support_request_id}"
     reply = result.final_output
     if business_outcome == "not_completed":
         error_code = completion_evidence.partition(":")[2] or "business_tool_failed"
@@ -228,4 +297,5 @@ async def run_agent(
         memory_events=context.memory_events,
         business_outcome=business_outcome,
         completion_evidence=completion_evidence,
+        support_request_id=context.support_request_id,
     )

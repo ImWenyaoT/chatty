@@ -12,7 +12,12 @@ from pydantic import BaseModel, Field
 from chatty.agent import MissingApiKeyError, model_from_env, run_agent
 from chatty.knowledge import KnowledgeRecord, KnowledgeStore
 from chatty.commerce import CommerceError, CommerceStore, Order
-from chatty.store import MemoryStore, SessionCustomerMismatchError, TraceStore
+from chatty.store import (
+    MemoryStore,
+    SessionCustomerMismatchError,
+    SupportRequestStore,
+    TraceStore,
+)
 from chatty.tracing import SQLiteTracingProcessor
 
 
@@ -44,12 +49,25 @@ class RunResponse(BaseModel):
     completion_evidence: str
     knowledge_search_results: list[KnowledgeRecord]
     memory_events: list[MemoryEventResponse]
+    needs_human: bool
+    support_request_id: str | None = None
 
 
 class MemorySearchResponse(BaseModel):
     customer_id: str
     query: str
     memories: list[MemoryResponse]
+
+
+class SupportRequestResponse(BaseModel):
+    id: str
+    customer_id: str
+    session_id: str
+    reason: str
+    context: str
+    status: str
+    created_at: str
+    updated_at: str
 
 
 class TraceResponse(BaseModel):
@@ -59,6 +77,12 @@ class TraceResponse(BaseModel):
     summary: str
     model_id: str
     span_types: list[str]
+
+
+class TraceSpanResponse(BaseModel):
+    span_type: str
+    status: str
+    summary: str
 
 
 def demo_customer_identity() -> str:
@@ -82,6 +106,7 @@ def create_app(
     )
     trace_store = TraceStore(database_path)
     memory_store = MemoryStore(database_path)
+    support_store = SupportRequestStore(database_path)
     knowledge_store = KnowledgeStore(database_path)
     active_knowledge_path = (
         Path(knowledge_path)
@@ -123,22 +148,32 @@ def create_app(
                 knowledge_store=knowledge_store,
                 customer_id=customer_id,
                 commerce=commerce,
+                support_store=support_store,
+                trace_store=trace_store,
             )
         except SessionCustomerMismatchError as error:
             raise HTTPException(status_code=409, detail="session_customer_mismatch") from error
         except Exception as error:
             trace_store.fail(trace_id)
-            raise HTTPException(status_code=502, detail="llm_provider_failed") from error
+            raise HTTPException(
+                status_code=502,
+                detail="llm_provider_failed",
+                headers={"X-Trace-ID": trace_id},
+            ) from error
         return RunResponse(
             reply=result.reply,
             customer_id=customer_id,
             session_id=session_id,
             trace_id=trace_id,
-            status={
-                "verified": "completed",
-                "not_completed": "not_completed",
-                "not_applicable": "responded",
-            }[result.business_outcome],
+            status=(
+                "needs_human"
+                if result.support_request_id is not None
+                else {
+                    "verified": "completed",
+                    "not_completed": "not_completed",
+                    "not_applicable": "responded",
+                }[result.business_outcome]
+            ),
             business_outcome=result.business_outcome,
             completion_evidence=result.completion_evidence,
             knowledge_search_results=result.knowledge_search_results,
@@ -149,7 +184,20 @@ def create_app(
                 )
                 for event in result.memory_events
             ],
+            needs_human=result.support_request_id is not None,
+            support_request_id=result.support_request_id,
         )
+
+    @app.get("/support-requests", response_model=list[SupportRequestResponse])
+    async def list_support_requests() -> list[SupportRequestResponse]:
+        return [SupportRequestResponse(**item.__dict__) for item in support_store.list_all()]
+
+    @app.get("/support-requests/{support_request_id}", response_model=SupportRequestResponse)
+    async def get_support_request(support_request_id: str) -> SupportRequestResponse:
+        request = support_store.get(support_request_id)
+        if request is None:
+            raise HTTPException(status_code=404, detail="support_request_not_found")
+        return SupportRequestResponse(**request.__dict__)
 
     @app.get(
         "/memories",
@@ -175,6 +223,12 @@ def create_app(
         if trace is None:
             raise HTTPException(status_code=404, detail="trace_not_found")
         return TraceResponse(**trace.__dict__, span_types=trace_store.span_types(trace_id))
+
+    @app.get("/traces/{trace_id}/spans", response_model=list[TraceSpanResponse])
+    async def get_trace_spans(trace_id: str) -> list[TraceSpanResponse]:
+        if trace_store.get(trace_id) is None:
+            raise HTTPException(status_code=404, detail="trace_not_found")
+        return [TraceSpanResponse(**span.__dict__) for span in trace_store.spans(trace_id)]
 
     @app.get("/orders", response_model=list[Order])
     async def list_orders() -> list[Order]:

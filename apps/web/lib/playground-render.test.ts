@@ -45,7 +45,9 @@ test("playground renders loading, success, session continuity, and errors", asyn
         customer_id: "demo-customer",
         session_id: "session-1",
         trace_id: "trace-1",
-        status: "responded",
+        status: "needs_human",
+        needs_human: true,
+        support_request_id: "support-1",
         knowledge_search_results: [
           {
             id: "policy-rental-period-1",
@@ -111,6 +113,8 @@ test("playground renders loading, success, session continuity, and errors", asyn
     screen.getByText("search_customer_memory").textContent,
     "search_customer_memory",
   );
+  assert.equal(screen.getByText("需要人工处理").textContent, "需要人工处理");
+  assert.equal(screen.getByText("support-1").textContent, "support-1");
   assert.deepEqual(requests[0], {
     message: "第一条消息",
   });
