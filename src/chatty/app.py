@@ -25,6 +25,8 @@ class RunResponse(BaseModel):
     session_id: str
     trace_id: str
     status: str
+    business_outcome: str
+    completion_evidence: str
     knowledge_search_results: list[KnowledgeRecord]
 
 
@@ -98,7 +100,13 @@ def create_app(
             reply=result.reply,
             session_id=session_id,
             trace_id=trace_id,
-            status="completed",
+            status={
+                "verified": "completed",
+                "not_completed": "not_completed",
+                "not_applicable": "responded",
+            }[result.business_outcome],
+            business_outcome=result.business_outcome,
+            completion_evidence=result.completion_evidence,
             knowledge_search_results=result.knowledge_search_results,
         )
 

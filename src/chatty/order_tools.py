@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
-from typing import Self
+from typing import Literal, Self
 
 from agents import FunctionTool, RunContextWrapper, function_tool
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
@@ -15,12 +15,67 @@ from chatty.commerce import (
     Order,
 )
 
+BusinessOutcome = Literal["verified", "not_completed", "not_applicable"]
+MUTATION_TOOLS = frozenset({"create_order", "confirm_order", "cancel_order"})
+
 
 @dataclass(frozen=True)
+class BusinessToolReceipt:
+    tool_name: str
+    ok: bool
+    order_id: str | None = None
+    expected_status: str | None = None
+    evidence: str | None = None
+    error: str | None = None
+
+
+@dataclass
 class HarnessContext:
     customer_id: str
     session_id: str
     commerce: CommerceStore
+    business_receipts: list[BusinessToolReceipt] = field(default_factory=list)
+
+    def record_read_success(self, tool_name: str, evidence: str) -> None:
+        self.business_receipts.append(
+            BusinessToolReceipt(tool_name=tool_name, ok=True, evidence=evidence)
+        )
+
+    def record_order_success(self, tool_name: str, order: Order) -> None:
+        self.business_receipts.append(
+            BusinessToolReceipt(
+                tool_name=tool_name,
+                ok=True,
+                order_id=order.id,
+                expected_status=order.status,
+            )
+        )
+
+    def record_failure(self, tool_name: str, error: Exception) -> None:
+        self.business_receipts.append(
+            BusinessToolReceipt(tool_name=tool_name, ok=False, error=_error_code(error))
+        )
+
+    def verify_business_outcome(self) -> tuple[BusinessOutcome, str]:
+        if not self.business_receipts:
+            return "not_applicable", "no_business_tool"
+        mutations = [
+            receipt for receipt in self.business_receipts if receipt.tool_name in MUTATION_TOOLS
+        ]
+        latest = mutations[-1] if mutations else self.business_receipts[-1]
+        if not latest.ok:
+            return "not_completed", f"{latest.tool_name}:{latest.error}"
+        if latest.evidence is not None:
+            return "verified", latest.evidence
+        if latest.order_id is None or latest.expected_status is None:
+            raise CommerceError("missing_completion_evidence")
+        persisted = self.commerce.get_order(latest.order_id)
+        if persisted.status != latest.expected_status:
+            raise CommerceError("unverified_business_outcome")
+        return (
+            "verified",
+            f"{latest.tool_name}:{persisted.id}:{persisted.status}",
+        )
 
 
 class _CreateOrderToolInput(BaseModel):
@@ -71,8 +126,16 @@ def build_order_tools() -> list[FunctionTool]:
                 start_date=start_date,
                 end_date=end_date,
             )
+            context.context.record_read_success(
+                "check_availability",
+                (
+                    f"check_availability:{availability.product_id}:{availability.size}:"
+                    f"available={availability.available_quantity}"
+                ),
+            )
             return _success(availability=availability.model_dump(mode="json"))
         except CommerceError as error:
+            context.context.record_failure("check_availability", error)
             return _failure(error)
 
     @function_tool
@@ -111,8 +174,10 @@ def build_order_tools() -> list[FunctionTool]:
                 risk=validated.risk,
             )
             order = trusted.commerce.create_order(order_input)
+            trusted.record_order_success("create_order", order)
             return _success(order=order.model_dump(mode="json"))
         except (CommerceError, ValidationError, ValueError) as error:
+            context.context.record_failure("create_order", error)
             return _failure(error)
 
     @function_tool
@@ -120,8 +185,12 @@ def build_order_tools() -> list[FunctionTool]:
         """Read one SQLite order belonging to the trusted customer."""
         try:
             order = _customer_order(context.context, order_id)
+            context.context.record_read_success(
+                "view_order", f"view_order:{order.id}:{order.status}"
+            )
             return _success(order=order.model_dump(mode="json"))
         except CommerceError as error:
+            context.context.record_failure("view_order", error)
             return _failure(error)
 
     @function_tool
@@ -130,8 +199,10 @@ def build_order_tools() -> list[FunctionTool]:
         try:
             _customer_order(context.context, order_id)
             order = context.context.commerce.confirm_order(order_id)
+            context.context.record_order_success("confirm_order", order)
             return _success(order=order.model_dump(mode="json"))
         except CommerceError as error:
+            context.context.record_failure("confirm_order", error)
             return _failure(error)
 
     @function_tool
@@ -140,8 +211,10 @@ def build_order_tools() -> list[FunctionTool]:
         try:
             _customer_order(context.context, order_id)
             order = context.context.commerce.cancel_order(order_id)
+            context.context.record_order_success("cancel_order", order)
             return _success(order=order.model_dump(mode="json"))
         except CommerceError as error:
+            context.context.record_failure("cancel_order", error)
             return _failure(error)
 
     return [
@@ -170,3 +243,9 @@ def _failure(error: Exception) -> str:
     import json
 
     return json.dumps({"ok": False, "error": str(error)}, ensure_ascii=False)
+
+
+def _error_code(error: Exception) -> str:
+    if isinstance(error, ValidationError):
+        return "invalid_tool_input"
+    return str(error)

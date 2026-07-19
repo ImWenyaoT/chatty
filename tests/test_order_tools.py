@@ -99,3 +99,49 @@ async def test_order_tools_use_harness_identity_and_return_verified_sqlite_state
     )
     assert confirmed["order"]["status"] == "confirmed"
     assert store.get_order(order.id).status == "confirmed"
+
+
+@pytest.mark.asyncio
+async def test_successful_read_cannot_hide_a_failed_order_mutation(tmp_path: Path) -> None:
+    store = CommerceStore(tmp_path / "chatty.sqlite")
+    context = HarnessContext(
+        customer_id="trusted-customer",
+        session_id="trusted-session",
+        commerce=store,
+    )
+    tools = {tool.name: tool for tool in build_order_tools()}
+    create_arguments = json.dumps(
+        {
+            "idempotency_key": "too-large",
+            "product_id": "SUIT-001",
+            "size": "L",
+            "fulfillment_mode": "buyout",
+            "quantity": 3,
+            "start_date": None,
+            "end_date": None,
+            "amount_cents": 10000,
+            "channel": "Chatty",
+            "address": "上海市静安区",
+            "risk": "无",
+        }
+    )
+    created = json.loads(
+        await tools["create_order"].on_invoke_tool(
+            tool_context(context, "create_order", create_arguments),
+            create_arguments,
+        )
+    )
+    order_id = created["order"]["id"]
+    order_arguments = json.dumps({"order_id": order_id})
+
+    await tools["confirm_order"].on_invoke_tool(
+        tool_context(context, "confirm_order", order_arguments), order_arguments
+    )
+    await tools["view_order"].on_invoke_tool(
+        tool_context(context, "view_order", order_arguments), order_arguments
+    )
+
+    assert context.verify_business_outcome() == (
+        "not_completed",
+        "confirm_order:insufficient_inventory",
+    )

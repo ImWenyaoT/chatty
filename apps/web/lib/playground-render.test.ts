@@ -44,7 +44,7 @@ test("playground renders loading, success, session continuity, and errors", asyn
         reply: "第一条回复",
         session_id: "session-1",
         trace_id: "trace-1",
-        status: "completed",
+        status: "responded",
         knowledge_search_results: [
           {
             id: "policy-rental-period-1",

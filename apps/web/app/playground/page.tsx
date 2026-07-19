@@ -18,7 +18,7 @@ type RunResponse = {
   reply: string;
   session_id: string;
   trace_id: string;
-  status: string;
+  status: "completed" | "not_completed" | "responded";
   knowledge_search_results: KnowledgeResult[];
 };
 
@@ -54,7 +54,9 @@ function isRunResponse(payload: unknown): payload is RunResponse {
     typeof candidate.trace_id === "string" &&
     Array.isArray(candidate.knowledge_search_results) &&
     candidate.knowledge_search_results.every(isKnowledgeResult) &&
-    candidate.status === "completed"
+    ["completed", "not_completed", "responded"].includes(
+      String(candidate.status),
+    )
   );
 }
 

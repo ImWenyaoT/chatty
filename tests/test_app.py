@@ -115,7 +115,8 @@ def test_user_can_continue_an_agent_session_and_receive_local_trace_summary(
 
     assert first.status_code == 200
     assert first_body["reply"] == "你好，小林。"
-    assert first_body["status"] == "completed"
+    assert first_body["status"] == "responded"
+    assert first_body["business_outcome"] == "not_applicable"
     assert first_body["session_id"].startswith("session_")
     assert first_body["trace_id"].startswith("trace_")
     assert second.status_code == 200
@@ -383,13 +384,15 @@ def test_model_selected_order_tool_persists_state_read_by_fastapi(tmp_path: Path
 
     assert run.status_code == 200
     assert run.json()["reply"] == "订单已创建，等待确认。"
+    assert run.json()["business_outcome"] == "verified"
+    assert run.json()["completion_evidence"].startswith("create_order:order_")
     assert set(
         [
-        "check_availability",
-        "create_order",
-        "view_order",
-        "confirm_order",
-        "cancel_order",
+            "check_availability",
+            "create_order",
+            "view_order",
+            "confirm_order",
+            "cancel_order",
         ]
     ).issubset(model.tool_names[0])
     assert orders.status_code == 200
@@ -408,3 +411,78 @@ def test_order_detail_returns_not_found_for_unknown_order(tmp_path: Path) -> Non
 
     assert response.status_code == 404
     assert response.json() == {"detail": "order_not_found"}
+
+
+def test_failed_order_tool_cannot_be_reported_as_a_verified_business_outcome(
+    tmp_path: Path,
+) -> None:
+    arguments = json.dumps(
+        {
+            "idempotency_key": "unknown-variant",
+            "product_id": "SUIT-001",
+            "size": "XXL",
+            "fulfillment_mode": "buyout",
+            "quantity": 1,
+            "start_date": None,
+            "end_date": None,
+            "amount_cents": 10000,
+            "channel": "Chatty",
+            "address": "上海市静安区",
+            "risk": "无",
+        }
+    )
+    model = ScriptedModel(
+        [
+            ResponseFunctionToolCall(
+                arguments=arguments,
+                call_id="call-create-unknown",
+                name="create_order",
+                type="function_call",
+            ),
+            "订单已经创建成功。",
+        ]
+    )
+
+    with TestClient(create_app(database_path=tmp_path / "chatty.sqlite", model=model)) as client:
+        response = client.post(
+            "/runs",
+            json={"message": "买一件 XXL", "customer_id": "trusted-customer"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "not_completed"
+    assert response.json()["business_outcome"] == "not_completed"
+    assert response.json()["completion_evidence"] == "create_order:unknown_variant"
+    assert response.json()["reply"] == "业务操作未完成：unknown_variant"
+
+
+def test_inventory_tool_result_is_verified_business_evidence(tmp_path: Path) -> None:
+    arguments = json.dumps(
+        {
+            "product_id": "SUIT-001",
+            "size": "L",
+            "fulfillment_mode": "buyout",
+            "quantity": 1,
+            "start_date": None,
+            "end_date": None,
+        }
+    )
+    model = ScriptedModel(
+        [
+            ResponseFunctionToolCall(
+                arguments=arguments,
+                call_id="call-check-inventory",
+                name="check_availability",
+                type="function_call",
+            ),
+            "L 码有货。",
+        ]
+    )
+
+    with TestClient(create_app(database_path=tmp_path / "chatty.sqlite", model=model)) as client:
+        response = client.post("/runs", json={"message": "L 码能买吗？"})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "completed"
+    assert response.json()["business_outcome"] == "verified"
+    assert response.json()["completion_evidence"] == ("check_availability:SUIT-001:L:available=2")

@@ -22,7 +22,7 @@ from chatty.knowledge import KnowledgeRecord, KnowledgeStore
 from agents.tool import Tool
 
 from chatty.commerce import CommerceStore
-from chatty.order_tools import HarnessContext, build_order_tools
+from chatty.order_tools import BusinessOutcome, HarnessContext, build_order_tools
 
 DEFAULT_BASE_URL = "https://api.deepseek.com"
 DEFAULT_MODEL_ID = "deepseek-v4-pro"
@@ -47,6 +47,8 @@ class InvalidAgentOutputError(RuntimeError):
 class AgentRunResult:
     reply: str
     knowledge_search_results: list[KnowledgeRecord]
+    business_outcome: BusinessOutcome
+    completion_evidence: str
 
 
 def model_from_env() -> tuple[Model, str]:
@@ -105,15 +107,16 @@ async def run_agent(
         sessions_table="chatty_sessions",
         messages_table="chatty_messages",
     )
+    harness_context = HarnessContext(
+        customer_id=customer_id,
+        session_id=session_id,
+        commerce=commerce,
+    )
     try:
         result = await Runner.run(
             agent,
             message,
-            context=HarnessContext(
-                customer_id=customer_id,
-                session_id=session_id,
-                commerce=commerce,
-            ),
+            context=harness_context,
             session=session,
             run_config=RunConfig(
                 workflow_name="Chatty Agent Run",
@@ -131,7 +134,14 @@ async def run_agent(
         record.source in result.final_output for record in knowledge_search_results.values()
     ):
         raise InvalidAgentOutputError("Knowledge-backed reply omitted its source")
+    business_outcome, completion_evidence = harness_context.verify_business_outcome()
+    reply = result.final_output
+    if business_outcome == "not_completed":
+        error_code = completion_evidence.partition(":")[2] or "business_tool_failed"
+        reply = f"业务操作未完成：{error_code}"
     return AgentRunResult(
-        reply=result.final_output,
+        reply=reply,
         knowledge_search_results=list(knowledge_search_results.values()),
+        business_outcome=business_outcome,
+        completion_evidence=completion_evidence,
     )
