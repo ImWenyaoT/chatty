@@ -1,8 +1,14 @@
 import os
 from pathlib import Path
+from typing import Literal
 
+import pytest
+from agents import Agent, ModelSettings, Runner, function_tool
+from agents.exceptions import ModelBehaviorError
+from agents.tool_context import ToolContext
 from fastapi.testclient import TestClient
 
+from chatty.agent import model_from_env
 from chatty.app import create_app
 
 
@@ -10,6 +16,15 @@ def contract_client(tmp_path: Path) -> TestClient:
     if not os.getenv("OPENAI_API_KEY"):
         raise AssertionError("OPENAI_API_KEY is required for --run-deepseek")
     return TestClient(create_app(database_path=tmp_path / "contract.sqlite"))
+
+
+def assert_secret_not_exposed(tmp_path: Path, response_text: str) -> None:
+    secret = os.environ["OPENAI_API_KEY"]
+    if secret in response_text:
+        raise AssertionError("OPENAI_API_KEY was exposed in the contract response")
+    for path in tmp_path.rglob("*"):
+        if path.is_file() and secret.encode() in path.read_bytes():
+            raise AssertionError("OPENAI_API_KEY was persisted by the contract run")
 
 
 def test_real_deepseek_completes_a_no_tool_run(tmp_path: Path) -> None:
@@ -43,6 +58,7 @@ def test_real_deepseek_uses_one_knowledge_tool_with_source_and_local_trace(
     assert trace.status_code == 200
     assert "function" in trace.json()["span_types"]
     assert trace.json()["knowledge_sources"]
+    assert_secret_not_exposed(tmp_path, response.text + trace.text)
 
 
 def test_real_deepseek_can_use_consecutive_tools_for_one_verified_order(
@@ -95,3 +111,38 @@ def test_real_deepseek_missing_tool_parameters_cannot_create_an_order(
     assert response.status_code == 200
     assert orders.json() == []
     assert response.json()["business_outcome"] != "verified"
+
+
+@pytest.mark.asyncio
+async def test_real_deepseek_tool_contract_and_local_schema_reject_invalid_arguments() -> None:
+    calls: list[str] = []
+
+    @function_tool(use_docstring_info=False, failure_error_function=None)
+    def record_size(size: Literal["L"]) -> str:
+        calls.append(size)
+        return "recorded"
+
+    model, _ = model_from_env()
+    agent = Agent(
+        name="Tool parameter contract",
+        instructions="必须调用 record_size，使用客户明确提供的尺码；Tool 成功后简短回答。",
+        model=model,
+        model_settings=ModelSettings(extra_body={"thinking": {"type": "disabled"}}),
+        tools=[record_size],
+    )
+
+    await Runner.run(agent, "尺码是 L，请记录。")
+
+    assert calls == ["L"]
+    invalid_arguments = '{"size":"XXL"}'
+    with pytest.raises(ModelBehaviorError, match="literal_error"):
+        await record_size.on_invoke_tool(
+            ToolContext(
+                None,
+                tool_name="record_size",
+                tool_call_id="invalid-size-contract",
+                tool_arguments=invalid_arguments,
+            ),
+            invalid_arguments,
+        )
+    assert calls == ["L"]

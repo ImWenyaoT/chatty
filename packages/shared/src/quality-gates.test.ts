@@ -85,7 +85,7 @@ test("CI runs the full quality story in failure-localizing order", () => {
     );
 });
 
-test("coverage and manual golden evaluation stay wired", () => {
+test("coverage and current Python Agent eval stay wired", () => {
   assert.match(
     rootPackageJson.scripts["test:coverage:core"],
     /test-coverage-lines=90/,
@@ -95,8 +95,16 @@ test("coverage and manual golden evaluation stay wired", () => {
     /test-coverage-branches=84/,
   );
   assert.match(evalWorkflow, /workflow_dispatch/);
-  assert.match(evalWorkflow, /pnpm eval -- --repeat 3 --save ci-latest/);
+  assert.match(evalWorkflow, /uv sync --locked/);
+  assert.match(evalWorkflow, /uv run python -m chatty\.eval/);
+  assert.match(
+    evalWorkflow,
+    /uv run pytest -q --run-deepseek tests\/test_deepseek_contract\.py/,
+  );
   assert.match(evalWorkflow, /OPENAI_API_KEY/);
+  assert.match(evalWorkflow, /OPENAI_BASE_URL/);
+  assert.match(evalWorkflow, /MODEL_ID/);
+  assert.doesNotMatch(evalWorkflow, /CHAT_MODEL|EVALUATOR_MODEL|--repeat/);
 });
 
 test("tag delivery packages and smoke-checks a standalone SQLite-capable server", () => {

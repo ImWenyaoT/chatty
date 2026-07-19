@@ -10,4 +10,4 @@
 
 如果工作与 ADR 冲突，必须显式指出，不能静默覆盖：
 
-> _Contradicts ADR-0007 (event-sourced orders) -- but worth reopening because..._
+> _与 ADR 0007 的 single-context 边界冲突；建议重新讨论，因为……_

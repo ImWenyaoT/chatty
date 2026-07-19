@@ -1,8 +1,3 @@
-# 金标回归 eval（需要真实 LLM，故不进每次 push 的 CI）。
-# 手动触发：Actions → eval → Run workflow。
-# 需要配置 repo secrets：OPENAI_API_KEY、OPENAI_BASE_URL（OpenAI 兼容端点）、
-# 可选 CHAT_MODEL / EVALUATOR_MODEL。
-# 默认走 harness lane：知识索引由 eval runner 每场景在进程内幂等同步（FTS5），无需 ingest 步。
 name: eval
 
 on:
@@ -16,42 +11,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  golden-eval:
+  agent-eval:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
-      CHAT_MODEL: ${{ secrets.CHAT_MODEL }}
-      EVALUATOR_MODEL: ${{ secrets.EVALUATOR_MODEL }}
+      MODEL_ID: ${{ secrets.MODEL_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
+      - name: Setup uv and Python
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          node-version-file: .nvmrc
-          cache: pnpm
+          enable-cache: true
+          python-version: "3.12"
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Sync locked dependencies
+        run: uv sync --locked
 
-      # harness lane 从 dist 解析 @rental/*，需先编译 skeleton。
-      - name: Build package skeleton
-        run: pnpm build:skeleton
+      - name: Deterministic Agent eval
+        run: uv run python -m chatty.eval --output eval/results.jsonl
 
-      # harness lane 是 agentic search 上线后的唯一活路径。--repeat 3 聚合抵消
-      # LLM judge 的评分噪声。失败条件：任一场景低于通过线（run.ts 以非零码退出）。
-      - name: Golden regression (harness lane)
-        run: pnpm eval -- --repeat 3 --save ci-latest
+      - name: Real DeepSeek contract eval
+        run: uv run pytest -q --run-deepseek tests/test_deepseek_contract.py
 
-      - name: Upload report
+      - name: Upload deterministic results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: eval-report
-          path: eval/reports/ci-latest.json
+          name: eval-results
+          path: eval/results.jsonl
