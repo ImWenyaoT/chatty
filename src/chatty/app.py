@@ -1,65 +1,30 @@
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Any, cast
+from typing import Annotated, Any
 from uuid import uuid4
 
-from agents import Model, SQLiteSession
-from agents.tracing import gen_trace_id, set_trace_processors
+from agents import Model
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from chatty.agent import (
-    HandoffIdempotencyConflictError,
-    HandoffPersistenceError,
-    MissingApiKeyError,
-    model_from_env,
-    run_agent,
-)
 from chatty.commerce import CommerceError, CommerceStore, Order
-from chatty.knowledge import KnowledgeRecord, KnowledgeStore
+from chatty.run import ChattyRunModule, CompletedRun, RunFailure, RunInput
 from chatty.store import (
+    CustomerMemory,
     MemoryStore,
-    SessionCustomerMismatchError,
-    SessionNotFoundError,
+    SupportRequest,
     SupportRequestStore,
+    TraceSpanSummary,
     TraceStore,
     TraceSummary,
 )
-from chatty.tracing import SQLiteTracingProcessor
 
 
 class RunRequest(BaseModel):
     message: str = Field(min_length=1, max_length=20_000)
     session_id: str | None = Field(default=None, min_length=1, max_length=200)
-
-
-class MemoryResponse(BaseModel):
-    memory_id: str
-    customer_id: str
-    fact: str
-    source_id: str
-    created_at: str
-
-
-class MemoryEventResponse(BaseModel):
-    tool: str
-    memories: list[MemoryResponse]
-
-
-class RunResponse(BaseModel):
-    reply: str
-    customer_id: str
-    session_id: str
-    trace_id: str
-    status: str
-    request_id: str
-    business_outcome: str
-    completion_evidence: str | None
-    knowledge_search_results: list[KnowledgeRecord]
-    memory_events: list[MemoryEventResponse]
-    needs_human: bool
-    support_request_id: str | None = None
 
 
 class SessionMessagesResponse(BaseModel):
@@ -70,51 +35,13 @@ class SessionMessagesResponse(BaseModel):
 class MemorySearchResponse(BaseModel):
     customer_id: str
     query: str
-    memories: list[MemoryResponse]
+    memories: list[CustomerMemory]
 
 
-class SupportRequestResponse(BaseModel):
-    id: str
-    customer_id: str
-    session_id: str
-    reason: str
-    context: str
-    model_context: str
-    prior_actions: tuple[str, ...]
-    status: str
-    created_at: str
-    updated_at: str
-
-
-class TraceResponse(BaseModel):
-    trace_id: str
-    session_id: str
-    status: str
-    summary: str
-    model_id: str
+@dataclass(frozen=True)
+class TraceResponse(TraceSummary):
     span_types: list[str]
-    created_at: str
-    updated_at: str
-    duration_ms: int
-    business_outcome: str | None
-    completion_evidence: str | None
-    knowledge_sources: list[str]
-    memory_sources: list[str]
-    support_request_id: str | None
-    spans: list["TraceSpanResponse"] = Field(default_factory=list)
-
-
-class TraceSpanResponse(BaseModel):
-    span_id: str
-    trace_id: str
-    parent_id: str | None
-    span_type: str
-    status: str
-    summary: str
-    started_at: str | None
-    ended_at: str | None
-    duration_ms: int | None
-    error: str | None
+    spans: list[TraceSpanSummary] = field(default_factory=list)
 
 
 class TraceDashboardResponse(BaseModel):
@@ -126,25 +53,9 @@ def trace_response(
     trace: TraceSummary, trace_store: TraceStore, *, include_spans: bool = False
 ) -> TraceResponse:
     return TraceResponse(
-        trace_id=trace.trace_id,
-        session_id=trace.session_id,
-        status=trace.status,
-        summary=trace.summary,
-        model_id=trace.model_id,
+        **trace.__dict__,
         span_types=trace_store.span_types(trace.trace_id),
-        created_at=trace.created_at,
-        updated_at=trace.updated_at,
-        duration_ms=trace.duration_ms,
-        business_outcome=trace.business_outcome,
-        completion_evidence=trace.completion_evidence,
-        knowledge_sources=list(trace.knowledge_sources),
-        memory_sources=list(trace.memory_sources),
-        support_request_id=trace.support_request_id,
-        spans=(
-            [TraceSpanResponse(**span.__dict__) for span in trace_store.spans(trace.trace_id)]
-            if include_spans
-            else []
-        ),
+        spans=trace_store.spans(trace.trace_id) if include_spans else [],
     )
 
 
@@ -172,126 +83,51 @@ def create_app(
         allow_methods=["GET", "POST"],
         allow_headers=["content-type"],
     )
+    runs = ChattyRunModule(
+        database_path=database_path,
+        model=model,
+        model_id=model_id,
+        knowledge_path=knowledge_path,
+    )
     trace_store = TraceStore(database_path)
     memory_store = MemoryStore(database_path)
     support_store = SupportRequestStore(database_path)
-    knowledge_store = KnowledgeStore(database_path)
-    active_knowledge_path = (
-        Path(knowledge_path)
-        if knowledge_path is not None
-        else Path(__file__).parents[2] / "knowledge" / "records.jsonl"
-    )
-    knowledge_store.import_jsonl(active_knowledge_path)
     commerce = CommerceStore(database_path)
-    set_trace_processors([SQLiteTracingProcessor(trace_store)])
-    configured_model = (model, model_id or "injected-model") if model is not None else None
 
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    @app.post("/runs", response_model=RunResponse)
+    @app.post("/runs", response_model=CompletedRun)
     async def create_run(
         request: RunRequest,
         customer_id: Annotated[str, Depends(customer_identity)],
         request_id: Annotated[str, Depends(request_identity)],
-    ) -> RunResponse:
-        nonlocal configured_model
-        session_id = request.session_id or f"session_{uuid4().hex}"
-        if request.session_id is not None:
-            try:
-                memory_store.require_session(session_id=session_id, customer_id=customer_id)
-            except SessionNotFoundError as error:
-                raise HTTPException(status_code=409, detail="session_not_found") from error
-            except SessionCustomerMismatchError as error:
-                raise HTTPException(status_code=409, detail="session_customer_mismatch") from error
-        trace_id = gen_trace_id()
+    ) -> CompletedRun:
         try:
-            if configured_model is None:
-                configured_model = model_from_env()
-            active_model, active_model_id = configured_model
-        except MissingApiKeyError as error:
-            raise HTTPException(status_code=503, detail="llm_not_configured") from error
-
-        try:
-            result = await run_agent(
-                message=request.message,
-                session_id=session_id,
-                database_path=database_path,
-                model=active_model,
-                model_id=active_model_id,
-                trace_id=trace_id,
-                request_id=request_id,
-                knowledge_store=knowledge_store,
-                customer_id=customer_id,
-                commerce=commerce,
-                support_store=support_store,
-                trace_store=trace_store,
-            )
-        except SessionCustomerMismatchError as error:
-            raise HTTPException(status_code=409, detail="session_customer_mismatch") from error
-        except HandoffIdempotencyConflictError as error:
-            trace_store.record_error(trace_id, code="handoff_idempotency_conflict")
-            trace_store.fail(trace_id)
-            raise HTTPException(
-                status_code=409,
-                detail="handoff_idempotency_conflict",
-                headers={"X-Trace-ID": trace_id},
-            ) from error
-        except HandoffPersistenceError as error:
-            trace_store.record_error(trace_id, code="handoff_persistence_failed")
-            trace_store.fail(trace_id)
-            raise HTTPException(
-                status_code=500,
-                detail="handoff_persistence_failed",
-                headers={"X-Trace-ID": trace_id},
-            ) from error
-        except Exception as error:
-            trace_store.record_error(trace_id, code="llm_provider_failed")
-            trace_store.fail(trace_id)
-            raise HTTPException(
-                status_code=502,
-                detail="llm_provider_failed",
-                headers={"X-Trace-ID": trace_id},
-            ) from error
-        trace_store.record_outcome(
-            trace_id,
-            business_outcome=result.business_outcome,
-            completion_evidence=result.completion_evidence,
-            knowledge_sources=[item.source for item in result.knowledge_search_results],
-            memory_sources=[
-                memory.source_id for event in result.memory_events for memory in event.memories
-            ],
-            support_request_id=result.support_request_id,
-        )
-        return RunResponse(
-            reply=result.reply,
-            customer_id=customer_id,
-            session_id=session_id,
-            trace_id=trace_id,
-            request_id=request_id,
-            status=(
-                "needs_human"
-                if result.support_request_id is not None
-                else {
-                    "verified": "completed",
-                    "not_completed": "not_completed",
-                    "not_applicable": "responded",
-                }[result.business_outcome]
-            ),
-            business_outcome=result.business_outcome,
-            completion_evidence=result.completion_evidence,
-            knowledge_search_results=result.knowledge_search_results,
-            memory_events=[
-                MemoryEventResponse(
-                    tool=event.tool,
-                    memories=[MemoryResponse(**memory.__dict__) for memory in event.memories],
+            result = await runs.run(
+                RunInput(
+                    message=request.message,
+                    customer_id=customer_id,
+                    request_id=request_id,
+                    session_id=request.session_id,
                 )
-                for event in result.memory_events
-            ],
-            needs_human=result.support_request_id is not None,
-            support_request_id=result.support_request_id,
-        )
+            )
+        except RunFailure as error:
+            status_code = {
+                "session_not_found": 409,
+                "session_customer_mismatch": 409,
+                "llm_not_configured": 503,
+                "handoff_idempotency_conflict": 409,
+                "handoff_persistence_failed": 500,
+                "llm_provider_failed": 502,
+            }[error.code]
+            raise HTTPException(
+                status_code=status_code,
+                detail=error.code,
+                headers={"X-Trace-ID": error.trace_id} if error.trace_id else None,
+            ) from error
+        return result
 
     @app.get(
         "/sessions/{session_id}/messages",
@@ -302,33 +138,25 @@ def create_app(
         customer_id: Annotated[str, Depends(customer_identity)],
     ) -> SessionMessagesResponse:
         try:
-            memory_store.require_session(session_id=session_id, customer_id=customer_id)
-        except SessionNotFoundError as error:
-            raise HTTPException(status_code=404, detail="session_not_found") from error
-        except SessionCustomerMismatchError as error:
-            raise HTTPException(status_code=409, detail="session_customer_mismatch") from error
-        session = SQLiteSession(
-            session_id,
-            db_path=database_path,
-            sessions_table="chatty_sessions",
-            messages_table="chatty_messages",
-        )
-        try:
-            messages = cast(list[dict[str, Any]], await session.get_items())
-        finally:
-            session.close()
+            messages = await runs.session_messages(session_id=session_id, customer_id=customer_id)
+        except RunFailure as error:
+            status_code = {
+                "session_not_found": 404,
+                "session_customer_mismatch": 409,
+            }[error.code]
+            raise HTTPException(status_code=status_code, detail=error.code) from error
         return SessionMessagesResponse(session_id=session_id, messages=messages)
 
-    @app.get("/support-requests", response_model=list[SupportRequestResponse])
-    async def list_support_requests() -> list[SupportRequestResponse]:
-        return [SupportRequestResponse(**item.__dict__) for item in support_store.list_all()]
+    @app.get("/support-requests", response_model=list[SupportRequest])
+    async def list_support_requests() -> list[SupportRequest]:
+        return support_store.list_all()
 
-    @app.get("/support-requests/{support_request_id}", response_model=SupportRequestResponse)
-    async def get_support_request(support_request_id: str) -> SupportRequestResponse:
+    @app.get("/support-requests/{support_request_id}", response_model=SupportRequest)
+    async def get_support_request(support_request_id: str) -> SupportRequest:
         request = support_store.get(support_request_id)
         if request is None:
             raise HTTPException(status_code=404, detail="support_request_not_found")
-        return SupportRequestResponse(**request.__dict__)
+        return request
 
     @app.get(
         "/memories",
@@ -345,7 +173,7 @@ def create_app(
         return MemorySearchResponse(
             customer_id=customer_id,
             query=query,
-            memories=[MemoryResponse(**memory.__dict__) for memory in memories],
+            memories=memories,
         )
 
     @app.get("/traces", response_model=TraceDashboardResponse)
@@ -367,11 +195,11 @@ def create_app(
             raise HTTPException(status_code=404, detail="trace_not_found")
         return trace_response(trace, trace_store, include_spans=True)
 
-    @app.get("/traces/{trace_id}/spans", response_model=list[TraceSpanResponse])
-    async def get_trace_spans(trace_id: str) -> list[TraceSpanResponse]:
+    @app.get("/traces/{trace_id}/spans", response_model=list[TraceSpanSummary])
+    async def get_trace_spans(trace_id: str) -> list[TraceSpanSummary]:
         if trace_store.get(trace_id) is None:
             raise HTTPException(status_code=404, detail="trace_not_found")
-        return [TraceSpanResponse(**span.__dict__) for span in trace_store.spans(trace_id)]
+        return trace_store.spans(trace_id)
 
     @app.get("/orders", response_model=list[Order])
     async def list_orders() -> list[Order]:

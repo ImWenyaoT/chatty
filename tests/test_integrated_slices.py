@@ -2,6 +2,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
+import pytest
 from agents import Model, ModelResponse, ModelSettings, ModelTracing, Usage
 from agents.agent_output import AgentOutputSchemaBase
 from agents.handoffs import Handoff
@@ -11,6 +12,8 @@ from fastapi.testclient import TestClient
 from openai.types.responses import ResponseOutputMessage, ResponseOutputText
 
 from chatty.app import create_app
+from chatty.run import ChattyRunModule, RunInput
+from chatty.store import TraceStore
 
 
 class ToolRecordingModel(Model):
@@ -63,6 +66,45 @@ class ToolRecordingModel(Model):
         prompt: Any,
     ) -> AsyncIterator[TResponseStreamEvent]:
         raise NotImplementedError
+
+
+@pytest.mark.asyncio
+async def test_run_module_returns_the_completed_run_and_persists_its_trace(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "chatty.sqlite"
+    runs = ChattyRunModule(
+        database_path=database_path,
+        model=ToolRecordingModel(),
+        model_id="run-module-test-model",
+    )
+
+    result = await runs.run(
+        RunInput(
+            message="你好",
+            customer_id="trusted-customer",
+            request_id="trusted-request",
+        )
+    )
+    trace = TraceStore(database_path).get(result.trace_id)
+
+    assert result.customer_id == "trusted-customer"
+    assert result.request_id == "trusted-request"
+    assert result.status == "responded"
+    assert result.business_outcome == "not_applicable"
+    assert result.session_id.startswith("session_")
+    assert trace is not None
+    assert trace.status == "completed"
+    assert trace.model_id == "run-module-test-model"
+    assert trace.business_outcome == "not_applicable"
+
+
+def test_run_response_keeps_optional_support_receipt_in_openapi(tmp_path: Path) -> None:
+    app = create_app(database_path=tmp_path / "chatty.sqlite", model=ToolRecordingModel())
+
+    schema = app.openapi()["components"]["schemas"]["CompletedRun"]
+
+    assert "support_request_id" not in schema["required"]
 
 
 def test_one_agent_exposes_every_customer_service_tool_and_consistent_run_status(

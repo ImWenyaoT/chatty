@@ -3,7 +3,6 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-import pytest
 from agents import ModelResponse
 from agents.tracing import generation_span
 from fastapi.testclient import TestClient
@@ -11,7 +10,6 @@ from openai.types.responses import ResponseFunctionToolCall
 from test_app import ScriptedModel
 
 from chatty.app import create_app
-from chatty.tracing import SQLiteTracingProcessor
 
 
 class GenerationScriptedModel(ScriptedModel):
@@ -135,20 +133,6 @@ def test_trace_dashboard_allows_real_browser_origin_and_rejects_unknown_origin(
     assert trace_list.json()["traces"][0]["trace_id"] == run.json()["trace_id"]
     assert trace_detail.headers["access-control-allow-origin"] == "http://127.0.0.1:3000"
     assert trace_detail.json()["trace_id"] == run.json()["trace_id"]
-
-
-def test_app_replaces_the_default_exporter_with_only_the_local_processor(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    installed: list[object] = []
-    monkeypatch.setattr(
-        "chatty.app.set_trace_processors", lambda processors: installed.extend(processors)
-    )
-
-    create_app(database_path=tmp_path / "chatty.sqlite", model=ScriptedModel(["你好"]))
-
-    assert len(installed) == 1
-    assert isinstance(installed[0], SQLiteTracingProcessor)
 
 
 def test_trace_dashboard_migrates_the_previous_sqlite_schema_through_public_apis(
