@@ -1,6 +1,10 @@
 # Context Map
 
-Chatty is a pnpm monorepo. Its ubiquitous language spans several bounded contexts — one per package/app, plus the evaluation and retrieval surfaces. This map is the entry point the engineering skills read first: it carries the cross-cutting vocabulary and points at the per-context `CONTEXT.md` files.
+Chatty is a Python Agent backend with a thin Next.js frontend, developed in a pnpm monorepo during a staged migration. Its ubiquitous language spans several bounded contexts — one per package/app, plus the evaluation and retrieval surfaces. This map is the entry point the engineering skills read first: it carries the cross-cutting vocabulary and points at the per-context `CONTEXT.md` files.
+
+## Migration status
+
+The root `src/chatty` application is the current Agent runtime: FastAPI owns the HTTP boundary, OpenAI Agents SDK owns the generic loop, and the Chatty Harness owns session and safe local trace boundaries. The existing `packages/*` implementation remains as migration evidence and test coverage until later tickets move or retire each capability. Issue #35 does not migrate tools, knowledge, orders, long-term Memory, human support, or the full dashboard.
 
 ## Shared vocabulary
 
@@ -32,8 +36,9 @@ Cross-cutting terms that span every context (read these for any concept not spec
 
 | Context | Location | Owns | `CONTEXT.md` |
 | --- | --- | --- | --- |
-| Harness runtime | `packages/agent-core` (`@rental/agent-core`) | Bounded tool space, Model-directed task scheduling, execution policy, completion verification | [`CONTEXT.md`](packages/agent-core/CONTEXT.md) |
-| Model plumbing | `packages/llm` (`@rental/llm`) | DeepSeek integration, Agents SDK adapter boundary, Chat Completions fallback | lazy |
+| Current Agent runtime | `src/chatty` | FastAPI request boundary, Agents SDK loop adapter, SQLite session, safe local trace summary | lazy |
+| Legacy Harness runtime | `packages/agent-core` (`@rental/agent-core`) | Migration source for bounded tools, execution policy, and completion verification; not the current loop | [`CONTEXT.md`](packages/agent-core/CONTEXT.md) |
+| Legacy model plumbing | `packages/llm` (`@rental/llm`) | Migration source for prior DeepSeek integration and model contracts | lazy |
 | Harness store | `packages/db` (`@rental/db`) | SQLite persistence: sessions, Transaction Context, Long-term Customer Memory, traces, FTS5 Knowledge Base index | [`CONTEXT.md`](packages/db/CONTEXT.md) |
 | Shared contracts | `packages/shared` (`@rental/shared`) | Browser-safe API contracts and shared types | lazy |
 | Seller workspace | `apps/web` (`@chatty/web`) | Web demo surfaces, Frontend Experience Contract | lazy |

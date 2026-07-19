@@ -6,7 +6,9 @@
 
 ---
 
-面向租赁电商客服场景的 **[agent][] [harness][]** · TypeScript / Node.js · DeepSeek 驱动。围绕一个问题——*一轮客服如何算完成、算做对*——把 Model 驱动的任务选择、[context][]、知识检索、tool use、风险审批与人工接管设计成可评测、可复盘的闭环。[model][] 固定为 `deepseek-v4-pro`，[harness][] 才是可演进的部分。
+面向租赁电商客服场景的 **[agent][] [harness][]** · Python / FastAPI + 薄 Next.js · DeepSeek 驱动。项目最高层公理是 **Agent = Model + Harness**：OpenAI Agents SDK 负责 Agent Loop，Chatty Harness 负责 Context、Tools、执行边界与完成验证。[model][] 默认是 `deepseek-v4-pro`。
+
+当前迁移纵切先证明 `playground → FastAPI → Runner.run → SQLiteSession` 的最小路径；订单、知识、Memory 和人工支持仍由后续 ticket 迁移，不在这个纵切中提前实现。
 
 - **任务终点 + 回归评测** — 从客服高频任务定义终点(回复 · 查知识 · 查库存 · 转人工 · 跟进);golden 场景 + LLM judge 做回归,把偏题回复、工具漏调、动作误判沉淀为固定测试集。
 - **Agentic 检索,不做 RAG** — 政策/费用/租期/售后等事实走 `search_knowledge` [tool call][] over SQLite FTS5:top-3 命中、有界 tool loop、query 去重、证据回填 [context][] 做核验——无 RAG pipeline、无 vector database。
@@ -17,54 +19,60 @@
 ## 快速开始
 
 ```bash
+cp .env.example .env
+uv sync --locked
+uv run --env-file .env python main.py  # FastAPI：http://127.0.0.1:8000
+
+# 另一个终端
 pnpm install --frozen-lockfile
-pnpm dev      # Next.js playground（apps/web）
-pnpm test     # 全 workspace 单测
-pnpm smoke    # 核心数据链路冒烟，无网络
-pnpm eval     # 金标回归（需真实 DeepSeek key）
+pnpm dev                            # playground：http://127.0.0.1:3000
 ```
 
-运行 playground 前配置 `OPENAI_API_KEY`(DeepSeek 的 OpenAI-format key),否则消息接口返回 503。状态默认持久化到 `data/chatty.sqlite`;改路径设 `CHATTY_DB_PATH`。
+运行配置只有 `OPENAI_API_KEY`、`OPENAI_BASE_URL` 和 `MODEL_ID`。示例默认使用 DeepSeek OpenAI-compatible Chat Completions、`deepseek-v4-pro`、关闭 thinking 且不启用 streaming；缺少 key 时 Run API 明确返回 503。Session 与本地 trace 摘要保存在 `data/chatty.sqlite`。
+
+```bash
+UV_CACHE_DIR=.cache/uv uv run ruff format --check .
+UV_CACHE_DIR=.cache/uv uv run ruff check .
+UV_CACHE_DIR=.cache/uv uv run ty check
+UV_CACHE_DIR=.cache/uv uv run pytest -q
+
+# 有现成凭据时才运行真实 DeepSeek no-Tool contract
+UV_CACHE_DIR=.cache/uv uv run pytest -q --run-deepseek tests/test_deepseek_contract.py
+```
 
 ## Monorepo
 
-`apps/web` 只做展示与 HTTP 适配,价值在 `agent-core` 这层 [harness][];[model][] 与持久化都是可替换的依赖。
+根 Python 应用是新的 Agent 运行入口；`apps/web` 的 playground 只调用 FastAPI 并展示 messages、loading、error、`session_id` 与 `trace_id`。旧 TypeScript 后端仍暂存于仓库，待父 spec 的后续收缩 ticket 在可见行为被覆盖后删除。
 
 ```mermaid
 flowchart TD
-  web["apps/web · Next.js<br/>playground + dashboard + /api"]
-  core["packages/agent-core · Harness<br/>有界工具 · context · completion verifier · run policy · agentic 检索"]
-  llm["packages/llm<br/>DeepSeek ⇄ OpenAI Agents SDK · usage 遥测"]
-  db[("packages/db · SQLite<br/>商品/订单 · Durable Task · Trace · Memory · FTS5")]
-  shared["packages/shared · 契约 / schema / 浏览器安全类型"]
-  worker["scripts/worker · 后台作业<br/>到期跟进 · 记忆抽取/固化"]
-  eval["eval/ · 金标回归 + LLM judge"]
+  web["apps/web · 薄 Next.js playground"]
+  api["src/chatty · FastAPI Harness"]
+  sdk["OpenAI Agents SDK · Runner.run"]
+  db[("SQLiteSession + local trace summary")]
   deepseek(("DeepSeek API"))
+  legacy["旧 packages / worker / Next API<br/>等待后续迁移 ticket 收缩"]
 
-  web --> core
-  core --> llm --> deepseek
-  core --> db
-  worker --> core
-  worker --> db
-  eval --> core
-  web -. 契约 .-> shared
-  core -. 契约 .-> shared
+  web -->|POST /runs| api
+  api --> sdk --> deepseek
+  api --> db
+  legacy -. 不再服务 playground .-> web
 ```
 
 | 路径 | 作用 |
 | --- | --- |
-| [`packages/agent-core`](packages/agent-core) | harness 核心：有界工具、[context][]、run policy、tool execution、completion verification |
-| [`packages/llm`](packages/llm) | DeepSeek 的 Agents SDK 适配 + usage 遥测([cache tokens][]、成本) |
-| [`packages/db`](packages/db) | SQLite:[session][] / trace / [memory][memory system] / knowledge(FTS5) |
-| [`packages/shared`](packages/shared) | 跨包类型、schema 与浏览器安全契约 |
-| [`apps/web`](apps/web) | Next.js playground + dashboard |
-| [`eval/`](eval) | 金标回归 + LLM judge |
+| [`src/chatty`](src/chatty) | FastAPI、Agent 配置、SDK Run 与本地 trace 摘要 |
+| [`tests`](tests) | FastAPI + disposable SQLite + 可控 SDK Model 的高层 seam |
+| [`apps/web`](apps/web) | 调用 FastAPI 的薄 playground；其他保留页暂未迁移 |
+| `packages/*`、`scripts/worker.mts` | 旧 TypeScript 后端，等待后续 ticket 删除 |
 
 ## 质量门禁
 
-`test` / `test:fullstack` / `test:coverage` / `test:coverage:core` / `smoke` / `typecheck` / `lint` 在每个 PR 与 `main` 上由 [CI](.github/workflows/ci.yml) 跑;full-stack 门覆盖真实 Next API、SQLite 与 worker 的联调。真实 LLM 的金标回归是手动 workflow([`eval.yml`](.github/workflows/eval.yml))。`v*` tag 会构建 standalone server、以持久 SQLite 路径做 `/api/health` 冒烟,并发布可运行的 [release](.github/workflows/release.yml)。命令以根 [`package.json`](package.json) 为真相源。
+Python 门禁是 locked sync、Ruff、ty、pytest 与真实 FastAPI 进程 smoke；web 门禁是 frozen pnpm install、测试、typecheck 和 production build。旧 TypeScript 全套门禁在收缩 ticket 完成前仍继续运行。
 
 ## 核心能力
+
+以下是父 spec 的目标能力；当前纵切只实现无 Tool 的 Agent Run、Session continuity 与最小 local trace。
 
 一条消息 = 一个有界 [turn][]。Model 读取 [context][] 并选择下一步工具；[harness][] 不预先替 Model 做意图分类，只掌控可见工具、可信身份、权限、执行、预算与完成验证。
 

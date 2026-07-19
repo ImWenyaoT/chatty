@@ -59,26 +59,31 @@ test("frontend shell exposes keyboard and screen-reader navigation affordances",
   assert.match(playgroundSource, /id="main-content"/);
   assert.match(playgroundSource, /role="status"/);
   assert.match(playgroundSource, /role="log"/);
-  assert.match(playgroundSource, /aria-busy=\{sending \|\| historyLoading\}/);
+  assert.match(playgroundSource, /aria-busy=\{sending\}/);
 });
 
 test("playground controls expose state beyond color alone", () => {
   assert.match(playgroundSource, /aria-label="发送客户消息"/);
   assert.match(playgroundSource, /aria-label="客户消息"/);
   assert.match(playgroundSource, /<h1>客服会话<\/h1>/);
-  assert.match(playgroundSource, /className="support-layout"/);
+  assert.match(
+    playgroundSource,
+    /className="support-layout support-layout-thin"/,
+  );
   assert.match(playgroundSource, /className="support-composer-box"/);
-  assert.match(playgroundSource, /aria-label="添加客户图片"/);
   assert.match(playgroundSource, /aria-label="发送"/);
-  assert.doesNotMatch(playgroundSource, /客户详情/);
-  assert.doesNotMatch(playgroundSource, /清空/);
 });
 
-test("switching conversations restores the persisted transcript", () => {
-  assert.match(playgroundSource, /isPlaygroundHistoryResponse/);
-  assert.match(playgroundSource, /\/api\/playground\?conversationId=/);
-  assert.doesNotMatch(playgroundSource, /setTurns\(\[\]\)/);
-  assert.match(playgroundSource, /turn\.status \? `状态：/);
+test("playground is a thin FastAPI client with session continuity", () => {
+  assert.match(playgroundSource, /API_BASE_URL = "http:\/\/127\.0\.0\.1:8000"/);
+  assert.match(playgroundSource, /`\$\{API_BASE_URL\}\/runs`/);
+  assert.match(playgroundSource, /session_id: sessionId/);
+  assert.match(playgroundSource, /setSessionId\(payload\.session_id\)/);
+  assert.match(playgroundSource, /setTraceId\(payload\.trace_id\)/);
+  assert.match(playgroundSource, /role="alert"/);
+  assert.doesNotMatch(playgroundSource, /@rental\//);
+  assert.doesNotMatch(playgroundSource, /\/api\/playground/);
+  assert.doesNotMatch(playgroundSource, /controlPlane/);
 });
 
 test("frontend CSS keeps focus visible and mobile touch targets large enough", () => {
@@ -138,9 +143,7 @@ test("customer service workspace keeps product language with technical observabi
     "客服会话",
   );
   assert.match(playgroundSource, /<h1>客服会话<\/h1>/);
-  assert.match(playgroundSource, /<h2>订单信息<\/h2>/);
   assert.match(playgroundSource, /className="support-composer-box"/);
-  assert.match(playgroundSource, /className="support-attachment-details"/);
   assert.match(playgroundSource, /className="support-send-button"/);
   assert.match(playgroundSource, /运行详情/);
   assert.doesNotMatch(playgroundSource, /className="legacy-inspector"/);
@@ -157,14 +160,6 @@ test("customer service workspace keeps product language with technical observabi
 });
 
 test("control-plane surfaces render durable status and explicit unknown or empty evidence", () => {
-  assert.match(
-    playgroundSource,
-    /controlPlane\?\.workflow\.displayState \?\? ["']尚未运行["']/,
-  );
-  assert.match(playgroundSource, /<dt>排队<\/dt>/);
-  assert.match(playgroundSource, /<dt>最近心跳<\/dt>/);
-  assert.match(playgroundSource, /完成一次会话后可查看运行记录/);
-  assert.match(playgroundSource, /控制面状态读取失败/);
   assert.match(dashboardSource, /job\.events/);
   assert.match(dashboardSource, /暂无事件证据/);
   assert.match(dashboardSource, /未知（无 attempt）/);

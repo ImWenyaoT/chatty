@@ -278,6 +278,10 @@
   background: #fff;
 }
 
+.support-layout-thin {
+  grid-template-columns: minmax(0, 1fr) 320px;
+}
+
 .support-inbox,
 .support-context {
   min-width: 0;

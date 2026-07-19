@@ -90,55 +90,43 @@ test("Search Execution, memory, and indexed knowledge remain concrete modules", 
   }
 });
 
-test("the runnable MVP keeps the required TypeScript harness stack", () => {
+test("the runnable MVP exposes the required Python Agents SDK vertical slice", () => {
   const root = JSON.parse(
     readFileSync(resolve(repoRoot, "package.json"), "utf8"),
   ) as {
     packageManager: string;
-    devDependencies: Record<string, string>;
   };
-  const llm = JSON.parse(
-    readFileSync(resolve(repoRoot, "packages/llm/package.json"), "utf8"),
-  ) as { dependencies: Record<string, string> };
-  const db = JSON.parse(
-    readFileSync(resolve(repoRoot, "packages/db/package.json"), "utf8"),
-  ) as { dependencies: Record<string, string> };
-  const web = JSON.parse(
-    readFileSync(resolve(repoRoot, "apps/web/package.json"), "utf8"),
-  ) as {
-    dependencies: Record<string, string>;
-    devDependencies: Record<string, string>;
-    scripts: Record<string, string>;
-  };
-  const nextConfig = readFileSync(
-    resolve(repoRoot, "apps/web/next.config.ts"),
+  const pyproject = readFileSync(resolve(repoRoot, "pyproject.toml"), "utf8");
+  const agent = readFileSync(resolve(repoRoot, "src/chatty/agent.py"), "utf8");
+  const app = readFileSync(resolve(repoRoot, "src/chatty/app.py"), "utf8");
+  const playground = readFileSync(
+    resolve(repoRoot, "apps/web/app/playground/page.tsx"),
     "utf8",
   );
-  const modelAdapter = readFileSync(
-    resolve(repoRoot, "packages/llm/src/agents-sdk-adapter.ts"),
-    "utf8",
-  );
-  const directEval = readFileSync(resolve(repoRoot, "eval/judge.ts"), "utf8");
 
   assert.match(root.packageManager, /^pnpm@/);
-  for (const dependency of ["typescript", "eslint", "prettier"]) {
-    assert.ok(root.devDependencies[dependency]);
-  }
-  assert.match(
-    root.devDependencies["@typescript/native"],
-    /^npm:typescript@\^7\./,
+  for (const dependency of [
+    "fastapi",
+    "openai-agents==0.17.8",
+    "openai>=2.44,<2.45",
+    "pydantic",
+    "pytest",
+    "ruff",
+    "ty",
+  ])
+    assert.match(pyproject, new RegExp(dependency.replace(/[.>=<]/g, "\\$&")));
+  assert.match(agent, /OpenAIChatCompletionsModel/);
+  assert.match(agent, /await Runner\.run\(/);
+  assert.match(agent, /SQLiteSession\(/);
+  assert.match(agent, /"thinking": \{"type": "disabled"\}/);
+  assert.deepEqual(
+    [...agent.matchAll(/os\.getenv\("([A-Z0-9_]+)"/g)].map((match) => match[1]),
+    ["OPENAI_API_KEY", "MODEL_ID", "OPENAI_BASE_URL"],
   );
-  assert.match(
-    root.devDependencies.typescript,
-    /^npm:@typescript\/typescript6@\^6\./,
-  );
-  assert.ok(llm.dependencies["@openai/agents"]);
-  assert.ok(llm.dependencies.openai);
-  assert.ok(db.dependencies["better-sqlite3"]);
-  assert.ok(web.dependencies.next);
-  assert.equal(web.devDependencies.typescript, undefined);
-  assert.match(web.scripts.build, /^pnpm typecheck && /);
-  assert.match(nextConfig, /ignoreBuildErrors:\s*true/);
-  assert.match(modelAdapter, /OpenAIChatCompletionsModel/);
-  assert.match(directEval, /chat\.completions\.create/);
+  assert.match(app, /@app\.post\("\/runs"/);
+  assert.match(app, /async def create_run/);
+  assert.match(app, /reply = await run_agent\(/);
+  assert.doesNotMatch(app, /worker|queue|background/i);
+  assert.match(playground, /fetch\(`\$\{API_BASE_URL\}\/runs`/);
+  assert.doesNotMatch(playground, /@rental\//);
 });
