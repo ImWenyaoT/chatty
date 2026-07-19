@@ -1,9 +1,11 @@
+from collections.abc import Callable
 from pathlib import Path
+from typing import Annotated
 from uuid import uuid4
 
 from agents import Model
 from agents.tracing import gen_trace_id, set_trace_processors
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -17,7 +19,6 @@ from chatty.tracing import SQLiteTracingProcessor
 class RunRequest(BaseModel):
     message: str = Field(min_length=1, max_length=20_000)
     session_id: str | None = Field(default=None, min_length=1, max_length=200)
-    customer_id: str = Field(default="demo-customer", min_length=1, max_length=200)
 
 
 class MemoryResponse(BaseModel):
@@ -35,6 +36,7 @@ class MemoryEventResponse(BaseModel):
 
 class RunResponse(BaseModel):
     reply: str
+    customer_id: str
     session_id: str
     trace_id: str
     status: str
@@ -59,12 +61,17 @@ class TraceResponse(BaseModel):
     span_types: list[str]
 
 
+def demo_customer_identity() -> str:
+    return "demo-customer"
+
+
 def create_app(
     *,
     database_path: str | Path,
     model: Model | None = None,
     model_id: str | None = None,
     knowledge_path: str | Path | None = None,
+    customer_identity: Callable[[], str] = demo_customer_identity,
 ) -> FastAPI:
     app = FastAPI(title="Chatty Agent", version="0.1.0")
     app.add_middleware(
@@ -91,7 +98,10 @@ def create_app(
         return {"status": "ok"}
 
     @app.post("/runs", response_model=RunResponse)
-    async def create_run(request: RunRequest) -> RunResponse:
+    async def create_run(
+        request: RunRequest,
+        customer_id: Annotated[str, Depends(customer_identity)],
+    ) -> RunResponse:
         nonlocal configured_model
         session_id = request.session_id or f"session_{uuid4().hex}"
         trace_id = gen_trace_id()
@@ -111,7 +121,7 @@ def create_app(
                 model_id=active_model_id,
                 trace_id=trace_id,
                 knowledge_store=knowledge_store,
-                customer_id=request.customer_id,
+                customer_id=customer_id,
                 commerce=commerce,
             )
         except SessionCustomerMismatchError as error:
@@ -121,6 +131,7 @@ def create_app(
             raise HTTPException(status_code=502, detail="llm_provider_failed") from error
         return RunResponse(
             reply=result.reply,
+            customer_id=customer_id,
             session_id=session_id,
             trace_id=trace_id,
             status={
@@ -141,11 +152,11 @@ def create_app(
         )
 
     @app.get(
-        "/customers/{customer_id}/memories",
+        "/memories",
         response_model=MemorySearchResponse,
     )
     async def search_customer_memories(
-        customer_id: str,
+        customer_id: Annotated[str, Depends(customer_identity)],
         query: str = "",
         limit: int = 10,
     ) -> MemorySearchResponse:
