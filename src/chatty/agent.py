@@ -340,6 +340,13 @@ async def run_agent(
             )
     finally:
         session.close()
+    if result.interruptions:
+        context.prior_actions.append("tool_permission:approval_required")
+        return _force_handoff(
+            context,
+            reason="Harness 需要人工权限或授权",
+            details="Tool 权限边界中断了同步执行",
+        )
     if not isinstance(result.final_output, str) or not result.final_output.strip():
         return _force_handoff(
             context,

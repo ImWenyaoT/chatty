@@ -4,6 +4,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
+import pytest
 from agents import Model, ModelResponse, ModelSettings, ModelTracing, Usage
 from agents.agent_output import AgentOutputSchemaBase
 from agents.handoffs import Handoff
@@ -16,6 +17,7 @@ from openai.types.responses import (
     ResponseOutputText,
 )
 
+from chatty.agent import create_handoff
 from chatty.app import create_app
 
 
@@ -981,3 +983,28 @@ def test_invalid_model_tool_is_forced_into_the_same_handoff_path(tmp_path: Path)
 
     assert run.json()["status"] == "needs_human"
     assert receipt.json()["reason"] == "Harness 拒绝无效操作"
+
+
+def test_tool_permission_boundary_forces_a_traceable_handoff(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(create_handoff, "needs_approval", True)
+    model = ScriptedModel(
+        [
+            ResponseFunctionToolCall(
+                arguments=json.dumps({"reason": "需要授权", "context": "退款审批"}),
+                call_id="call-approval",
+                name="create_handoff",
+                type="function_call",
+            )
+        ]
+    )
+    app = create_app(database_path=tmp_path / "chatty.sqlite", model=model)
+
+    with TestClient(app) as client:
+        run = client.post("/runs", json={"message": "申请需要人工权限的操作"})
+        receipt = client.get(f"/support-requests/{run.json()['support_request_id']}")
+
+    assert run.json()["status"] == "needs_human"
+    assert receipt.json()["reason"] == "Harness 需要人工权限或授权"
+    assert receipt.json()["prior_actions"] == ["tool_permission:approval_required"]
