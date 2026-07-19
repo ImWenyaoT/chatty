@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from chatty.agent import MissingApiKeyError, model_from_env, run_agent
+from chatty.knowledge import KnowledgeRecord, KnowledgeStore
 from chatty.store import TraceStore
 from chatty.tracing import SQLiteTracingProcessor
 
@@ -22,6 +23,7 @@ class RunResponse(BaseModel):
     session_id: str
     trace_id: str
     status: str
+    knowledge_search_results: list[KnowledgeRecord]
 
 
 class TraceResponse(BaseModel):
@@ -38,6 +40,7 @@ def create_app(
     database_path: str | Path,
     model: Model | None = None,
     model_id: str | None = None,
+    knowledge_path: str | Path | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Chatty Agent", version="0.1.0")
     app.add_middleware(
@@ -47,6 +50,13 @@ def create_app(
         allow_headers=["content-type"],
     )
     trace_store = TraceStore(database_path)
+    knowledge_store = KnowledgeStore(database_path)
+    active_knowledge_path = (
+        Path(knowledge_path)
+        if knowledge_path is not None
+        else Path(__file__).parents[2] / "knowledge" / "records.jsonl"
+    )
+    knowledge_store.import_jsonl(active_knowledge_path)
     set_trace_processors([SQLiteTracingProcessor(trace_store)])
     configured_model = (model, model_id or "injected-model") if model is not None else None
 
@@ -67,22 +77,24 @@ def create_app(
             raise HTTPException(status_code=503, detail="llm_not_configured") from error
 
         try:
-            reply = await run_agent(
+            result = await run_agent(
                 message=request.message,
                 session_id=session_id,
                 database_path=database_path,
                 model=active_model,
                 model_id=active_model_id,
                 trace_id=trace_id,
+                knowledge_store=knowledge_store,
             )
         except Exception as error:
             trace_store.fail(trace_id)
             raise HTTPException(status_code=502, detail="llm_provider_failed") from error
         return RunResponse(
-            reply=reply,
+            reply=result.reply,
             session_id=session_id,
             trace_id=trace_id,
             status="completed",
+            knowledge_search_results=result.knowledge_search_results,
         )
 
     @app.get("/traces/{trace_id}", response_model=TraceResponse)

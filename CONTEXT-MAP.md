@@ -36,14 +36,14 @@ Cross-cutting terms that span every context (read these for any concept not spec
 
 | Context | Location | Owns | `CONTEXT.md` |
 | --- | --- | --- | --- |
-| Current Agent runtime | `src/chatty` | FastAPI request boundary, Agents SDK loop adapter, SQLite session, safe local trace summary | lazy |
+| Current Agent runtime | `src/chatty` | FastAPI request boundary, Agents SDK loop adapter, SQLite session, JSONL-to-FTS5 knowledge search, safe local trace summary | lazy |
 | Legacy Harness runtime | `packages/agent-core` (`@rental/agent-core`) | Migration source for bounded tools, execution policy, and completion verification; not the current loop | [`CONTEXT.md`](packages/agent-core/CONTEXT.md) |
 | Legacy model plumbing | `packages/llm` (`@rental/llm`) | Migration source for prior DeepSeek integration and model contracts | lazy |
-| Harness store | `packages/db` (`@rental/db`) | SQLite persistence: sessions, Transaction Context, Long-term Customer Memory, traces, FTS5 Knowledge Base index | [`CONTEXT.md`](packages/db/CONTEXT.md) |
+| Legacy Harness store | `packages/db` (`@rental/db`) | Migration evidence for prior SQLite persistence and FTS5 Knowledge Base index | [`CONTEXT.md`](packages/db/CONTEXT.md) |
 | Shared contracts | `packages/shared` (`@rental/shared`) | Browser-safe API contracts and shared types | lazy |
 | Seller workspace | `apps/web` (`@chatty/web`) | Web demo surfaces, Frontend Experience Contract | lazy |
 | Evaluation | `eval` | Chat-completions eval lane, golden evals, harness validation | lazy |
-| Search / retrieval | `packages/agent-core/src/search-execution.ts` + `packages/db/src/knowledge-index.ts` + `knowledge` | Search Execution, agentic search over indexed and summarized content | lazy |
+| Current search / retrieval | `src/chatty/knowledge.py` + `knowledge/records.jsonl` | Pre-chunked JSONL import and bounded lexical/fuzzy SQLite FTS5 search Tool | lazy |
 | Learning surface | `learn-chatty` | Minimal executable explanations of the mainline Agent and Harness | lazy |
 
 Per-context `CONTEXT.md` files are marked **lazy**: they do not exist yet and are created by `/domain-modeling` when a context-specific term or decision actually gets resolved. Absence is not an error — treat it as "not resolved yet".

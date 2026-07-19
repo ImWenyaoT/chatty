@@ -125,7 +125,7 @@ test("the runnable MVP exposes the required Python Agents SDK vertical slice", (
   );
   assert.match(app, /@app\.post\("\/runs"/);
   assert.match(app, /async def create_run/);
-  assert.match(app, /reply = await run_agent\(/);
+  assert.match(app, /await run_agent\(/);
   assert.doesNotMatch(app, /worker|queue|background/i);
   assert.match(playground, /fetch\(`\$\{API_BASE_URL\}\/runs`/);
   assert.doesNotMatch(playground, /@rental\//);

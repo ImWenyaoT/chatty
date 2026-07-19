@@ -45,6 +45,16 @@ test("playground renders loading, success, session continuity, and errors", asyn
         session_id: "session-1",
         trace_id: "trace-1",
         status: "completed",
+        knowledge_search_results: [
+          {
+            id: "policy-rental-period-1",
+            title: "租期计算",
+            summary: "租期从签收当天开始。",
+            body: "租期从签收当天开始，到约定归还日期寄回即可。",
+            source: "seller-policy://rental-period",
+            tags: ["租赁"],
+          },
+        ],
       });
     }
     return Response.json({ detail: "llm_provider_failed" }, { status: 503 });
@@ -65,6 +75,15 @@ test("playground renders loading, success, session continuity, and errors", asyn
   await screen.findByText("第一条回复");
   assert.equal(screen.getByText("session-1").textContent, "session-1");
   assert.equal(screen.getByText("trace-1").textContent, "trace-1");
+  assert.equal(screen.getByText("租期计算").textContent, "租期计算");
+  assert.equal(
+    screen.getByRole("heading", { name: "知识检索结果" }).textContent,
+    "知识检索结果",
+  );
+  assert.equal(
+    screen.getByText("seller-policy://rental-period").textContent,
+    "seller-policy://rental-period",
+  );
   assert.deepEqual(requests[0], {
     message: "第一条消息",
   });

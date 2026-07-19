@@ -1,0 +1,3 @@
+{"id":"policy-rental-period-1","title":"租期计算","summary":"租期从签收当天开始，到约定归还日期寄回。","body":"租期从客户签收当天开始计算，到约定归还日期寄回即可；在途时间不计入租期。","source":"seller-policy://rental-period","tags":["租赁","租期"]}
+{"id":"policy-exchange-1","title":"尺码不合适可以换吗","summary":"发错尺码或推荐尺码不合身时可协助换码。","body":"如商家发错尺码或款式，可免费补发；如按客服推荐尺码仍不合身，可协助更换一次。","source":"seller-policy://exchange","tags":["售后","换码"]}
+{"id":"product-suit-001-1","title":"SUIT-001 黑色双排扣西装","summary":"面试与婚礼场景西装，首日 199 元，续租每日 99.5 元。","body":"SUIT-001 黑色双排扣西装适合面试、婚礼和商务活动。第一天租赁价格 199 元，续租每天 99.5 元，寄出一般包邮，偏远地区除外。","source":"seller-catalog://SUIT-001","tags":["西装","价格","商品"]}

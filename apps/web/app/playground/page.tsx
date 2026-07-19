@@ -19,7 +19,31 @@ type RunResponse = {
   session_id: string;
   trace_id: string;
   status: string;
+  knowledge_search_results: KnowledgeResult[];
 };
+
+type KnowledgeResult = {
+  id: string;
+  title: string;
+  summary: string;
+  body: string;
+  source: string;
+  tags: string[];
+};
+
+function isKnowledgeResult(payload: unknown): payload is KnowledgeResult {
+  if (!payload || typeof payload !== "object") return false;
+  const candidate = payload as Record<string, unknown>;
+  return (
+    typeof candidate.id === "string" &&
+    typeof candidate.title === "string" &&
+    typeof candidate.summary === "string" &&
+    typeof candidate.body === "string" &&
+    typeof candidate.source === "string" &&
+    Array.isArray(candidate.tags) &&
+    candidate.tags.every((tag) => typeof tag === "string")
+  );
+}
 
 function isRunResponse(payload: unknown): payload is RunResponse {
   if (!payload || typeof payload !== "object") return false;
@@ -28,6 +52,8 @@ function isRunResponse(payload: unknown): payload is RunResponse {
     typeof candidate.reply === "string" &&
     typeof candidate.session_id === "string" &&
     typeof candidate.trace_id === "string" &&
+    Array.isArray(candidate.knowledge_search_results) &&
+    candidate.knowledge_search_results.every(isKnowledgeResult) &&
     candidate.status === "completed"
   );
 }
@@ -47,6 +73,9 @@ export default function PlaygroundPage() {
   const [error, setError] = useState<string>();
   const [sessionId, setSessionId] = useState<string>();
   const [traceId, setTraceId] = useState<string>();
+  const [knowledgeResults, setKnowledgeResults] = useState<KnowledgeResult[]>(
+    [],
+  );
   const nextId = useRef(1);
 
   async function sendMessage() {
@@ -78,6 +107,7 @@ export default function PlaygroundPage() {
       ]);
       setSessionId(payload.session_id);
       setTraceId(payload.trace_id);
+      setKnowledgeResults(payload.knowledge_search_results);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "请求失败");
     } finally {
@@ -190,6 +220,23 @@ export default function PlaygroundPage() {
               </div>
             </dl>
           </section>
+          {knowledgeResults.length > 0 ? (
+            <section
+              className="support-context-section"
+              aria-labelledby="knowledge-results-heading"
+            >
+              <div className="support-section-heading">
+                <h2 id="knowledge-results-heading">知识检索结果</h2>
+              </div>
+              {knowledgeResults.map((result) => (
+                <article key={result.id} className="support-runtime-list">
+                  <strong>{result.title}</strong>
+                  <p>{result.summary}</p>
+                  <small>{result.source}</small>
+                </article>
+              ))}
+            </section>
+          ) : null}
         </aside>
       </div>
     </div>

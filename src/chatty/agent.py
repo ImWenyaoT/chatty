@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Annotated
 
 from agents import (
     Agent,
@@ -12,7 +14,11 @@ from agents import (
     RunConfig,
     Runner,
     SQLiteSession,
+    function_tool,
 )
+from pydantic import Field
+
+from chatty.knowledge import KnowledgeRecord, KnowledgeStore
 
 DEFAULT_BASE_URL = "https://api.deepseek.com"
 DEFAULT_MODEL_ID = "deepseek-v4-pro"
@@ -20,6 +26,7 @@ DEFAULT_MODEL_ID = "deepseek-v4-pro"
 AGENT_INSTRUCTIONS = """你是 Chatty，一个简洁、可靠的客服 Agent。
 直接理解用户消息并回答，不要声称执行了当前没有提供的业务工具。
 信息不足时提出一个聚焦的问题，不要编造事实。
+回答政策或商品事实前必须调用 search_knowledge；使用检索内容时必须原样附上至少一个 source。
 """
 
 
@@ -29,6 +36,12 @@ class MissingApiKeyError(RuntimeError):
 
 class InvalidAgentOutputError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class AgentRunResult:
+    reply: str
+    knowledge_search_results: list[KnowledgeRecord]
 
 
 def model_from_env() -> tuple[Model, str]:
@@ -51,12 +64,32 @@ async def run_agent(
     model: Model,
     model_id: str,
     trace_id: str,
-) -> str:
+    knowledge_store: KnowledgeStore,
+) -> AgentRunResult:
+    knowledge_search_results: dict[str, KnowledgeRecord] = {}
+
+    @function_tool
+    def search_knowledge(
+        query: Annotated[str, Field(min_length=1, max_length=500)],
+        limit: Annotated[int, Field(ge=1, le=5)] = 3,
+    ) -> str:
+        """Search seller-verified policy and product knowledge.
+
+        Args:
+            query: Model-selected lexical query.
+            limit: Maximum number of structured source records to return.
+        """
+        search_result = knowledge_store.search(query, limit=limit)
+        for record in search_result.results:
+            knowledge_search_results[record.id] = record
+        return search_result.model_dump_json()
+
     agent = Agent(
         name="Chatty",
         instructions=AGENT_INSTRUCTIONS,
         model=model,
         model_settings=ModelSettings(extra_body={"thinking": {"type": "disabled"}}),
+        tools=[search_knowledge],
     )
     session = SQLiteSession(
         session_id,
@@ -81,4 +114,11 @@ async def run_agent(
         session.close()
     if not isinstance(result.final_output, str) or not result.final_output.strip():
         raise InvalidAgentOutputError("Agent returned no customer-facing reply")
-    return result.final_output
+    if knowledge_search_results and not any(
+        record.source in result.final_output for record in knowledge_search_results.values()
+    ):
+        raise InvalidAgentOutputError("Knowledge-backed reply omitted its source")
+    return AgentRunResult(
+        reply=result.final_output,
+        knowledge_search_results=list(knowledge_search_results.values()),
+    )
