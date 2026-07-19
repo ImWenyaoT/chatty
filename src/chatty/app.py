@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from chatty.agent import MissingApiKeyError, model_from_env, run_agent
 from chatty.knowledge import KnowledgeRecord, KnowledgeStore
 from chatty.commerce import CommerceError, CommerceStore, Order
-from chatty.store import TraceStore
+from chatty.store import MemoryStore, TraceStore
 from chatty.tracing import SQLiteTracingProcessor
 
 
@@ -18,6 +18,19 @@ class RunRequest(BaseModel):
     message: str = Field(min_length=1, max_length=20_000)
     session_id: str | None = Field(default=None, min_length=1, max_length=200)
     customer_id: str = Field(default="demo-customer", min_length=1, max_length=200)
+
+
+class MemoryResponse(BaseModel):
+    memory_id: str
+    customer_id: str
+    fact: str
+    source_id: str
+    created_at: str
+
+
+class MemoryEventResponse(BaseModel):
+    tool: str
+    memories: list[MemoryResponse]
 
 
 class RunResponse(BaseModel):
@@ -28,6 +41,13 @@ class RunResponse(BaseModel):
     business_outcome: str
     completion_evidence: str
     knowledge_search_results: list[KnowledgeRecord]
+    memory_events: list[MemoryEventResponse]
+
+
+class MemorySearchResponse(BaseModel):
+    customer_id: str
+    query: str
+    memories: list[MemoryResponse]
 
 
 class TraceResponse(BaseModel):
@@ -54,6 +74,7 @@ def create_app(
         allow_headers=["content-type"],
     )
     trace_store = TraceStore(database_path)
+    memory_store = MemoryStore(database_path)
     knowledge_store = KnowledgeStore(database_path)
     active_knowledge_path = (
         Path(knowledge_path)
@@ -108,6 +129,31 @@ def create_app(
             business_outcome=result.business_outcome,
             completion_evidence=result.completion_evidence,
             knowledge_search_results=result.knowledge_search_results,
+            memory_events=[
+                MemoryEventResponse(
+                    tool=event.tool,
+                    memories=[MemoryResponse(**memory.__dict__) for memory in event.memories],
+                )
+                for event in result.memory_events
+            ],
+        )
+
+    @app.get(
+        "/customers/{customer_id}/memories",
+        response_model=MemorySearchResponse,
+    )
+    async def search_customer_memories(
+        customer_id: str,
+        query: str = "",
+        limit: int = 10,
+    ) -> MemorySearchResponse:
+        if not 1 <= limit <= 10:
+            raise HTTPException(status_code=422, detail="invalid_memory_limit")
+        memories = memory_store.search(customer_id=customer_id, query=query, limit=limit)
+        return MemorySearchResponse(
+            customer_id=customer_id,
+            query=query,
+            memories=[MemoryResponse(**memory.__dict__) for memory in memories],
         )
 
     @app.get("/traces/{trace_id}", response_model=TraceResponse)

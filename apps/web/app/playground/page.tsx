@@ -16,10 +16,25 @@ type Message = {
 
 type RunResponse = {
   reply: string;
+  customer_id: string;
   session_id: string;
   trace_id: string;
   status: "completed" | "not_completed" | "responded";
   knowledge_search_results: KnowledgeResult[];
+  memory_events: MemoryEvent[];
+};
+
+type CustomerMemory = {
+  memory_id: string;
+  customer_id: string;
+  fact: string;
+  source_id: string;
+  created_at: string;
+};
+
+type MemoryEvent = {
+  tool: string;
+  memories: CustomerMemory[];
 };
 
 type KnowledgeResult = {
@@ -50,10 +65,12 @@ function isRunResponse(payload: unknown): payload is RunResponse {
   const candidate = payload as Record<string, unknown>;
   return (
     typeof candidate.reply === "string" &&
+    typeof candidate.customer_id === "string" &&
     typeof candidate.session_id === "string" &&
     typeof candidate.trace_id === "string" &&
     Array.isArray(candidate.knowledge_search_results) &&
     candidate.knowledge_search_results.every(isKnowledgeResult) &&
+    Array.isArray(candidate.memory_events) &&
     ["completed", "not_completed", "responded"].includes(
       String(candidate.status),
     )
@@ -69,6 +86,7 @@ function apiError(payload: unknown): string {
 }
 
 export default function PlaygroundPage() {
+  const [customerId, setCustomerId] = useState("demo-customer");
   const [messages, setMessages] = useState<Message[]>([]);
   const [question, setQuestion] = useState("");
   const [sending, setSending] = useState(false);
@@ -78,6 +96,7 @@ export default function PlaygroundPage() {
   const [knowledgeResults, setKnowledgeResults] = useState<KnowledgeResult[]>(
     [],
   );
+  const [memoryEvents, setMemoryEvents] = useState<MemoryEvent[]>([]);
   const nextId = useRef(1);
 
   async function sendMessage() {
@@ -107,9 +126,11 @@ export default function PlaygroundPage() {
         ...current,
         { id: nextId.current++, role: "assistant", content: payload.reply },
       ]);
+      setCustomerId(payload.customer_id);
       setSessionId(payload.session_id);
       setTraceId(payload.trace_id);
       setKnowledgeResults(payload.knowledge_search_results);
+      setMemoryEvents(payload.memory_events);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "请求失败");
     } finally {
@@ -213,6 +234,10 @@ export default function PlaygroundPage() {
             </div>
             <dl className="support-runtime-list">
               <div>
+                <dt>customer_id</dt>
+                <dd>{customerId}</dd>
+              </div>
+              <div>
                 <dt>session_id</dt>
                 <dd>{sessionId ?? "尚未建立"}</dd>
               </div>
@@ -239,6 +264,33 @@ export default function PlaygroundPage() {
               ))}
             </section>
           ) : null}
+          <section
+            className="support-context-section"
+            aria-labelledby="memory-events-title"
+          >
+            <div className="support-section-heading">
+              <h2 id="memory-events-title">Memory Tool</h2>
+            </div>
+            {memoryEvents.length === 0 ? (
+              <p>本次运行未使用客户 Memory。</p>
+            ) : (
+              memoryEvents.map((event, eventIndex) => (
+                <div key={event.tool + "-" + eventIndex}>
+                  <strong>{event.tool}</strong>
+                  {event.memories.length === 0 ? (
+                    <p>未找到匹配事实</p>
+                  ) : (
+                    event.memories.map((memory) => (
+                      <article key={memory.memory_id}>
+                        <p>{memory.fact}</p>
+                        <small>来源 {memory.source_id}</small>
+                      </article>
+                    ))
+                  )}
+                </div>
+              ))
+            )}
+          </section>
         </aside>
       </div>
     </div>

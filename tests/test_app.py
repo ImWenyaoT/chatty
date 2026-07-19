@@ -20,7 +20,7 @@ from chatty.app import create_app
 
 
 class ScriptedModel(Model):
-    def __init__(self, replies: list[str | ResponseFunctionToolCall]) -> None:
+    def __init__(self, replies: list[str | ResponseFunctionToolCall | list[Any]]) -> None:
         self.replies = iter(replies)
         self.inputs: list[str | list[TResponseInputItem]] = []
         self.settings: list[ModelSettings] = []
@@ -53,6 +53,8 @@ class ScriptedModel(Model):
         output: list[TResponseOutputItem]
         if isinstance(reply, ResponseFunctionToolCall):
             output = [reply]
+        elif isinstance(reply, list):
+            output = reply
         else:
             output = [
                 ResponseOutputMessage(
@@ -486,3 +488,130 @@ def test_inventory_tool_result_is_verified_business_evidence(tmp_path: Path) -> 
     assert response.json()["status"] == "completed"
     assert response.json()["business_outcome"] == "verified"
     assert response.json()["completion_evidence"] == ("check_availability:SUIT-001:L:available=2")
+
+
+def test_explicit_stable_memory_is_searchable_across_sessions_with_provenance(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "chatty.sqlite"
+    save_model = ScriptedModel(
+        [
+            [
+                ResponseFunctionToolCall(
+                    arguments=json.dumps(
+                        {
+                            "fact": "客户对羊毛过敏",
+                            "explicitly_stated": True,
+                            "stable": True,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    call_id="save-memory-1",
+                    name="save_customer_memory",
+                    type="function_call",
+                )
+            ],
+            "我会记住你对羊毛过敏。",
+        ]
+    )
+    save_app = create_app(
+        database_path=database_path,
+        model=save_model,
+        model_id="memory-save-model",
+    )
+
+    with TestClient(save_app) as client:
+        saved = client.post(
+            "/runs",
+            json={"customer_id": "customer-1", "message": "请记住，我对羊毛过敏"},
+        )
+
+    assert saved.status_code == 200
+    saved_body = saved.json()
+    assert saved_body["memory_events"][0]["tool"] == "save_customer_memory"
+    saved_memory = saved_body["memory_events"][0]["memories"][0]
+    assert saved_memory["customer_id"] == "customer-1"
+    assert saved_memory["fact"] == "客户对羊毛过敏"
+    assert saved_memory["source_id"] == saved_body["trace_id"]
+    assert saved_memory["created_at"].endswith("Z")
+
+    search_model = ScriptedModel(
+        [
+            [
+                ResponseFunctionToolCall(
+                    arguments=json.dumps({"query": "羊毛", "limit": 5}, ensure_ascii=False),
+                    call_id="search-memory-1",
+                    name="search_customer_memory",
+                    type="function_call",
+                )
+            ],
+            "根据你之前明确提供的信息，你对羊毛过敏。",
+        ]
+    )
+    search_app = create_app(
+        database_path=database_path,
+        model=search_model,
+        model_id="memory-search-model",
+    )
+
+    with TestClient(search_app) as client:
+        found = client.post(
+            "/runs",
+            json={"customer_id": "customer-1", "message": "帮我选合适的材质"},
+        )
+        other_customer = client.get(
+            "/customers/customer-2/memories",
+            params={"query": "羊毛"},
+        )
+
+    assert found.status_code == 200
+    assert found.json()["reply"] == "根据你之前明确提供的信息，你对羊毛过敏。"
+    assert found.json()["session_id"] != saved_body["session_id"]
+    search_event = found.json()["memory_events"][0]
+    assert search_event["tool"] == "search_customer_memory"
+    assert search_event["memories"] == [saved_memory]
+    assert "客户对羊毛过敏" in json.dumps(search_model.inputs[1], ensure_ascii=False)
+    assert saved_body["trace_id"] in json.dumps(search_model.inputs[1], ensure_ascii=False)
+    assert other_customer.status_code == 200
+    assert other_customer.json()["memories"] == []
+
+
+def test_temporary_or_inferred_statement_cannot_be_saved_as_memory(tmp_path: Path) -> None:
+    database_path = tmp_path / "chatty.sqlite"
+    model = ScriptedModel(
+        [
+            [
+                ResponseFunctionToolCall(
+                    arguments=json.dumps(
+                        {
+                            "fact": "客户今天想租蓝色西装",
+                            "explicitly_stated": False,
+                            "stable": False,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    call_id="invalid-memory-1",
+                    name="save_customer_memory",
+                    type="function_call",
+                )
+            ],
+            "这只是本次需求，我不会把它保存为长期客户事实。",
+        ]
+    )
+    app = create_app(database_path=database_path, model=model)
+
+    with TestClient(app) as client:
+        run = client.post(
+            "/runs",
+            json={"customer_id": "customer-1", "message": "今天想租蓝色西装"},
+        )
+        memories = client.get(
+            "/customers/customer-1/memories",
+            params={"query": "蓝色"},
+        )
+
+    assert run.status_code == 200
+    assert run.json()["memory_events"] == []
+    assert "literal_error" in json.dumps(model.inputs[1], ensure_ascii=False)
+    assert memories.status_code == 200
+    assert memories.json()["memories"] == []

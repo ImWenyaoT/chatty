@@ -42,6 +42,7 @@ test("playground renders loading, success, session continuity, and errors", asyn
       await firstPending;
       return Response.json({
         reply: "第一条回复",
+        customer_id: "demo-customer",
         session_id: "session-1",
         trace_id: "trace-1",
         status: "responded",
@@ -53,6 +54,20 @@ test("playground renders loading, success, session continuity, and errors", asyn
             body: "租期从签收当天开始，到约定归还日期寄回即可。",
             source: "seller-policy://rental-period",
             tags: ["租赁"],
+          },
+        ],
+        memory_events: [
+          {
+            tool: "search_customer_memory",
+            memories: [
+              {
+                memory_id: "memory-1",
+                customer_id: "demo-customer",
+                fact: "客户对羊毛过敏",
+                source_id: "trace-memory-source",
+                created_at: "2026-07-19T08:00:00.000Z",
+              },
+            ],
           },
         ],
       });
@@ -83,6 +98,18 @@ test("playground renders loading, success, session continuity, and errors", asyn
   assert.equal(
     screen.getByText("seller-policy://rental-period").textContent,
     "seller-policy://rental-period",
+  );
+  assert.equal(
+    screen.getByText("客户对羊毛过敏").textContent,
+    "客户对羊毛过敏",
+  );
+  assert.match(
+    screen.getByText(/trace-memory-source/).textContent ?? "",
+    /来源 trace-memory-source/,
+  );
+  assert.equal(
+    screen.getByText("search_customer_memory").textContent,
+    "search_customer_memory",
   );
   assert.deepEqual(requests[0], {
     message: "第一条消息",

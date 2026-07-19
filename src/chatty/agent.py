@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import json
 import os
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from agents import (
     Agent,
@@ -12,6 +13,7 @@ from agents import (
     ModelSettings,
     OpenAIChatCompletionsModel,
     RunConfig,
+    RunContextWrapper,
     Runner,
     SQLiteSession,
     function_tool,
@@ -23,6 +25,7 @@ from agents.tool import Tool
 
 from chatty.commerce import CommerceStore
 from chatty.order_tools import BusinessOutcome, HarnessContext, build_order_tools
+from chatty.store import CustomerMemory, MemoryStore
 
 DEFAULT_BASE_URL = "https://api.deepseek.com"
 DEFAULT_MODEL_ID = "deepseek-v4-pro"
@@ -32,6 +35,8 @@ AGENT_INSTRUCTIONS = """你是 Chatty，一个简洁、可靠的客服 Agent。
 只有 Tool 返回 ok=true 且 SQLite 状态与请求一致时，才能声称业务操作完成。
 信息不足时提出一个聚焦的问题，不要编造事实。
 回答政策或商品事实前必须调用 search_knowledge；使用检索内容时必须原样附上至少一个 source。
+仅当客户明确要求记住其直接陈述、且该事实跨交易稳定时，调用 save_customer_memory。
+临时需求、当前订单偏好、推断或画像不得保存；需要既有客户事实时主动搜索 Memory。
 """
 
 
@@ -44,11 +49,67 @@ class InvalidAgentOutputError(RuntimeError):
 
 
 @dataclass(frozen=True)
+class MemoryEvent:
+    tool: str
+    memories: list[CustomerMemory]
+
+
+@dataclass(frozen=True)
 class AgentRunResult:
     reply: str
     knowledge_search_results: list[KnowledgeRecord]
+    memory_events: list[MemoryEvent]
     business_outcome: BusinessOutcome
     completion_evidence: str
+
+
+@dataclass(kw_only=True)
+class AgentContext(HarnessContext):
+    message: str
+    trace_id: str
+    memory_store: MemoryStore
+    memory_events: list[MemoryEvent] = field(default_factory=list)
+
+
+def memory_tools() -> list[Tool]:
+    @function_tool(use_docstring_info=False)
+    async def save_customer_memory(
+        context: RunContextWrapper[AgentContext],
+        fact: Annotated[str, Field(min_length=1, max_length=500)],
+        explicitly_stated: Literal[True],
+        stable: Literal[True],
+    ) -> str:
+        memory = context.context.memory_store.save(
+            customer_id=context.context.customer_id,
+            fact=fact.strip(),
+            source_id=context.context.trace_id,
+        )
+        event = MemoryEvent(tool="save_customer_memory", memories=[memory])
+        context.context.memory_events.append(event)
+        return json.dumps(
+            {"tool": event.tool, "memories": [asdict(memory)]},
+            ensure_ascii=False,
+        )
+
+    @function_tool(use_docstring_info=False)
+    async def search_customer_memory(
+        context: RunContextWrapper[AgentContext],
+        query: Annotated[str, Field(min_length=1, max_length=200)],
+        limit: Annotated[int, Field(ge=1, le=10)] = 5,
+    ) -> str:
+        memories = context.context.memory_store.search(
+            customer_id=context.context.customer_id,
+            query=query.strip(),
+            limit=limit,
+        )
+        event = MemoryEvent(tool="search_customer_memory", memories=memories)
+        context.context.memory_events.append(event)
+        return json.dumps(
+            {"tool": event.tool, "memories": [asdict(memory) for memory in memories]},
+            ensure_ascii=False,
+        )
+
+    return [search_customer_memory, save_customer_memory]
 
 
 def model_from_env() -> tuple[Model, str]:
@@ -93,8 +154,20 @@ async def run_agent(
             knowledge_search_results[record.id] = record
         return search_result.model_dump_json()
 
-    agent_tools: list[Tool] = [search_knowledge, *build_order_tools()]
-    agent: Agent[HarnessContext] = Agent(
+    context = AgentContext(
+        customer_id=customer_id,
+        session_id=session_id,
+        commerce=commerce,
+        message=message,
+        trace_id=trace_id,
+        memory_store=MemoryStore(database_path),
+    )
+    agent_tools: list[Tool] = [
+        search_knowledge,
+        *memory_tools(),
+        *build_order_tools(),
+    ]
+    agent: Agent[AgentContext] = Agent(
         name="Chatty",
         instructions=AGENT_INSTRUCTIONS,
         model=model,
@@ -107,16 +180,11 @@ async def run_agent(
         sessions_table="chatty_sessions",
         messages_table="chatty_messages",
     )
-    harness_context = HarnessContext(
-        customer_id=customer_id,
-        session_id=session_id,
-        commerce=commerce,
-    )
     try:
         result = await Runner.run(
             agent,
             message,
-            context=harness_context,
+            context=context,
             session=session,
             run_config=RunConfig(
                 workflow_name="Chatty Agent Run",
@@ -134,7 +202,7 @@ async def run_agent(
         record.source in result.final_output for record in knowledge_search_results.values()
     ):
         raise InvalidAgentOutputError("Knowledge-backed reply omitted its source")
-    business_outcome, completion_evidence = harness_context.verify_business_outcome()
+    business_outcome, completion_evidence = context.verify_business_outcome()
     reply = result.final_output
     if business_outcome == "not_completed":
         error_code = completion_evidence.partition(":")[2] or "business_tool_failed"
@@ -142,6 +210,7 @@ async def run_agent(
     return AgentRunResult(
         reply=reply,
         knowledge_search_results=list(knowledge_search_results.values()),
+        memory_events=context.memory_events,
         business_outcome=business_outcome,
         completion_evidence=completion_evidence,
     )

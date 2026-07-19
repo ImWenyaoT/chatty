@@ -5,6 +5,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from uuid import uuid4
 
 
 @dataclass(frozen=True)
@@ -14,6 +15,86 @@ class TraceSummary:
     status: str
     summary: str
     model_id: str
+
+
+@dataclass(frozen=True)
+class CustomerMemory:
+    memory_id: str
+    customer_id: str
+    fact: str
+    source_id: str
+    created_at: str
+
+
+class MemoryStore:
+    def __init__(self, database_path: str | Path) -> None:
+        self.database_path = Path(database_path)
+        self.database_path.parent.mkdir(parents=True, exist_ok=True)
+        with self._connect() as connection:
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS customer_memories (
+                    memory_id TEXT PRIMARY KEY,
+                    customer_id TEXT NOT NULL,
+                    fact TEXT NOT NULL,
+                    source_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                        DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS customer_memories_customer_created
+                ON customer_memories (customer_id, created_at DESC)
+                """
+            )
+
+    def save(self, *, customer_id: str, fact: str, source_id: str) -> CustomerMemory:
+        memory_id = f"memory_{uuid4().hex}"
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO customer_memories (memory_id, customer_id, fact, source_id)
+                VALUES (?, ?, ?, ?)
+                """,
+                (memory_id, customer_id, fact, source_id),
+            )
+            row = connection.execute(
+                """
+                SELECT memory_id, customer_id, fact, source_id, created_at
+                FROM customer_memories
+                WHERE memory_id = ?
+                """,
+                (memory_id,),
+            ).fetchone()
+        if row is None:  # pragma: no cover - SQLite insert/read is one transaction
+            raise RuntimeError("saved memory could not be read")
+        return CustomerMemory(*row)
+
+    def search(self, *, customer_id: str, query: str, limit: int) -> list[CustomerMemory]:
+        escaped_query = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT memory_id, customer_id, fact, source_id, created_at
+                FROM customer_memories
+                WHERE customer_id = ? AND fact LIKE ? ESCAPE '\\'
+                ORDER BY created_at DESC, memory_id DESC
+                LIMIT ?
+                """,
+                (customer_id, f"%{escaped_query}%", limit),
+            ).fetchall()
+        return [CustomerMemory(*row) for row in rows]
+
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        connection = sqlite3.connect(self.database_path)
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
 
 
 class TraceStore:
