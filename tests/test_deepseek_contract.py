@@ -72,14 +72,15 @@ def test_real_deepseek_can_use_consecutive_tools_for_one_verified_order(
             json={
                 "message": (
                     "请先检查 SUIT-001 的 L 码在 2026-08-01 至 2026-08-03 "
-                    "是否可租；若可租，立即创建 1 件、760 元、送到上海市静安区的订单。"
+                    "是否可租；若可租，立即创建 1 件、760 元、送到上海市静安区、"
+                    "风险信息为无的订单。这个任务不需要知识搜索，只使用库存和订单 Tool。"
                 )
             },
         )
         orders = client.get("/orders")
+        assert response.status_code == 200, response.text
         trace = client.get(f"/traces/{response.json()['trace_id']}")
 
-    assert response.status_code == 200
     assert response.json()["business_outcome"] == "verified"
     assert len(orders.json()) == 1
     function_spans = [span for span in trace.json()["spans"] if span["span_type"] == "function"]

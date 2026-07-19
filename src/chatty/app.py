@@ -1,9 +1,9 @@
 from collections.abc import Callable
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any, cast
 from uuid import uuid4
 
-from agents import Model
+from agents import Model, SQLiteSession
 from agents.tracing import gen_trace_id, set_trace_processors
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -60,6 +60,11 @@ class RunResponse(BaseModel):
     memory_events: list[MemoryEventResponse]
     needs_human: bool
     support_request_id: str | None = None
+
+
+class SessionMessagesResponse(BaseModel):
+    session_id: str
+    messages: list[dict[str, Any]]
 
 
 class MemorySearchResponse(BaseModel):
@@ -287,6 +292,32 @@ def create_app(
             needs_human=result.support_request_id is not None,
             support_request_id=result.support_request_id,
         )
+
+    @app.get(
+        "/sessions/{session_id}/messages",
+        response_model=SessionMessagesResponse,
+    )
+    async def get_session_messages(
+        session_id: str,
+        customer_id: Annotated[str, Depends(customer_identity)],
+    ) -> SessionMessagesResponse:
+        try:
+            memory_store.require_session(session_id=session_id, customer_id=customer_id)
+        except SessionNotFoundError as error:
+            raise HTTPException(status_code=404, detail="session_not_found") from error
+        except SessionCustomerMismatchError as error:
+            raise HTTPException(status_code=409, detail="session_customer_mismatch") from error
+        session = SQLiteSession(
+            session_id,
+            db_path=database_path,
+            sessions_table="chatty_sessions",
+            messages_table="chatty_messages",
+        )
+        try:
+            messages = cast(list[dict[str, Any]], await session.get_items())
+        finally:
+            session.close()
+        return SessionMessagesResponse(session_id=session_id, messages=messages)
 
     @app.get("/support-requests", response_model=list[SupportRequestResponse])
     async def list_support_requests() -> list[SupportRequestResponse]:

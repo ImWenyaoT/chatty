@@ -29,6 +29,39 @@ def test_order_tool_schema_uses_provider_compatible_iso_date_strings() -> None:
 
 
 @pytest.mark.asyncio
+async def test_create_order_requires_explicit_business_fields_before_writing(
+    tmp_path: Path,
+) -> None:
+    store = CommerceStore(tmp_path / "chatty.sqlite")
+    context = HarnessContext(
+        customer_id="trusted-customer",
+        session_id="trusted-session",
+        commerce=store,
+    )
+    create_tool = next(tool for tool in build_order_tools() if tool.name == "create_order")
+
+    assert {"amount_cents", "address", "risk"} <= set(create_tool.params_json_schema["required"])
+    arguments = json.dumps(
+        {
+            "idempotency_key": "missing-business-fields",
+            "product_id": "SUIT-001",
+            "size": "L",
+            "fulfillment_mode": "rental",
+            "quantity": 1,
+            "start_date": "2026-08-01",
+            "end_date": "2026-08-03",
+        }
+    )
+
+    result = await create_tool.on_invoke_tool(
+        tool_context(context, "create_order", arguments), arguments
+    )
+
+    assert "error" in str(result).lower()
+    assert store.list_orders() == []
+
+
+@pytest.mark.asyncio
 async def test_create_order_tool_rejects_model_supplied_identity_before_business_code(
     tmp_path: Path,
 ) -> None:
@@ -86,6 +119,7 @@ async def test_order_tools_use_harness_identity_and_return_verified_sqlite_state
             "end_date": "2026-08-03",
             "amount_cents": 76000,
             "address": "上海市静安区",
+            "risk": "无",
         }
     )
 

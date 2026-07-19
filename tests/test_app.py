@@ -120,6 +120,7 @@ def test_user_can_continue_an_agent_session_and_receive_local_trace_summary(
             "/runs",
             json={"message": "我刚才说我叫什么？", "session_id": first_body["session_id"]},
         )
+        messages = client.get(f"/sessions/{first_body['session_id']}/messages")
         trace = client.get(f"/traces/{second.json()['trace_id']}")
 
     assert first.status_code == 200
@@ -132,6 +133,15 @@ def test_user_can_continue_an_agent_session_and_receive_local_trace_summary(
     assert second.status_code == 200
     assert second.json()["reply"] == "你刚才说你叫小林。"
     assert second.json()["session_id"] == first_body["session_id"]
+    assert messages.status_code == 200
+    assert messages.json()["session_id"] == first_body["session_id"]
+    assert [item["role"] for item in messages.json()["messages"]] == [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+    ]
+    assert "我叫小林" in json.dumps(messages.json()["messages"], ensure_ascii=False)
     assert "我叫小林" in json.dumps(model.inputs[1], ensure_ascii=False)
     assert "你好，小林。" in json.dumps(model.inputs[1], ensure_ascii=False)
     assert model.settings[0].extra_body == {"thinking": {"type": "disabled"}}
@@ -161,6 +171,23 @@ def test_client_cannot_claim_an_unknown_session_id(tmp_path: Path) -> None:
 
     assert response.status_code == 409
     assert response.json() == {"detail": "session_not_found"}
+
+
+def test_customer_cannot_read_another_customers_session_messages(tmp_path: Path) -> None:
+    active_customer = "customer-a"
+    app = create_app(
+        database_path=tmp_path / "chatty.sqlite",
+        model=ScriptedModel(["已收到。"]),
+        customer_identity=lambda: active_customer,
+    )
+
+    with TestClient(app) as client:
+        first = client.post("/runs", json={"message": "我的私密消息"})
+        active_customer = "customer-b"
+        response = client.get(f"/sessions/{first.json()['session_id']}/messages")
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "session_customer_mismatch"}
 
 
 def test_empty_model_output_forces_a_traceable_handoff(tmp_path: Path) -> None:

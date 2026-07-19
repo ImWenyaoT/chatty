@@ -30,7 +30,7 @@ The only Model settings are `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `MODEL_ID`.
 - `http://127.0.0.1:3000/dashboard` shows real Agent Runs, Tools, Traces, and outcomes.
 - `http://127.0.0.1:3000/orders` reads the SQLite Orders changed by the Agent.
 
-The pages call FastAPI only. `data/chatty.sqlite` is the source of truth for Sessions, Orders, Customer Memory, Handoff receipts, and local Traces. Seller Knowledge comes from `knowledge/records.jsonl` and is imported into SQLite FTS5.
+The pages call FastAPI only. `data/chatty.sqlite` is the source of truth for Sessions, Orders, Customer Memory, Handoff receipts, and local Traces. Seller Knowledge comes from `knowledge/records.jsonl` and is imported into SQLite FTS5. `GET /sessions/{session_id}/messages` reads the history of a customer-bound Session.
 
 ## Eval and verification
 

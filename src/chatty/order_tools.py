@@ -93,10 +93,10 @@ class _CreateOrderToolInput(BaseModel):
     quantity: int = Field(ge=1, le=100)
     start_date: date | None
     end_date: date | None
-    amount_cents: int = Field(default=0, ge=0)
+    amount_cents: int = Field(gt=0)
     channel: str = Field(default="Chatty", min_length=1, max_length=100)
-    address: str = Field(default="待补充", min_length=1, max_length=500)
-    risk: str = Field(default="无", min_length=1, max_length=500)
+    address: str = Field(min_length=1, max_length=500)
+    risk: str = Field(min_length=1, max_length=500)
 
     @model_validator(mode="after")
     def validate_period(self) -> Self:
@@ -153,10 +153,10 @@ def build_order_tools() -> list[FunctionTool]:
         quantity: int,
         start_date: IsoDateString | None,
         end_date: IsoDateString | None,
-        amount_cents: int = 0,
+        amount_cents: int,
+        address: str,
+        risk: str,
         channel: str = "Chatty",
-        address: str = "待补充",
-        risk: str = "无",
     ) -> str:
         """Create one pending SQLite order with Harness-owned customer and session identity."""
         try:

@@ -30,7 +30,7 @@ pnpm dev
 - `http://127.0.0.1:3000/dashboard`：查看真实 Agent Run、Tool、Trace 和结果。
 - `http://127.0.0.1:3000/orders`：读取 Agent 操作后的 SQLite 订单。
 
-三个页面只调用 FastAPI；业务事实来自 `data/chatty.sqlite`，不是前端 fixtures。知识输入位于 `knowledge/records.jsonl`，导入 SQLite FTS5 后由 Agent Tool 搜索。Session、订单、Memory、Handoff receipt 与本地 Trace 也存入同一 SQLite 文件。
+三个页面只调用 FastAPI；业务事实来自 `data/chatty.sqlite`，不是前端 fixtures。知识输入位于 `knowledge/records.jsonl`，导入 SQLite FTS5 后由 Agent Tool 搜索。Session、订单、Memory、Handoff receipt 与本地 Trace 也存入同一 SQLite 文件；`GET /sessions/{session_id}/messages` 可读取已绑定客户的 Session 历史。
 
 ## eval 与验证
 
