@@ -19,7 +19,10 @@ type RunResponse = {
   customer_id: string;
   session_id: string;
   trace_id: string;
+  request_id: string;
   status: "completed" | "not_completed" | "responded" | "needs_human";
+  business_outcome: "verified" | "not_completed" | "not_applicable";
+  completion_evidence: string | null;
   knowledge_search_results: KnowledgeResult[];
   memory_events: MemoryEvent[];
   needs_human: boolean;
@@ -70,6 +73,12 @@ function isRunResponse(payload: unknown): payload is RunResponse {
     typeof candidate.customer_id === "string" &&
     typeof candidate.session_id === "string" &&
     typeof candidate.trace_id === "string" &&
+    typeof candidate.request_id === "string" &&
+    ["verified", "not_completed", "not_applicable"].includes(
+      String(candidate.business_outcome),
+    ) &&
+    (candidate.completion_evidence === null ||
+      typeof candidate.completion_evidence === "string") &&
     Array.isArray(candidate.knowledge_search_results) &&
     candidate.knowledge_search_results.every(isKnowledgeResult) &&
     Array.isArray(candidate.memory_events) &&
@@ -88,6 +97,8 @@ function apiError(payload: unknown): string {
   const detail = (payload as Record<string, unknown>).detail;
   if (detail === "llm_not_configured") return "模型尚未配置，请检查根目录 .env";
   if (detail === "llm_provider_failed") return "模型服务暂时不可用，请稍后重试";
+  if (detail === "handoff_persistence_failed")
+    return "人工交接凭证未能保存，请稍后重试";
   return typeof detail === "string" ? detail : "请求失败";
 }
 
@@ -99,11 +110,15 @@ export default function PlaygroundPage() {
   const [error, setError] = useState<string>();
   const [sessionId, setSessionId] = useState<string>();
   const [traceId, setTraceId] = useState<string>();
+  const [requestId, setRequestId] = useState<string>();
   const [knowledgeResults, setKnowledgeResults] = useState<KnowledgeResult[]>(
     [],
   );
   const [memoryEvents, setMemoryEvents] = useState<MemoryEvent[]>([]);
   const [runStatus, setRunStatus] = useState<RunResponse["status"]>();
+  const [businessOutcome, setBusinessOutcome] =
+    useState<RunResponse["business_outcome"]>();
+  const [completionEvidence, setCompletionEvidence] = useState<string>();
   const [supportRequestId, setSupportRequestId] = useState<string>();
   const nextId = useRef(1);
 
@@ -137,9 +152,12 @@ export default function PlaygroundPage() {
       setCustomerId(payload.customer_id);
       setSessionId(payload.session_id);
       setTraceId(payload.trace_id);
+      setRequestId(payload.request_id);
       setKnowledgeResults(payload.knowledge_search_results);
       setMemoryEvents(payload.memory_events);
       setRunStatus(payload.status);
+      setBusinessOutcome(payload.business_outcome);
+      setCompletionEvidence(payload.completion_evidence ?? undefined);
       setSupportRequestId(payload.support_request_id ?? undefined);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "请求失败");
@@ -256,6 +274,10 @@ export default function PlaygroundPage() {
                 <dd>{traceId ?? "尚未运行"}</dd>
               </div>
               <div>
+                <dt>request_id</dt>
+                <dd>{requestId ?? "尚未运行"}</dd>
+              </div>
+              <div>
                 <dt>状态</dt>
                 <dd>
                   {runStatus === "needs_human"
@@ -268,6 +290,14 @@ export default function PlaygroundPage() {
                           ? "已回复"
                           : "尚未运行"}
                 </dd>
+              </div>
+              <div>
+                <dt>订单业务结果</dt>
+                <dd>{businessOutcome ?? "未涉及"}</dd>
+              </div>
+              <div>
+                <dt>完成证据</dt>
+                <dd>{completionEvidence ?? "无"}</dd>
               </div>
               <div>
                 <dt>support_request_id</dt>

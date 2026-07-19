@@ -52,6 +52,10 @@ class InvalidAgentOutputError(RuntimeError):
     pass
 
 
+class HandoffPersistenceError(RuntimeError):
+    pass
+
+
 @dataclass(frozen=True)
 class MemoryEvent:
     tool: str
@@ -72,10 +76,11 @@ class AgentRunResult:
 class AgentContext(HarnessContext):
     message: str
     trace_id: str
+    request_id: str
     memory_store: MemoryStore
     support_store: SupportRequestStore
     trace_store: TraceStore
-    prior_actions: tuple[str, ...] = ()
+    prior_actions: list[str] = field(default_factory=list)
     memory_events: list[MemoryEvent] = field(default_factory=list)
     support_request_id: str | None = None
 
@@ -90,16 +95,22 @@ def create_handoff(
             customer_id=ctx.context.customer_id,
             session_id=ctx.context.session_id,
             reason=reason,
-            context=_support_context(ctx.context.message, context),
-            prior_actions=ctx.context.prior_actions,
+            context=ctx.context.message.strip(),
+            model_context=context,
+            prior_actions=tuple(ctx.context.prior_actions),
+            idempotency_key=(
+                f"{ctx.context.customer_id}:{ctx.context.session_id}:"
+                f"{ctx.context.request_id}:handoff"
+            ),
         )
-    except Exception:
+    except Exception as error:
+        ctx.context.prior_actions.append("create_handoff:failed")
         ctx.context.trace_store.record_tool_event(
             ctx.context.trace_id,
             status="failed",
             summary="create_handoff failed",
         )
-        raise
+        raise HandoffPersistenceError("handoff receipt could not be persisted") from error
     ctx.context.support_request_id = receipt.id
     ctx.context.trace_store.record_tool_event(
         ctx.context.trace_id,
@@ -107,10 +118,6 @@ def create_handoff(
         summary="create_handoff created receipt",
     )
     return {"support_request_id": receipt.id, "status": receipt.status}
-
-
-def _support_context(input_message: str, model_context: str) -> str:
-    return f"客户消息：{input_message.strip()}\nModel 摘要：{model_context.strip()}"
 
 
 def _handoff_result(
@@ -142,16 +149,20 @@ def _force_handoff(
             customer_id=context.customer_id,
             session_id=context.session_id,
             reason=reason,
-            context=_support_context(context.message, details),
-            prior_actions=context.prior_actions,
+            context=context.message.strip(),
+            model_context=details,
+            prior_actions=tuple(context.prior_actions),
+            idempotency_key=(
+                f"{context.customer_id}:{context.session_id}:{context.request_id}:handoff"
+            ),
         )
-    except Exception:
+    except Exception as error:
         context.trace_store.record_tool_event(
             context.trace_id,
             status="failed",
             summary="Harness-enforced handoff receipt failed",
         )
-        raise
+        raise HandoffPersistenceError("handoff receipt could not be persisted") from error
     context.trace_store.record_tool_event(
         context.trace_id,
         status="completed",
@@ -240,6 +251,7 @@ async def run_agent(
     model: Model,
     model_id: str,
     trace_id: str,
+    request_id: str,
     knowledge_store: KnowledgeStore,
     customer_id: str,
     commerce: CommerceStore,
@@ -270,6 +282,7 @@ async def run_agent(
         commerce=commerce,
         message=message,
         trace_id=trace_id,
+        request_id=request_id,
         memory_store=MemoryStore(database_path),
         support_store=support_store,
         trace_store=trace_store,
@@ -310,6 +323,7 @@ async def run_agent(
                 ),
             )
         except ModelBehaviorError:
+            context.prior_actions.append("model_tool_call:rejected")
             return _force_handoff(
                 context,
                 reason="Harness 拒绝无效操作",
@@ -317,6 +331,7 @@ async def run_agent(
                 knowledge_search_results=knowledge_search_results,
             )
         except MaxTurnsExceeded:
+            context.prior_actions.append("agent_loop:max_turns")
             return _force_handoff(
                 context,
                 reason="Harness 安全恢复已耗尽",
@@ -341,15 +356,6 @@ async def run_agent(
             context,
             reason="Harness 强制升级",
             details="create_handoff 调用失败或参数无效",
-            knowledge_search_results=knowledge_search_results,
-        )
-    if any(
-        marker in result.final_output for marker in ("人工客服", "联系人工", "转人工", "人工支持")
-    ):
-        return _force_handoff(
-            context,
-            reason="Harness 验证到未落库的人工交接声明",
-            details="Model 声明需要人工处理，但没有可验证 receipt",
             knowledge_search_results=knowledge_search_results,
         )
     if context.support_request_id is not None:

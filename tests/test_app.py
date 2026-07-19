@@ -124,6 +124,7 @@ def test_user_can_continue_an_agent_session_and_receive_local_trace_summary(
     assert first_body["reply"] == "你好，小林。"
     assert first_body["status"] == "responded"
     assert first_body["business_outcome"] == "not_applicable"
+    assert first_body["request_id"].startswith("request_")
     assert first_body["session_id"].startswith("session_")
     assert first_body["trace_id"].startswith("trace_")
     assert second.status_code == 200
@@ -802,7 +803,8 @@ def test_model_can_create_a_traceable_human_support_receipt(tmp_path: Path) -> N
         "customer_id": "customer-1",
         "session_id": run.json()["session_id"],
         "reason": "退款争议需要负责人判断",
-        "context": "客户消息：退款一直没到账\nModel 摘要：客户称订单 ORD-1001 尚未退款",
+        "context": "退款一直没到账",
+        "model_context": "客户称订单 ORD-1001 尚未退款",
         "prior_actions": [],
         "status": "open",
         "created_at": receipt.json()["created_at"],
@@ -840,9 +842,9 @@ def test_harness_forces_support_after_an_invalid_support_tool_call(tmp_path: Pat
     assert run.json()["reply"] == "业务无法安全完成，已创建可追踪的人工支持请求。"
     assert receipt.json()["customer_id"] == "customer-2"
     assert receipt.json()["reason"] == "Harness 强制升级"
-    assert receipt.json()["context"] == (
-        "客户消息：处理这个不支持的操作\nModel 摘要：create_handoff 调用失败或参数无效"
-    )
+    assert receipt.json()["context"] == "处理这个不支持的操作"
+    assert receipt.json()["model_context"] == "create_handoff 调用失败或参数无效"
+    assert receipt.json()["prior_actions"] == ["create_handoff:failed"]
 
 
 def test_duplicate_support_requests_return_one_stable_receipt(tmp_path: Path) -> None:
@@ -861,14 +863,23 @@ def test_duplicate_support_requests_return_one_stable_receipt(tmp_path: Path) ->
         type="function_call",
     )
     model = ScriptedModel([tool_call("call-1"), "已提交。", second_call, "仍在处理中。"])
-    app = create_app(database_path=tmp_path / "chatty.sqlite", model=model)
+    app = create_app(
+        database_path=tmp_path / "chatty.sqlite",
+        model=model,
+        customer_identity=customer_identity("customer-1"),
+        request_identity=lambda: "request-duplicate",
+    )
 
     with TestClient(app) as client:
-        first = client.post("/runs", json={"customer_id": "customer-1", "message": "申请人工"})
+        first = client.post(
+            "/runs",
+            json={
+                "message": "申请人工",
+            },
+        )
         second = client.post(
             "/runs",
             json={
-                "customer_id": "customer-1",
                 "session_id": first.json()["session_id"],
                 "message": "再次申请人工",
             },
@@ -879,7 +890,7 @@ def test_duplicate_support_requests_return_one_stable_receipt(tmp_path: Path) ->
     assert len(receipts.json()) == 1
 
 
-def test_plain_support_wording_forces_a_real_handoff_receipt(tmp_path: Path) -> None:
+def test_plain_support_wording_is_not_reported_as_a_completed_handoff(tmp_path: Path) -> None:
     app = create_app(
         database_path=tmp_path / "chatty.sqlite",
         model=ScriptedModel(["请联系人工客服。"]),
@@ -889,9 +900,9 @@ def test_plain_support_wording_forces_a_real_handoff_receipt(tmp_path: Path) -> 
         run = client.post("/runs", json={"message": "帮我处理"})
         receipts = client.get("/support-requests")
 
-    assert run.json()["status"] == "needs_human"
-    assert run.json()["support_request_id"].startswith("support_")
-    assert len(receipts.json()) == 1
+    assert run.json()["status"] == "responded"
+    assert run.json()["support_request_id"] is None
+    assert receipts.json() == []
 
 
 def test_support_write_failure_is_traced_and_not_reported_as_handoff(tmp_path: Path) -> None:
@@ -921,8 +932,8 @@ def test_support_write_failure_is_traced_and_not_reported_as_handoff(tmp_path: P
         run = client.post("/runs", json={"message": "需要人工授权"})
         spans = client.get(f"/traces/{run.headers['x-trace-id']}/spans")
 
-    assert run.status_code == 502
-    assert run.json() == {"detail": "llm_provider_failed"}
+    assert run.status_code == 500
+    assert run.json() == {"detail": "handoff_persistence_failed"}
     assert any(span["status"] == "failed" and "handoff" in span["summary"] for span in spans.json())
 
 

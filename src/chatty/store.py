@@ -41,6 +41,7 @@ class SupportRequest:
     session_id: str
     reason: str
     context: str
+    model_context: str
     prior_actions: tuple[str, ...]
     status: str
     created_at: str
@@ -162,6 +163,7 @@ class SupportRequestStore:
                     session_id TEXT NOT NULL,
                     reason TEXT NOT NULL,
                     context TEXT NOT NULL,
+                    model_context TEXT NOT NULL,
                     prior_actions TEXT NOT NULL,
                     status TEXT NOT NULL,
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -177,21 +179,22 @@ class SupportRequestStore:
         session_id: str,
         reason: str,
         context: str,
+        model_context: str,
         prior_actions: tuple[str, ...],
+        idempotency_key: str,
     ) -> SupportRequest:
         reason = reason.strip()
         context = context.strip()
         if not reason or not context:
             raise ValueError("support reason and context are required")
         with sqlite_connection(self.database_path) as connection:
-            idempotency_key = f"{customer_id}:{session_id}:open-handoff"
             request_id = f"support_{uuid4().hex}"
             connection.execute(
                 """
                 INSERT OR IGNORE INTO support_requests
                     (id, idempotency_key, customer_id, session_id, reason, context,
-                     prior_actions, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'open')
+                     model_context, prior_actions, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open')
                 """,
                 (
                     request_id,
@@ -200,6 +203,7 @@ class SupportRequestStore:
                     session_id,
                     reason,
                     context,
+                    model_context.strip(),
                     json.dumps(prior_actions, ensure_ascii=False),
                 ),
             )
@@ -233,6 +237,7 @@ class SupportRequestStore:
             session_id=row["session_id"],
             reason=row["reason"],
             context=row["context"],
+            model_context=row["model_context"],
             prior_actions=tuple(json.loads(row["prior_actions"])),
             status=row["status"],
             created_at=row["created_at"],

@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from chatty.agent import MissingApiKeyError, model_from_env, run_agent
+from chatty.agent import HandoffPersistenceError, MissingApiKeyError, model_from_env, run_agent
 from chatty.knowledge import KnowledgeRecord, KnowledgeStore
 from chatty.commerce import CommerceError, CommerceStore, Order
 from chatty.store import (
@@ -45,6 +45,7 @@ class RunResponse(BaseModel):
     session_id: str
     trace_id: str
     status: str
+    request_id: str
     business_outcome: str
     completion_evidence: str | None
     knowledge_search_results: list[KnowledgeRecord]
@@ -65,6 +66,7 @@ class SupportRequestResponse(BaseModel):
     session_id: str
     reason: str
     context: str
+    model_context: str
     prior_actions: tuple[str, ...]
     status: str
     created_at: str
@@ -90,6 +92,10 @@ def demo_customer_identity() -> str:
     return "demo-customer"
 
 
+def new_request_identity() -> str:
+    return f"request_{uuid4().hex}"
+
+
 def create_app(
     *,
     database_path: str | Path,
@@ -97,6 +103,7 @@ def create_app(
     model_id: str | None = None,
     knowledge_path: str | Path | None = None,
     customer_identity: Callable[[], str] = demo_customer_identity,
+    request_identity: Callable[[], str] = new_request_identity,
 ) -> FastAPI:
     app = FastAPI(title="Chatty Agent", version="0.1.0")
     app.add_middleware(
@@ -127,6 +134,7 @@ def create_app(
     async def create_run(
         request: RunRequest,
         customer_id: Annotated[str, Depends(customer_identity)],
+        request_id: Annotated[str, Depends(request_identity)],
     ) -> RunResponse:
         nonlocal configured_model
         session_id = request.session_id or f"session_{uuid4().hex}"
@@ -146,6 +154,7 @@ def create_app(
                 model=active_model,
                 model_id=active_model_id,
                 trace_id=trace_id,
+                request_id=request_id,
                 knowledge_store=knowledge_store,
                 customer_id=customer_id,
                 commerce=commerce,
@@ -154,6 +163,13 @@ def create_app(
             )
         except SessionCustomerMismatchError as error:
             raise HTTPException(status_code=409, detail="session_customer_mismatch") from error
+        except HandoffPersistenceError as error:
+            trace_store.fail(trace_id)
+            raise HTTPException(
+                status_code=500,
+                detail="handoff_persistence_failed",
+                headers={"X-Trace-ID": trace_id},
+            ) from error
         except Exception as error:
             trace_store.fail(trace_id)
             raise HTTPException(
@@ -166,6 +182,7 @@ def create_app(
             customer_id=customer_id,
             session_id=session_id,
             trace_id=trace_id,
+            request_id=request_id,
             status=(
                 "needs_human"
                 if result.support_request_id is not None

@@ -45,7 +45,10 @@ test("playground renders loading, success, session continuity, and errors", asyn
         customer_id: "demo-customer",
         session_id: "session-1",
         trace_id: "trace-1",
+        request_id: "request-1",
         status: "needs_human",
+        business_outcome: "not_completed",
+        completion_evidence: "handoff:support-1",
         needs_human: true,
         support_request_id: "support-1",
         knowledge_search_results: [
@@ -92,6 +95,11 @@ test("playground renders loading, success, session continuity, and errors", asyn
   await screen.findByText("第一条回复");
   assert.equal(screen.getByText("session-1").textContent, "session-1");
   assert.equal(screen.getByText("trace-1").textContent, "trace-1");
+  assert.equal(screen.getByText("request-1").textContent, "request-1");
+  assert.equal(
+    screen.getByText("handoff:support-1").textContent,
+    "handoff:support-1",
+  );
   assert.equal(screen.getByText("租期计算").textContent, "租期计算");
   assert.equal(
     screen.getByRole("heading", { name: "知识检索结果" }).textContent,
