@@ -189,7 +189,7 @@ def test_model_can_search_real_knowledge_and_return_source_evidence(tmp_path: Pa
         trace = client.get(f"/traces/{response.json()['trace_id']}")
 
     assert response.status_code == 200
-    assert model.tool_names[0] == ["search_knowledge"]
+    assert "search_knowledge" in model.tool_names[0]
     query_schema = model.tool_schemas[0]["search_knowledge"]["properties"]["query"]
     assert query_schema["minLength"] == 1
     assert query_schema["maxLength"] == 500
@@ -333,3 +333,78 @@ def test_search_failure_reaches_the_model_as_a_structured_tool_result(tmp_path: 
     assert response.status_code == 200
     assert "knowledge_search_unavailable" in json.dumps(model.inputs[1], ensure_ascii=False)
     assert response.json()["knowledge_search_results"] == []
+
+
+def test_model_selected_order_tool_persists_state_read_by_fastapi(tmp_path: Path) -> None:
+    arguments = json.dumps(
+        {
+            "idempotency_key": "customer-request-1",
+            "product_id": "SUIT-001",
+            "size": "L",
+            "fulfillment_mode": "rental",
+            "quantity": 1,
+            "start_date": "2026-08-01",
+            "end_date": "2026-08-03",
+            "amount_cents": 76000,
+            "channel": "Chatty",
+            "address": "上海市静安区",
+            "risk": "无",
+        }
+    )
+    model = ScriptedModel(
+        [
+            ResponseFunctionToolCall(
+                arguments=arguments,
+                call_id="call-create-order",
+                name="create_order",
+                type="function_call",
+            ),
+            "订单已创建，等待确认。",
+        ]
+    )
+    app = create_app(
+        database_path=tmp_path / "chatty.sqlite",
+        model=model,
+        model_id="controllable-test-model",
+    )
+
+    with TestClient(app) as client:
+        run = client.post(
+            "/runs",
+            json={
+                "message": "请预订 8 月 1 日到 3 日的 L 码西装",
+                "customer_id": "trusted-customer",
+                "session_id": "trusted-session",
+            },
+        )
+        orders = client.get("/orders")
+        order_id = orders.json()[0]["id"]
+        detail = client.get(f"/orders/{order_id}")
+
+    assert run.status_code == 200
+    assert run.json()["reply"] == "订单已创建，等待确认。"
+    assert set(
+        [
+        "check_availability",
+        "create_order",
+        "view_order",
+        "confirm_order",
+        "cancel_order",
+        ]
+    ).issubset(model.tool_names[0])
+    assert orders.status_code == 200
+    assert len(orders.json()) == 1
+    assert detail.status_code == 200
+    assert detail.json()["customer_id"] == "trusted-customer"
+    assert detail.json()["session_id"] == "trusted-session"
+    assert detail.json()["status"] == "pending"
+    assert [event["event_type"] for event in detail.json()["events"]] == ["created"]
+    assert "order_" in json.dumps(model.inputs[1], ensure_ascii=False)
+
+
+def test_order_detail_returns_not_found_for_unknown_order(tmp_path: Path) -> None:
+    with TestClient(create_app(database_path=tmp_path / "chatty.sqlite")) as client:
+        response = client.get("/orders/missing")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "order_not_found"}

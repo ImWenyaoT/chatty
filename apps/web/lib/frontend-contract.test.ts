@@ -21,7 +21,6 @@ const homeSource = readAppSource("app/page.tsx");
 const dashboardSource = readAppSource("app/dashboard/page.tsx");
 const jobActionsSource = readAppSource("app/dashboard/JobActions.tsx");
 const ordersSource = readAppSource("app/orders/page.tsx");
-const orderDataSource = readAppSource("app/components/seller/orderData.ts");
 const playgroundSource = readAppSource("app/playground/page.tsx");
 const cssSource = readAppSource("app/globals.css");
 const webPackageSource = readAppSource("package.json");
@@ -167,7 +166,7 @@ test("control-plane surfaces render durable status and explicit unknown or empty
   assert.match(jobActionsSource, /updateBackgroundJob/);
 });
 
-test("order operations stays as workflow evidence instead of an empty route", () => {
+test("orders page is a thin FastAPI client for SQLite orders and events", () => {
   const visibleOrderCopy = [
     dashboardSource,
     ordersSource,
@@ -179,14 +178,16 @@ test("order operations stays as workflow evidence instead of an empty route", ()
   assert.doesNotMatch(visibleOrderCopy, /订单管理/);
   assert.match(visibleOrderCopy, /订单跟进/);
   assert.match(ordersSource, /aria-label="搜索订单"/);
-  assert.match(ordersSource, /<h3>履约进度<\/h3>/);
   assert.match(ordersSource, /<h3>订单时间线<\/h3>/);
-  assert.match(orderDataSource, /status: ["']待复核["']/);
-  assert.match(orderDataSource, /status: ["']待发货["']/);
-  assert.match(orderDataSource, /status: ["']租赁中["']/);
-  assert.match(orderDataSource, /mode: ["']ai_resolved["']/);
-  assert.match(ordersSource, /AI 证据/);
-  assert.match(ordersSource, /节省/);
+  assert.match(ordersSource, /API_BASE_URL = "http:\/\/127\.0\.0\.1:8000"/);
+  assert.match(ordersSource, /fetch\(`\$\{API_BASE_URL\}\/orders`/);
+  assert.match(ordersSource, /role="status"/);
+  assert.match(ordersSource, /role="alert"/);
+  assert.match(ordersSource, /暂无订单/);
+  assert.match(ordersSource, /selected\.events\.map/);
+  assert.doesNotMatch(ordersSource, /SELLER_ORDERS/);
+  assert.doesNotMatch(ordersSource, /orderData/);
+  assert.doesNotMatch(ordersSource, /@rental\/db/);
   assert.doesNotMatch(playgroundSource, /fetch\(["']\/api\/orders\/place["']/);
   assert.doesNotMatch(playgroundSource, /提交订单号，标记已下单/);
 });

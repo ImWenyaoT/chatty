@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from chatty.agent import MissingApiKeyError, model_from_env, run_agent
 from chatty.knowledge import KnowledgeRecord, KnowledgeStore
+from chatty.commerce import CommerceError, CommerceStore, Order
 from chatty.store import TraceStore
 from chatty.tracing import SQLiteTracingProcessor
 
@@ -16,6 +17,7 @@ from chatty.tracing import SQLiteTracingProcessor
 class RunRequest(BaseModel):
     message: str = Field(min_length=1, max_length=20_000)
     session_id: str | None = Field(default=None, min_length=1, max_length=200)
+    customer_id: str = Field(default="demo-customer", min_length=1, max_length=200)
 
 
 class RunResponse(BaseModel):
@@ -57,6 +59,7 @@ def create_app(
         else Path(__file__).parents[2] / "knowledge" / "records.jsonl"
     )
     knowledge_store.import_jsonl(active_knowledge_path)
+    commerce = CommerceStore(database_path)
     set_trace_processors([SQLiteTracingProcessor(trace_store)])
     configured_model = (model, model_id or "injected-model") if model is not None else None
 
@@ -85,6 +88,8 @@ def create_app(
                 model_id=active_model_id,
                 trace_id=trace_id,
                 knowledge_store=knowledge_store,
+                customer_id=request.customer_id,
+                commerce=commerce,
             )
         except Exception as error:
             trace_store.fail(trace_id)
@@ -103,5 +108,16 @@ def create_app(
         if trace is None:
             raise HTTPException(status_code=404, detail="trace_not_found")
         return TraceResponse(**trace.__dict__, span_types=trace_store.span_types(trace_id))
+
+    @app.get("/orders", response_model=list[Order])
+    async def list_orders() -> list[Order]:
+        return commerce.list_orders()
+
+    @app.get("/orders/{order_id}", response_model=Order)
+    async def get_order(order_id: str) -> Order:
+        try:
+            return commerce.get_order(order_id)
+        except CommerceError as error:
+            raise HTTPException(status_code=404, detail="order_not_found") from error
 
     return app

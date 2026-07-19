@@ -19,12 +19,17 @@ from agents import (
 from pydantic import Field
 
 from chatty.knowledge import KnowledgeRecord, KnowledgeStore
+from agents.tool import Tool
+
+from chatty.commerce import CommerceStore
+from chatty.order_tools import HarnessContext, build_order_tools
 
 DEFAULT_BASE_URL = "https://api.deepseek.com"
 DEFAULT_MODEL_ID = "deepseek-v4-pro"
 
 AGENT_INSTRUCTIONS = """你是 Chatty，一个简洁、可靠的客服 Agent。
-直接理解用户消息并回答，不要声称执行了当前没有提供的业务工具。
+直接理解用户消息，由你选择合适的 Tool 查询库存、查看或更改订单。
+只有 Tool 返回 ok=true 且 SQLite 状态与请求一致时，才能声称业务操作完成。
 信息不足时提出一个聚焦的问题，不要编造事实。
 回答政策或商品事实前必须调用 search_knowledge；使用检索内容时必须原样附上至少一个 source。
 """
@@ -65,6 +70,8 @@ async def run_agent(
     model_id: str,
     trace_id: str,
     knowledge_store: KnowledgeStore,
+    customer_id: str,
+    commerce: CommerceStore,
 ) -> AgentRunResult:
     knowledge_search_results: dict[str, KnowledgeRecord] = {}
 
@@ -84,12 +91,13 @@ async def run_agent(
             knowledge_search_results[record.id] = record
         return search_result.model_dump_json()
 
-    agent = Agent(
+    agent_tools: list[Tool] = [search_knowledge, *build_order_tools()]
+    agent: Agent[HarnessContext] = Agent(
         name="Chatty",
         instructions=AGENT_INSTRUCTIONS,
         model=model,
         model_settings=ModelSettings(extra_body={"thinking": {"type": "disabled"}}),
-        tools=[search_knowledge],
+        tools=agent_tools,
     )
     session = SQLiteSession(
         session_id,
@@ -101,6 +109,11 @@ async def run_agent(
         result = await Runner.run(
             agent,
             message,
+            context=HarnessContext(
+                customer_id=customer_id,
+                session_id=session_id,
+                commerce=commerce,
+            ),
             session=session,
             run_config=RunConfig(
                 workflow_name="Chatty Agent Run",
