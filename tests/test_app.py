@@ -147,6 +147,23 @@ def test_user_can_continue_an_agent_session_and_receive_local_trace_summary(
     }
 
 
+def test_client_cannot_claim_an_unknown_session_id(tmp_path: Path) -> None:
+    app = create_app(
+        database_path=tmp_path / "chatty.sqlite",
+        model=ScriptedModel(["不应运行"]),
+        customer_identity=customer_identity("trusted-customer"),
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/runs",
+            json={"message": "继续", "session_id": "session_client_chosen"},
+        )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "session_not_found"}
+
+
 def test_empty_model_output_forces_a_traceable_handoff(tmp_path: Path) -> None:
     app = create_app(
         database_path=tmp_path / "chatty.sqlite",
@@ -387,7 +404,6 @@ def test_model_selected_order_tool_persists_state_read_by_fastapi(tmp_path: Path
             json={
                 "message": "请预订 8 月 1 日到 3 日的 L 码西装",
                 "customer_id": "trusted-customer",
-                "session_id": "trusted-session",
             },
         )
         orders = client.get("/orders")
@@ -411,7 +427,7 @@ def test_model_selected_order_tool_persists_state_read_by_fastapi(tmp_path: Path
     assert len(orders.json()) == 1
     assert detail.status_code == 200
     assert detail.json()["customer_id"] == "trusted-customer"
-    assert detail.json()["session_id"] == "trusted-session"
+    assert detail.json()["session_id"] == run.json()["session_id"]
     assert detail.json()["status"] == "pending"
     assert [event["event_type"] for event in detail.json()["events"]] == ["created"]
     assert "order_" in json.dumps(model.inputs[1], ensure_ascii=False)
@@ -798,6 +814,9 @@ def test_model_can_create_a_traceable_human_support_receipt(tmp_path: Path) -> N
 
     assert run.status_code == 200
     assert run.json()["status"] == "needs_human"
+    assert run.json()["business_outcome"] == "not_completed"
+    assert run.json()["needs_human"] is True
+    assert run.json()["completion_evidence"] == (f"handoff:{run.json()['support_request_id']}")
     assert run.json()["support_request_id"].startswith("support_")
     assert receipt.status_code == 200
     assert receipt.json() == {
@@ -812,6 +831,45 @@ def test_model_can_create_a_traceable_human_support_receipt(tmp_path: Path) -> N
         "created_at": receipt.json()["created_at"],
         "updated_at": receipt.json()["updated_at"],
     }
+
+
+def test_handoff_receipt_keeps_prior_cross_domain_tool_actions(tmp_path: Path) -> None:
+    model = ScriptedModel(
+        [
+            ResponseFunctionToolCall(
+                arguments=json.dumps(
+                    {
+                        "product_id": "SUIT-001",
+                        "size": "L",
+                        "fulfillment_mode": "buyout",
+                        "quantity": 1,
+                        "start_date": None,
+                        "end_date": None,
+                    }
+                ),
+                call_id="call-availability-before-handoff",
+                name="check_availability",
+                type="function_call",
+            ),
+            ResponseFunctionToolCall(
+                arguments=json.dumps(
+                    {"reason": "需要人工定价", "context": "已确认库存，需要人工报价"}
+                ),
+                call_id="call-handoff-after-availability",
+                name="create_handoff",
+                type="function_call",
+            ),
+            "已转交人工报价。",
+        ]
+    )
+    app = create_app(database_path=tmp_path / "chatty.sqlite", model=model)
+
+    with TestClient(app) as client:
+        run = client.post("/runs", json={"message": "查库存后转人工报价"})
+        receipt = client.get(f"/support-requests/{run.json()['support_request_id']}")
+
+    assert run.status_code == 200
+    assert receipt.json()["prior_actions"] == ["check_availability:ok"]
 
 
 def test_harness_forces_support_after_an_invalid_support_tool_call(tmp_path: Path) -> None:
@@ -858,13 +916,7 @@ def test_duplicate_support_requests_return_one_stable_receipt(tmp_path: Path) ->
             type="function_call",
         )
 
-    second_call = ResponseFunctionToolCall(
-        arguments=json.dumps({"reason": "仍是退款问题", "context": "换一种说法"}),
-        call_id="call-2",
-        name="create_handoff",
-        type="function_call",
-    )
-    model = ScriptedModel([tool_call("call-1"), "已提交。", second_call, "仍在处理中。"])
+    model = ScriptedModel([tool_call("call-1"), "已提交。", tool_call("call-2"), "仍在处理中。"])
     app = create_app(
         database_path=tmp_path / "chatty.sqlite",
         model=model,
@@ -883,13 +935,86 @@ def test_duplicate_support_requests_return_one_stable_receipt(tmp_path: Path) ->
             "/runs",
             json={
                 "session_id": first.json()["session_id"],
-                "message": "再次申请人工",
+                "message": "申请人工",
             },
         )
         receipts = client.get("/support-requests")
 
     assert first.json()["support_request_id"] == second.json()["support_request_id"]
     assert len(receipts.json()) == 1
+
+
+def test_handoff_idempotency_rejects_different_evidence(tmp_path: Path) -> None:
+    def handoff(call_id: str, reason: str) -> ResponseFunctionToolCall:
+        return ResponseFunctionToolCall(
+            arguments=json.dumps({"reason": reason, "context": reason}),
+            call_id=call_id,
+            name="create_handoff",
+            type="function_call",
+        )
+
+    model = ScriptedModel(
+        [
+            handoff("call-1", "退款争议"),
+            "已提交。",
+            handoff("call-2", "改为物流争议"),
+            "仍在处理中。",
+        ]
+    )
+    app = create_app(
+        database_path=tmp_path / "chatty.sqlite",
+        model=model,
+        request_identity=lambda: "request-conflict",
+    )
+
+    with TestClient(app) as client:
+        first = client.post("/runs", json={"message": "申请人工"})
+        second = client.post(
+            "/runs",
+            json={"message": "改为物流问题", "session_id": first.json()["session_id"]},
+        )
+
+    assert first.status_code == 200
+    assert second.status_code == 409
+    assert second.json() == {"detail": "handoff_idempotency_conflict"}
+
+
+def test_failed_memory_action_is_kept_when_model_then_hands_off(tmp_path: Path) -> None:
+    model = ScriptedModel(
+        [
+            ResponseFunctionToolCall(
+                arguments=json.dumps(
+                    {
+                        "fact": "客户偏爱羊毛",
+                        "explicitly_stated": True,
+                        "stable": True,
+                    },
+                    ensure_ascii=False,
+                ),
+                call_id="failed-memory-before-handoff",
+                name="save_customer_memory",
+                type="function_call",
+            ),
+            ResponseFunctionToolCall(
+                arguments=json.dumps(
+                    {"reason": "需要人工确认偏好", "context": "Memory 原文校验失败"},
+                    ensure_ascii=False,
+                ),
+                call_id="handoff-after-memory-failure",
+                name="create_handoff",
+                type="function_call",
+            ),
+            "已转人工确认。",
+        ]
+    )
+    app = create_app(database_path=tmp_path / "chatty.sqlite", model=model)
+
+    with TestClient(app) as client:
+        run = client.post("/runs", json={"message": "羊毛看起来不错"})
+        receipt = client.get(f"/support-requests/{run.json()['support_request_id']}")
+
+    assert run.status_code == 200
+    assert receipt.json()["prior_actions"] == ["save_customer_memory:failed"]
 
 
 def test_plain_support_wording_is_not_reported_as_a_completed_handoff(tmp_path: Path) -> None:

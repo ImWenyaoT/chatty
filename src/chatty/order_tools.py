@@ -35,13 +35,16 @@ class HarnessContext:
     session_id: str
     commerce: CommerceStore
     business_receipts: list[BusinessToolReceipt] = field(default_factory=list)
+    prior_actions: list[str] = field(default_factory=list)
 
     def record_read_success(self, tool_name: str, evidence: str) -> None:
+        self.prior_actions.append(f"{tool_name}:ok")
         self.business_receipts.append(
             BusinessToolReceipt(tool_name=tool_name, ok=True, evidence=evidence)
         )
 
     def record_order_success(self, tool_name: str, order: Order) -> None:
+        self.prior_actions.append(f"{tool_name}:ok")
         self.business_receipts.append(
             BusinessToolReceipt(
                 tool_name=tool_name,
@@ -52,6 +55,7 @@ class HarnessContext:
         )
 
     def record_failure(self, tool_name: str, error: Exception) -> None:
+        self.prior_actions.append(f"{tool_name}:failed")
         self.business_receipts.append(
             BusinessToolReceipt(tool_name=tool_name, ok=False, error=_error_code(error))
         )

@@ -68,7 +68,7 @@ function isKnowledgeResult(payload: unknown): payload is KnowledgeResult {
 function isRunResponse(payload: unknown): payload is RunResponse {
   if (!payload || typeof payload !== "object") return false;
   const candidate = payload as Record<string, unknown>;
-  return (
+  const hasPublicShape =
     typeof candidate.reply === "string" &&
     typeof candidate.customer_id === "string" &&
     typeof candidate.session_id === "string" &&
@@ -85,10 +85,37 @@ function isRunResponse(payload: unknown): payload is RunResponse {
     typeof candidate.needs_human === "boolean" &&
     (candidate.support_request_id === null ||
       typeof candidate.support_request_id === "string") &&
-    candidate.needs_human === (candidate.status === "needs_human") &&
     ["completed", "not_completed", "responded", "needs_human"].includes(
       String(candidate.status),
-    )
+    );
+  if (!hasPublicShape) return false;
+  if (candidate.status === "needs_human") {
+    return (
+      candidate.needs_human === true &&
+      candidate.business_outcome === "not_completed" &&
+      typeof candidate.support_request_id === "string" &&
+      candidate.completion_evidence ===
+        `handoff:${candidate.support_request_id}`
+    );
+  }
+  if (candidate.needs_human || candidate.support_request_id !== null)
+    return false;
+  if (candidate.status === "completed") {
+    return (
+      candidate.business_outcome === "verified" &&
+      typeof candidate.completion_evidence === "string"
+    );
+  }
+  if (candidate.status === "not_completed") {
+    return (
+      candidate.business_outcome === "not_completed" &&
+      typeof candidate.completion_evidence === "string"
+    );
+  }
+  return (
+    candidate.status === "responded" &&
+    candidate.business_outcome === "not_applicable" &&
+    candidate.completion_evidence === null
   );
 }
 

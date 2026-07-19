@@ -9,12 +9,19 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from chatty.agent import HandoffPersistenceError, MissingApiKeyError, model_from_env, run_agent
-from chatty.knowledge import KnowledgeRecord, KnowledgeStore
+from chatty.agent import (
+    HandoffIdempotencyConflictError,
+    HandoffPersistenceError,
+    MissingApiKeyError,
+    model_from_env,
+    run_agent,
+)
 from chatty.commerce import CommerceError, CommerceStore, Order
+from chatty.knowledge import KnowledgeRecord, KnowledgeStore
 from chatty.store import (
     MemoryStore,
     SessionCustomerMismatchError,
+    SessionNotFoundError,
     SupportRequestStore,
     TraceStore,
 )
@@ -138,6 +145,13 @@ def create_app(
     ) -> RunResponse:
         nonlocal configured_model
         session_id = request.session_id or f"session_{uuid4().hex}"
+        if request.session_id is not None:
+            try:
+                memory_store.require_session(session_id=session_id, customer_id=customer_id)
+            except SessionNotFoundError as error:
+                raise HTTPException(status_code=409, detail="session_not_found") from error
+            except SessionCustomerMismatchError as error:
+                raise HTTPException(status_code=409, detail="session_customer_mismatch") from error
         trace_id = gen_trace_id()
         try:
             if configured_model is None:
@@ -163,6 +177,13 @@ def create_app(
             )
         except SessionCustomerMismatchError as error:
             raise HTTPException(status_code=409, detail="session_customer_mismatch") from error
+        except HandoffIdempotencyConflictError as error:
+            trace_store.fail(trace_id)
+            raise HTTPException(
+                status_code=409,
+                detail="handoff_idempotency_conflict",
+                headers={"X-Trace-ID": trace_id},
+            ) from error
         except HandoffPersistenceError as error:
             trace_store.fail(trace_id)
             raise HTTPException(

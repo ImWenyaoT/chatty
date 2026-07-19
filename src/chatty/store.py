@@ -52,6 +52,14 @@ class SessionCustomerMismatchError(RuntimeError):
     pass
 
 
+class SessionNotFoundError(RuntimeError):
+    pass
+
+
+class SupportRequestIdempotencyConflictError(RuntimeError):
+    pass
+
+
 @contextmanager
 def sqlite_connection(database_path: Path) -> Iterator[sqlite3.Connection]:
     connection = sqlite3.connect(database_path)
@@ -109,6 +117,17 @@ class MemoryStore:
                 (session_id,),
             ).fetchone()
         if row is None or row[0] != customer_id:
+            raise SessionCustomerMismatchError("session belongs to another customer")
+
+    def require_session(self, *, session_id: str, customer_id: str) -> None:
+        with sqlite_connection(self.database_path) as connection:
+            row = connection.execute(
+                "SELECT customer_id FROM customer_sessions WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
+        if row is None:
+            raise SessionNotFoundError("session was not issued by this Harness")
+        if row[0] != customer_id:
             raise SessionCustomerMismatchError("session belongs to another customer")
 
     def save(self, *, customer_id: str, fact: str, source_id: str) -> CustomerMemory:
@@ -213,6 +232,17 @@ class SupportRequestStore:
             ).fetchone()
         if row is None:
             raise RuntimeError("support request was not persisted")
+        if (
+            row["customer_id"] != customer_id
+            or row["session_id"] != session_id
+            or row["reason"] != reason
+            or row["context"] != context
+            or row["model_context"] != model_context.strip()
+            or tuple(json.loads(row["prior_actions"])) != prior_actions
+        ):
+            raise SupportRequestIdempotencyConflictError(
+                "handoff idempotency key was reused with different evidence"
+            )
         return self._request(row)
 
     def get(self, request_id: str) -> SupportRequest | None:

@@ -126,6 +126,10 @@ def test_create_is_idempotent_and_unknown_or_insufficient_inventory_fails(
     assert replay.id == first.id
     assert len(store.list_orders()) == 1
 
+    with pytest.raises(CommerceError, match="idempotency_conflict"):
+        store.create_order(rental_order(quantity=1))
+    assert len(store.list_orders()) == 1
+
     with pytest.raises(CommerceError, match="unknown_variant"):
         store.create_order(rental_order(idempotency_key="unknown", size="XXL"))
 

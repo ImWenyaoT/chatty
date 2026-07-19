@@ -20,14 +20,19 @@ from agents import (
     function_tool,
 )
 from agents.exceptions import MaxTurnsExceeded, ModelBehaviorError
+from agents.tool import Tool
 from pydantic import Field, StringConstraints
 
-from chatty.knowledge import KnowledgeRecord, KnowledgeStore
-from agents.tool import Tool
-
 from chatty.commerce import CommerceStore
+from chatty.knowledge import KnowledgeRecord, KnowledgeStore
 from chatty.order_tools import BusinessOutcome, HarnessContext, build_order_tools
-from chatty.store import CustomerMemory, MemoryStore, SupportRequestStore, TraceStore
+from chatty.store import (
+    CustomerMemory,
+    MemoryStore,
+    SupportRequestIdempotencyConflictError,
+    SupportRequestStore,
+    TraceStore,
+)
 
 DEFAULT_BASE_URL = "https://api.deepseek.com"
 DEFAULT_MODEL_ID = "deepseek-v4-pro"
@@ -56,6 +61,10 @@ class HandoffPersistenceError(RuntimeError):
     pass
 
 
+class HandoffIdempotencyConflictError(RuntimeError):
+    pass
+
+
 @dataclass(frozen=True)
 class MemoryEvent:
     tool: str
@@ -80,7 +89,6 @@ class AgentContext(HarnessContext):
     memory_store: MemoryStore
     support_store: SupportRequestStore
     trace_store: TraceStore
-    prior_actions: list[str] = field(default_factory=list)
     memory_events: list[MemoryEvent] = field(default_factory=list)
     support_request_id: str | None = None
 
@@ -103,6 +111,9 @@ def create_handoff(
                 f"{ctx.context.request_id}:handoff"
             ),
         )
+    except SupportRequestIdempotencyConflictError as error:
+        ctx.context.prior_actions.append("create_handoff:failed")
+        raise HandoffIdempotencyConflictError("handoff_idempotency_conflict") from error
     except Exception as error:
         ctx.context.prior_actions.append("create_handoff:failed")
         ctx.context.trace_store.record_tool_event(
@@ -156,6 +167,8 @@ def _force_handoff(
                 f"{context.customer_id}:{context.session_id}:{context.request_id}:handoff"
             ),
         )
+    except SupportRequestIdempotencyConflictError as error:
+        raise HandoffIdempotencyConflictError("handoff_idempotency_conflict") from error
     except Exception as error:
         context.trace_store.record_tool_event(
             context.trace_id,
@@ -187,18 +200,23 @@ def memory_tools() -> list[Tool]:
         explicitly_stated: Literal[True],
         stable: Literal[True],
     ) -> str:
-        fact = fact.strip()
-        if not fact:
-            raise ValueError("memory fact must not be blank")
-        if fact.casefold() not in context.context.message.casefold():
-            raise ValueError("memory fact must be a verbatim part of the customer message")
-        memory = context.context.memory_store.save(
-            customer_id=context.context.customer_id,
-            fact=fact,
-            source_id=context.context.trace_id,
-        )
+        try:
+            fact = fact.strip()
+            if not fact:
+                raise ValueError("memory fact must not be blank")
+            if fact.casefold() not in context.context.message.casefold():
+                raise ValueError("memory fact must be a verbatim part of the customer message")
+            memory = context.context.memory_store.save(
+                customer_id=context.context.customer_id,
+                fact=fact,
+                source_id=context.context.trace_id,
+            )
+        except Exception:
+            context.context.prior_actions.append("save_customer_memory:failed")
+            raise
         event = MemoryEvent(tool="save_customer_memory", memories=[memory])
         context.context.memory_events.append(event)
+        context.context.prior_actions.append("save_customer_memory:ok")
         return json.dumps(
             {"tool": event.tool, "memories": [asdict(memory)]},
             ensure_ascii=False,
@@ -213,16 +231,21 @@ def memory_tools() -> list[Tool]:
         ],
         limit: Annotated[int, Field(ge=1, le=10)] = 5,
     ) -> str:
-        query = query.strip()
-        if not query:
-            raise ValueError("memory query must not be blank")
-        memories = context.context.memory_store.search(
-            customer_id=context.context.customer_id,
-            query=query,
-            limit=limit,
-        )
+        try:
+            query = query.strip()
+            if not query:
+                raise ValueError("memory query must not be blank")
+            memories = context.context.memory_store.search(
+                customer_id=context.context.customer_id,
+                query=query,
+                limit=limit,
+            )
+        except Exception:
+            context.context.prior_actions.append("search_customer_memory:failed")
+            raise
         event = MemoryEvent(tool="search_customer_memory", memories=memories)
         context.context.memory_events.append(event)
+        context.context.prior_actions.append("search_customer_memory:ok")
         return json.dumps(
             {"tool": event.tool, "memories": [asdict(memory) for memory in memories]},
             ensure_ascii=False,
@@ -272,6 +295,7 @@ async def run_agent(
             limit: Maximum number of structured source records to return.
         """
         search_result = knowledge_store.search(query, limit=limit)
+        context.prior_actions.append(f"search_knowledge:{search_result.status}")
         for record in search_result.results:
             knowledge_search_results[record.id] = record
         return search_result.model_dump_json()
@@ -346,6 +370,7 @@ async def run_agent(
             context,
             reason="Harness 需要人工权限或授权",
             details="Tool 权限边界中断了同步执行",
+            knowledge_search_results=knowledge_search_results,
         )
     if not isinstance(result.final_output, str) or not result.final_output.strip():
         return _force_handoff(

@@ -231,7 +231,10 @@ class CommerceStore:
                 (order_input.idempotency_key,),
             ).fetchone()
             if existing is not None:
-                return self._get_order(str(existing["id"]), connection)
+                replay = self._get_order(str(existing["id"]), connection)
+                if not _same_create_order(replay, order_input):
+                    raise CommerceError("idempotency_conflict")
+                return replay
 
             self.check_availability(
                 product_id=order_input.product_id,
@@ -428,3 +431,20 @@ class CommerceStore:
 
 def _timestamp() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _same_create_order(order: Order, requested: CreateOrderInput) -> bool:
+    return (
+        order.customer_id == requested.customer_id
+        and order.session_id == requested.session_id
+        and order.product_id == requested.product_id.strip().upper()
+        and order.size == requested.size.strip().upper()
+        and order.fulfillment_mode == requested.fulfillment_mode
+        and order.quantity == requested.quantity
+        and order.start_date == requested.start_date
+        and order.end_date == requested.end_date
+        and order.amount_cents == requested.amount_cents
+        and order.channel == requested.channel
+        and order.address == requested.address
+        and order.risk == requested.risk
+    )
