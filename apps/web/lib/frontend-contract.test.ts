@@ -19,6 +19,7 @@ const ordersSource = readAppSource("app/orders/page.tsx");
 const playgroundSource = readAppSource("app/playground/page.tsx");
 const cssSource = readAppSource("app/globals.css");
 const webPackageSource = readAppSource("package.json");
+const nextConfigSource = readAppSource("next.config.ts");
 test("web runtime contains only the thin Next.js application", () => {
   const webPackage = JSON.parse(webPackageSource) as {
     dependencies?: Record<string, string>;
@@ -56,7 +57,7 @@ test("playground controls expose state beyond color alone", () => {
 });
 
 test("playground is a thin FastAPI client with session continuity", () => {
-  assert.match(playgroundSource, /API_BASE_URL = "http:\/\/127\.0\.0\.1:8000"/);
+  assert.match(playgroundSource, /API_BASE_URL = "\/api\/chatty"/);
   assert.match(playgroundSource, /`\$\{API_BASE_URL\}\/runs`/);
   assert.match(playgroundSource, /session_id: sessionId/);
   assert.match(playgroundSource, /setSessionId\(payload\.session_id\)/);
@@ -65,6 +66,15 @@ test("playground is a thin FastAPI client with session continuity", () => {
   assert.doesNotMatch(playgroundSource, /@rental\//);
   assert.doesNotMatch(playgroundSource, /\/api\/playground/);
   assert.doesNotMatch(playgroundSource, /controlPlane/);
+});
+
+test("browser calls FastAPI through a same-origin development rewrite", () => {
+  assert.match(nextConfigSource, /allowedDevOrigins: \["127\.0\.0\.1"\]/);
+  assert.match(nextConfigSource, /source: "\/api\/chatty\/:path\*"/);
+  assert.match(
+    nextConfigSource,
+    /destination: "http:\/\/127\.0\.0\.1:8000\/:path\*"/,
+  );
 });
 
 test("frontend CSS keeps focus visible and mobile touch targets large enough", () => {
@@ -132,7 +142,7 @@ test("customer service workspace keeps product language with technical observabi
 });
 
 test("dashboard is a thin FastAPI client for real local traces", () => {
-  assert.match(dashboardSource, /API_BASE_URL = "http:\/\/127\.0\.0\.1:8000"/);
+  assert.match(dashboardSource, /API_BASE_URL = "\/api\/chatty"/);
   assert.match(dashboardSource, /fetch\(`\$\{API_BASE_URL\}\/traces`/);
   assert.match(
     dashboardSource,
@@ -165,7 +175,7 @@ test("orders page is a thin FastAPI client for SQLite orders and events", () => 
   assert.match(visibleOrderCopy, /订单跟进/);
   assert.match(ordersSource, /aria-label="搜索订单"/);
   assert.match(ordersSource, /<h3>订单时间线<\/h3>/);
-  assert.match(ordersSource, /API_BASE_URL = "http:\/\/127\.0\.0\.1:8000"/);
+  assert.match(ordersSource, /API_BASE_URL = "\/api\/chatty"/);
   assert.match(ordersSource, /fetch\(`\$\{API_BASE_URL\}\/orders`/);
   assert.match(ordersSource, /role="status"/);
   assert.match(ordersSource, /role="alert"/);

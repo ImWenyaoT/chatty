@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { SellerNavigation } from "../components/seller/SellerNavigation";
 import { WorkspaceHeader } from "../components/seller/WorkspaceHeader";
 
-const API_BASE_URL = "http://127.0.0.1:8000";
+const API_BASE_URL = "/api/chatty";
 
 type OrderEvent = {
   id: number;

@@ -9,13 +9,12 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from chatty.commerce import CommerceError, CommerceStore, Order
+from chatty.commerce import CommerceError, Order
 from chatty.run import ChattyRunModule, CompletedRun, RunFailure, RunInput
+from chatty.runtime import ChattyRuntime
 from chatty.store import (
     CustomerMemory,
-    MemoryStore,
     SupportRequest,
-    SupportRequestStore,
     TraceSpanSummary,
     TraceStore,
     TraceSummary,
@@ -83,16 +82,19 @@ def create_app(
         allow_methods=["GET", "POST"],
         allow_headers=["content-type"],
     )
-    runs = ChattyRunModule(
-        database_path=database_path,
-        model=model,
-        model_id=model_id,
+    runtime = ChattyRuntime.open(
+        database_path,
         knowledge_path=knowledge_path,
     )
-    trace_store = TraceStore(database_path)
-    memory_store = MemoryStore(database_path)
-    support_store = SupportRequestStore(database_path)
-    commerce = CommerceStore(database_path)
+    runs = ChattyRunModule(
+        model=model,
+        model_id=model_id,
+        runtime=runtime,
+    )
+    trace_store = runtime.trace_store
+    memory_store = runtime.memory_store
+    support_store = runtime.support_store
+    commerce = runtime.commerce
 
     @app.get("/health")
     async def health() -> dict[str, str]:

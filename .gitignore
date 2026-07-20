@@ -27,6 +27,7 @@ dist/
 playwright-report/
 test-results/
 blob-report/
+output/playwright/
 .remember/
 
 # 目标公司 JD 是私有只读输入，仅本地引用，不入公开仓库

@@ -18,6 +18,7 @@
     "lint": "pnpm -r --if-present lint",
     "lint:fix": "pnpm -r --if-present lint:fix",
     "test:frontend": "pnpm --filter @chatty/web test:frontend",
+    "test:e2e": "pnpm --filter @chatty/web test:e2e",
     "test:coverage": "pnpm --filter @chatty/web test:coverage",
     "eval": "uv run python -m chatty.eval"
   }

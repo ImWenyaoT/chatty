@@ -212,6 +212,7 @@ def run_eval(*, cases_path: Path, output_path: Path, workdir: Path) -> dict[str,
     results: list[EvalCaseResult] = []
     for case in _read_cases(cases_path):
         database_path = workdir / f"{case.id}.sqlite"
+        _reset_eval_database(database_path)
         model = EvalModel([item for run in case.runs for item in run.script])
         app = create_app(
             database_path=database_path,
@@ -270,6 +271,15 @@ def run_eval(*, cases_path: Path, output_path: Path, workdir: Path) -> dict[str,
     )
     passed = sum(result.passed for result in results)
     return {"passed": passed, "failed": len(results) - passed, "total": len(results)}
+
+
+def _reset_eval_database(database_path: Path) -> None:
+    for path in (
+        database_path,
+        Path(f"{database_path}-wal"),
+        Path(f"{database_path}-shm"),
+    ):
+        path.unlink(missing_ok=True)
 
 
 def main() -> int:

@@ -6,7 +6,7 @@ import { Button } from "../components/ui/button";
 import { Textarea } from "../components/ui/textarea";
 import { SellerNavigation } from "../components/seller/SellerNavigation";
 
-const API_BASE_URL = "http://127.0.0.1:8000";
+const API_BASE_URL = "/api/chatty";
 
 type Message = {
   id: number;

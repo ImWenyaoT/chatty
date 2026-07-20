@@ -12,8 +12,14 @@ def test_deterministic_jsonl_eval_runs_the_real_agent_path(tmp_path: Path) -> No
         output_path=output_path,
         workdir=tmp_path,
     )
+    repeated_summary = run_eval(
+        cases_path=Path("eval/cases.jsonl"),
+        output_path=output_path,
+        workdir=tmp_path,
+    )
 
     assert summary == {"passed": 6, "failed": 0, "total": 6}
+    assert repeated_summary == summary
     results = [json.loads(line) for line in output_path.read_text().splitlines()]
     assert [result["id"] for result in results] == [
         "ordinary-response",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -190,7 +191,49 @@ class MemoryStore:
                 """,
                 (customer_id, f"%{escaped_query}%", limit),
             ).fetchall()
+            if not rows and query.strip():
+                characters = _memory_query_characters(query)
+                if characters:
+                    predicates = " OR ".join("fact LIKE ?" for _ in characters)
+                    rows = connection.execute(
+                        f"""
+                        SELECT memory_id, customer_id, fact, source_id, created_at
+                        FROM customer_memories
+                        WHERE customer_id = ? AND ({predicates})
+                        ORDER BY created_at DESC, memory_id DESC
+                        LIMIT ?
+                        """,
+                        (
+                            customer_id,
+                            *(f"%{character}%" for character in characters),
+                            min(100, max(20, limit * 10)),
+                        ),
+                    ).fetchall()
+                    rows = sorted(
+                        rows,
+                        key=lambda row: -_memory_relevance(str(row["fact"]), query, characters),
+                    )[:limit]
         return [CustomerMemory(*row) for row in rows]
+
+
+_MEMORY_QUERY_STOP_CHARACTERS = frozenset("的了和与是我你他她它们什么一下信息客户关于相关")
+
+
+def _memory_query_characters(query: str) -> tuple[str, ...]:
+    characters: list[str] = []
+    for character in query.casefold():
+        if not character.isalnum() or character in _MEMORY_QUERY_STOP_CHARACTERS:
+            continue
+        if character not in characters:
+            characters.append(character)
+    return tuple(characters[:32])
+
+
+def _memory_relevance(fact: str, query: str, characters: tuple[str, ...]) -> int:
+    normalized_fact = fact.casefold()
+    terms = [term for term in re.split(r"[^\w]+", query.casefold()) if term]
+    exact_term_score = sum(len(term) * 3 for term in terms if term in normalized_fact)
+    return exact_term_score + sum(character in normalized_fact for character in characters)
 
 
 class SupportRequestStore:

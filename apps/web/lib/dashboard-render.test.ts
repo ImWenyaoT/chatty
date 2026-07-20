@@ -122,11 +122,7 @@ test("dashboard renders loading, real traces, selection, empty, and error states
   );
   assert.equal(screen.queryByText("create_handoff created receipt"), null);
   assert.equal(screen.queryByText("support-1"), null);
-  assert.ok(
-    requestedUrls.every((url) =>
-      url.startsWith("http://127.0.0.1:8000/traces"),
-    ),
-  );
+  assert.ok(requestedUrls.every((url) => url.startsWith("/api/chatty/traces")));
   cleanup();
 
   globalThis.fetch = async () =>

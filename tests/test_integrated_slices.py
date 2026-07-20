@@ -13,6 +13,7 @@ from openai.types.responses import ResponseOutputMessage, ResponseOutputText
 
 from chatty.app import create_app
 from chatty.run import ChattyRunModule, RunInput
+from chatty.runtime import ChattyRuntime
 from chatty.store import TraceStore
 
 
@@ -97,6 +98,51 @@ async def test_run_module_returns_the_completed_run_and_persists_its_trace(
     assert trace.status == "completed"
     assert trace.model_id == "run-module-test-model"
     assert trace.business_outcome == "not_applicable"
+
+
+@pytest.mark.asyncio
+async def test_each_run_module_persists_its_trace_to_its_own_runtime(
+    tmp_path: Path,
+) -> None:
+    first_database = tmp_path / "first.sqlite"
+    second_database = tmp_path / "second.sqlite"
+    first_runs = ChattyRunModule(
+        database_path=first_database,
+        model=ToolRecordingModel(),
+        model_id="first-runtime-model",
+    )
+    ChattyRunModule(
+        database_path=second_database,
+        model=ToolRecordingModel(),
+        model_id="second-runtime-model",
+    )
+
+    result = await first_runs.run(
+        RunInput(
+            message="你好",
+            customer_id="trusted-customer",
+            request_id="trusted-request",
+        )
+    )
+
+    first_trace = TraceStore(first_database).get(result.trace_id)
+    second_trace = TraceStore(second_database).get(result.trace_id)
+    assert first_trace is not None
+    assert first_trace.model_id == "first-runtime-model"
+    assert second_trace is None
+
+
+def test_run_module_rejects_path_configuration_with_an_existing_runtime(
+    tmp_path: Path,
+) -> None:
+    runtime = ChattyRuntime.open(tmp_path / "runtime.sqlite")
+
+    with pytest.raises(ValueError, match="runtime owns database and knowledge paths"):
+        ChattyRunModule(
+            database_path=tmp_path / "ignored.sqlite",
+            runtime=runtime,
+            model=ToolRecordingModel(),
+        )
 
 
 def test_run_response_keeps_optional_support_receipt_in_openapi(tmp_path: Path) -> None:

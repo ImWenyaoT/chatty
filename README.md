@@ -22,6 +22,14 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
+如需为本地演示补充可重复的订单、客户 Memory 与 Handoff receipt，可运行：
+
+```bash
+UV_CACHE_DIR=.cache/uv uv run python -m chatty.demo_data
+```
+
+重复执行不会重复生成同一批模拟数据；Agent Trace 仍只由真实 Agent Run 产生。
+
 配置只有 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`MODEL_ID`。示例使用 DeepSeek 的 OpenAI-compatible Chat Completions API 和 `deepseek-v4-pro`；thinking 已关闭。缺少 key 时 Run API 返回明确错误。
 
 ## 三个页面
