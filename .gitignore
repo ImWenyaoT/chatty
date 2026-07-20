@@ -52,8 +52,3 @@ data/
 
 # Eval 产物由 `python -m chatty.eval` 生成，不入库
 eval/results.jsonl
-
-# Next.js (apps/web)
-.next/
-apps/web/out/
-next-env.d.ts

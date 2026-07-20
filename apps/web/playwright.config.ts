@@ -7,7 +7,7 @@ export default defineConfig({
     ["html", { outputFolder: "../../output/playwright/report", open: "never" }],
   ],
   use: {
-    baseURL: "http://127.0.0.1:3000",
+    baseURL: "http://127.0.0.1:3100",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
@@ -20,15 +20,15 @@ export default defineConfig({
   webServer: [
     {
       command:
-        "UV_CACHE_DIR=.cache/uv CHATTY_E2E_DATABASE=.cache/browser-e2e.sqlite uv run uvicorn tests.browser_smoke_app:app --host 127.0.0.1 --port 8000",
+        "UV_CACHE_DIR=.cache/uv CHATTY_E2E_DATABASE=.cache/browser-e2e.sqlite uv run uvicorn tests.browser_smoke_app:app --host 127.0.0.1 --port 8100",
       cwd: "../..",
-      url: "http://127.0.0.1:8000/health",
+      url: "http://127.0.0.1:8100/health",
       reuseExistingServer: false,
       timeout: 30_000,
     },
     {
-      command: "pnpm dev",
-      url: "http://127.0.0.1:3000/playground",
+      command: "CHATTY_API_TARGET=http://127.0.0.1:8100 pnpm dev --port 3100",
+      url: "http://127.0.0.1:3100/playground",
       reuseExistingServer: false,
       timeout: 30_000,
     },

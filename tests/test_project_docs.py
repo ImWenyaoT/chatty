@@ -51,6 +51,9 @@ def test_repository_has_only_python_backend_and_thin_web_runtime() -> None:
 
     root_package = (ROOT / "package.json").read_text(encoding="utf-8")
     web_package = (ROOT / "apps/web/package.json").read_text(encoding="utf-8")
+    assert '"vite"' in web_package
+    assert '"next"' not in web_package
+    assert not (ROOT / "apps/web/next.config.ts").exists()
     forbidden_dependencies = (
         "@rental/",
         "@openai/agents",
@@ -64,9 +67,9 @@ def test_repository_has_only_python_backend_and_thin_web_runtime() -> None:
 
 
 def test_web_source_cannot_own_backend_or_platform_concerns() -> None:
-    source_paths = list((ROOT / "apps/web/app").rglob("*.ts"))
-    source_paths += list((ROOT / "apps/web/app").rglob("*.tsx"))
-    source_paths.append(ROOT / "apps/web/next.config.ts")
+    source_paths = list((ROOT / "apps/web/src").rglob("*.ts"))
+    source_paths += list((ROOT / "apps/web/src").rglob("*.tsx"))
+    source_paths.append(ROOT / "apps/web/vite.config.ts")
     web_sources = "\n".join(path.read_text(encoding="utf-8") for path in source_paths).casefold()
     for forbidden in (
         "better-sqlite3",
@@ -82,8 +85,8 @@ def test_web_source_cannot_own_backend_or_platform_concerns() -> None:
 
 def test_contracted_source_cannot_regrow_a_second_platform() -> None:
     active_sources = list((ROOT / "src/chatty").glob("*.py"))
-    active_sources += list((ROOT / "apps/web/app").rglob("*.ts"))
-    active_sources += list((ROOT / "apps/web/app").rglob("*.tsx"))
+    active_sources += list((ROOT / "apps/web/src").rglob("*.ts"))
+    active_sources += list((ROOT / "apps/web/src").rglob("*.tsx"))
     source = "\n".join(path.read_text(encoding="utf-8") for path in active_sources)
     web_source = "\n".join(
         path.read_text(encoding="utf-8")

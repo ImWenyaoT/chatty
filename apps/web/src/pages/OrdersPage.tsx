@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useMemo, useState } from "react";
 import { SellerNavigation } from "../components/seller/SellerNavigation";
 import { WorkspaceHeader } from "../components/seller/WorkspaceHeader";
@@ -46,6 +44,8 @@ export default function OrdersPage() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
+  const [detailTab, setDetailTab] = useState<"summary" | "timeline">("summary");
+  const [mobilePane, setMobilePane] = useState<"list" | "detail">("list");
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -99,7 +99,7 @@ export default function OrdersPage() {
       {!loading && !error && orders.length === 0 ? <p>暂无订单</p> : null}
 
       {!loading && !error && selected ? (
-        <div className="orders-layout">
+        <div className="orders-layout" data-mobile-pane={mobilePane}>
           <aside className="orders-list">
             <div className="orders-filter">
               <input
@@ -118,7 +118,10 @@ export default function OrdersPage() {
                   className={`order-row ${order.id === selected.id ? "active" : ""}`}
                   key={order.id}
                   type="button"
-                  onClick={() => setSelectedId(order.id)}
+                  onClick={() => {
+                    setSelectedId(order.id);
+                    setMobilePane("detail");
+                  }}
                 >
                   <div>
                     <strong>{order.id}</strong>
@@ -136,6 +139,13 @@ export default function OrdersPage() {
 
           <section className="order-detail">
             <div className="order-detail-head">
+              <button
+                className="mobile-back"
+                type="button"
+                onClick={() => setMobilePane("list")}
+              >
+                返回
+              </button>
               <div>
                 <p>
                   {selected.channel} · {selected.customer_id}
@@ -172,41 +182,70 @@ export default function OrdersPage() {
               </div>
             </div>
 
-            <div className="order-sections">
-              <section>
-                <h3>客户与订单信息</h3>
-                <div className="info-list">
-                  <div>
-                    <span>客户</span>
-                    <strong>{selected.customer_id}</strong>
-                  </div>
-                  <div>
-                    <span>地址</span>
-                    <strong>{selected.address}</strong>
-                  </div>
-                  <div>
-                    <span>风险</span>
-                    <strong>{selected.risk}</strong>
-                  </div>
-                  <div>
-                    <span>Session</span>
-                    <strong>{selected.session_id}</strong>
-                  </div>
-                </div>
-              </section>
+            <div
+              className="pane-tabs order-detail-tabs"
+              role="tablist"
+              aria-label="订单详情"
+            >
+              <button
+                className={detailTab === "summary" ? "active" : undefined}
+                aria-selected={detailTab === "summary"}
+                role="tab"
+                type="button"
+                onClick={() => setDetailTab("summary")}
+              >
+                订单信息
+              </button>
+              <button
+                className={detailTab === "timeline" ? "active" : undefined}
+                aria-selected={detailTab === "timeline"}
+                role="tab"
+                type="button"
+                onClick={() => setDetailTab("timeline")}
+              >
+                订单时间线
+              </button>
             </div>
 
-            <section className="order-timeline">
-              <h3>订单时间线</h3>
-              <ol>
-                {selected.events.map((event) => (
-                  <li key={event.id}>
-                    <strong>{formatDateTime(event.created_at)}</strong>
-                    {event.description}
-                  </li>
-                ))}
-              </ol>
-            </section>
+            {detailTab === "summary" ? (
+              <div className="order-sections">
+                <section>
+                  <h3>客户与订单信息</h3>
+                  <div className="info-list">
+                    <div>
+                      <span>客户</span>
+                      <strong>{selected.customer_id}</strong>
+                    </div>
+                    <div>
+                      <span>地址</span>
+                      <strong>{selected.address}</strong>
+                    </div>
+                    <div>
+                      <span>风险</span>
+                      <strong>{selected.risk}</strong>
+                    </div>
+                    <div>
+                      <span>Session</span>
+                      <strong>{selected.session_id}</strong>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            ) : null}
+
+            {detailTab === "timeline" ? (
+              <section className="order-timeline">
+                <h3>订单时间线</h3>
+                <ol>
+                  {selected.events.map((event) => (
+                    <li key={event.id}>
+                      <strong>{formatDateTime(event.created_at)}</strong>
+                      {event.description}
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            ) : null}
           </section>
         </div>
       ) : null}

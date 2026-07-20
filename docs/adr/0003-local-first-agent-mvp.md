@@ -4,7 +4,8 @@
 
 > Python Agent 运行时与分阶段迁移策略由
 > [ADR-0005](0005-python-agents-sdk-runtime.md) 取代；当前 single-context 范围由
-> [ADR-0007](0007-single-context-eval-and-project-boundary.md) 定义。本 ADR 对本地业务系统和可验证结果的产品约束仍然有效。
+> [ADR-0007](0007-single-context-eval-and-project-boundary.md) 定义；前端实现以
+> [ADR-0009](0009-thin-react-vite-web.md) 为准。本 ADR 对本地业务系统和可验证结果的产品约束仍然有效。
 
 ## 仍然有效的决定
 
@@ -14,4 +15,4 @@ Chatty 使用 SQLite 保存商品、库存、订单、Session、Memory、Handoff
 
 ## 已被取代的部分
 
-最初的 TypeScript 全栈、Next.js API、follow-up 与 Demo Adapter 方案不再有效。当前只有 Python/FastAPI 后端与薄 Next.js 前端，具体边界以 ADR 0005、0007、0008 为准。
+最初的 TypeScript 全栈、Next.js API、follow-up 与 Demo Adapter 方案不再有效。其后的 Python/FastAPI 后端与薄 web 边界由 ADR 0005、0007、0008 收缩，当前前端实现见 ADR 0009。

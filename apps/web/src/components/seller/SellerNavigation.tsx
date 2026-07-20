@@ -1,4 +1,3 @@
-import Link from "next/link";
 import {
   SELLER_WORKSPACE_ROUTES,
   type SellerWorkspaceRouteKey,
@@ -18,14 +17,14 @@ export function SellerNavigation({ active }: SellerNavigationProps) {
       </div>
       <div>
         {SELLER_WORKSPACE_ROUTES.map((item) => (
-          <Link
+          <a
             aria-current={active === item.key ? "page" : undefined}
             className={active === item.key ? "active" : undefined}
             href={item.href}
             key={item.key}
           >
             {item.navLabel}
-          </Link>
+          </a>
         ))}
       </div>
     </nav>

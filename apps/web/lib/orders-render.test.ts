@@ -25,8 +25,9 @@ Object.defineProperties(globalThis, {
   },
 });
 
-const { cleanup, render, screen } = await import("@testing-library/react");
-const { default: OrdersPage } = await import("../app/orders/page");
+const { cleanup, fireEvent, render, screen } =
+  await import("@testing-library/react");
+const { default: OrdersPage } = await import("../src/pages/OrdersPage");
 
 test("orders page renders FastAPI loading, success, empty, and error states", async () => {
   let release: (() => void) | undefined;
@@ -76,8 +77,9 @@ test("orders page renders FastAPI loading, success, empty, and error states", as
   assert.match(screen.getByRole("status").textContent ?? "", /正在读取订单/);
   release?.();
   assert.equal((await screen.findAllByText("order-1")).length, 2);
-  assert.ok(screen.getByText("订单已确认"));
   assert.equal(screen.getAllByText("黑色双排扣西装").length, 2);
+  fireEvent.click(screen.getByRole("tab", { name: "订单时间线" }));
+  assert.ok(screen.getByText("订单已确认"));
   cleanup();
 
   globalThis.fetch = async () => Response.json([]);

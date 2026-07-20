@@ -1,5 +1,5 @@
 import type { InputHTMLAttributes } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "../../lib/utils";
 
 /** Renders a shadcn-style input for optional customer attachments. */
 export function Input({

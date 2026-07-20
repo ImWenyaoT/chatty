@@ -1,6 +1,6 @@
 # Chatty 项目上下文
 
-本文件是仓库唯一的架构与领域语言入口。Chatty 是一个用于简历展示的单 Agent 客服 MVP：Python/FastAPI 后端运行真实 Agent 路径，薄 Next.js 前端只提供 Playground、Dashboard 和 Orders 三个页面，SQLite 保存 demo 的业务事实与运行证据。
+本文件是仓库唯一的架构与领域语言入口。Chatty 是一个用于简历展示的单 Agent 客服 MVP：Python/FastAPI 后端运行真实 Agent 路径，薄 React/Vite 前端只提供 Playground、Dashboard 和 Orders 三个页面，SQLite 保存 demo 的业务事实与运行证据。
 
 ## 最高公理
 
@@ -20,13 +20,13 @@
 - `src/chatty/harness.py`：拥有可信 Context、业务回执、Handoff、安全恢复、完成验证与完成结果持久化。
 - `src/chatty/runtime.py`：统一拥有 SQLite Stores、Knowledge 与 Tracing 生命周期；全局 tracing router 按 `trace_id` 将 SDK spans 写回对应 Runtime。
 - `src/chatty/demo_data.py`：可重复生成本地演示订单、客户 Memory 与 Handoff receipt；不伪造 Agent Trace。
-- `apps/web`：薄前端；只调用 FastAPI，不直接访问 SQLite、调用 Model、执行 Tool 或判断完成。
+- `apps/web`：React/Vite 薄 SPA；三个路由优先在视口内完成主任务，次要能力收入导航；页面只通过同源 `/api/chatty` 调用 FastAPI，不直接访问 SQLite、调用 Model、执行 Tool 或判断完成。
 - `knowledge/records.jsonl`：卖家验证的预分块知识，导入 SQLite FTS5 后由 `search_knowledge` 查询。
 - `eval/cases.jsonl`：确定性回归场景；可控 Model 只替代外部 Model API，Runner、Tools、SQLite、Trace 和完成验证均走真实路径。
-- `tests`：FastAPI + disposable SQLite 的公开行为测试；Playwright 另以真实 Chrome 验证 Web → FastAPI → Agent/Harness → Dashboard 路径。
+- `tests`：FastAPI + disposable SQLite 的公开行为测试；Playwright 另启动 Vite 开发服务，以真实 Chrome 验证 Web → FastAPI → Agent/Harness → Dashboard 路径。
 - `docs/adr`：重要决策史和当前决策状态。
 
-仓库不保留 TypeScript 后端、Next.js API routes 或内部 packages；TypeScript 只用于薄 web。
+仓库不保留 TypeScript 后端、server-side web runtime 或内部 packages；TypeScript 只用于薄 web。
 
 ## 领域语言
 

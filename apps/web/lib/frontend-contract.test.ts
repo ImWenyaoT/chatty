@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { SELLER_WORKSPACE_ROUTES } from "../app/components/seller/sellerWorkspaceRoutes";
+import { SELLER_WORKSPACE_ROUTES } from "../src/components/seller/sellerWorkspaceRoutes";
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -12,30 +12,32 @@ function readAppSource(path: string) {
   return readFileSync(resolve(appRoot, path), "utf8");
 }
 
-const layoutSource = readAppSource("app/layout.tsx");
-const homeSource = readAppSource("app/page.tsx");
-const dashboardSource = readAppSource("app/dashboard/page.tsx");
-const ordersSource = readAppSource("app/orders/page.tsx");
-const playgroundSource = readAppSource("app/playground/page.tsx");
-const cssSource = readAppSource("app/globals.css");
+const appSource = readAppSource("src/App.tsx");
+const mainSource = readAppSource("src/main.tsx");
+const dashboardSource = readAppSource("src/pages/DashboardPage.tsx");
+const ordersSource = readAppSource("src/pages/OrdersPage.tsx");
+const playgroundSource = readAppSource("src/pages/PlaygroundPage.tsx");
+const cssSource = readAppSource("src/globals.css");
 const webPackageSource = readAppSource("package.json");
-const nextConfigSource = readAppSource("next.config.ts");
-test("web runtime contains only the thin Next.js application", () => {
+const viteConfigSource = readAppSource("vite.config.ts");
+test("web runtime contains only the thin Vite React application", () => {
   const webPackage = JSON.parse(webPackageSource) as {
     dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
     scripts?: Record<string, string>;
   };
 
   for (const script of ["dev", "build", "start"])
-    assert.match(webPackage.scripts?.[script] ?? "", /next/);
-  assert.match(webPackage.scripts?.dev ?? "", /WATCHPACK_POLLING=true/);
+    assert.match(webPackage.scripts?.[script] ?? "", /vite/);
+  assert.equal(webPackage.dependencies?.next, undefined);
+  assert.equal(webPackage.devDependencies?.["eslint-config-next"], undefined);
   assert.equal(webPackage.dependencies?.["better-sqlite3"], undefined);
   assert.equal(webPackage.dependencies?.["@rental/db"], undefined);
 });
 
 test("frontend shell exposes keyboard and screen-reader navigation affordances", () => {
-  assert.match(layoutSource, /className="skip-link"/);
-  assert.match(layoutSource, /href="#main-content"/);
+  assert.match(appSource, /className="skip-link"/);
+  assert.match(appSource, /href="#main-content"/);
   assert.match(dashboardSource, /id="main-content"/);
   assert.match(ordersSource, /id="main-content"/);
   assert.match(playgroundSource, /id="main-content"/);
@@ -68,13 +70,14 @@ test("playground is a thin FastAPI client with session continuity", () => {
   assert.doesNotMatch(playgroundSource, /controlPlane/);
 });
 
-test("browser calls FastAPI through a same-origin development rewrite", () => {
-  assert.match(nextConfigSource, /allowedDevOrigins: \["127\.0\.0\.1"\]/);
-  assert.match(nextConfigSource, /source: "\/api\/chatty\/:path\*"/);
-  assert.match(
-    nextConfigSource,
-    /destination: "http:\/\/127\.0\.0\.1:8000\/:path\*"/,
-  );
+test("browser calls FastAPI through the same-origin Vite proxy", () => {
+  assert.match(viteConfigSource, /"\/api\/chatty"/);
+  assert.match(viteConfigSource, /process\.env\.CHATTY_API_TARGET/);
+  assert.match(viteConfigSource, /"http:\/\/127\.0\.0\.1:8000"/);
+  assert.match(viteConfigSource, /target: chattyApiTarget/);
+  assert.match(viteConfigSource, /replace\(\/\^\\\/api\\\/chatty\//);
+  assert.match(viteConfigSource, /strictPort: true/);
+  assert.equal(viteConfigSource.match(/proxy: chattyApiProxy/g)?.length, 2);
 });
 
 test("frontend CSS keeps focus visible and mobile touch targets large enough", () => {
@@ -115,7 +118,7 @@ test("seller workspace exposes exactly the three retained pages", () => {
       ["dashboard", "/dashboard", "复盘视图"],
     ],
   );
-  assert.match(homeSource, /redirect\(["']\/playground["']\)/);
+  assert.match(mainSource, /window\.location\.replace\("\/playground"\)/);
 });
 
 test("customer service workspace keeps product language with technical observability", () => {
@@ -190,7 +193,7 @@ test("orders page is a thin FastAPI client for SQLite orders and events", () => 
 
 test("review dashboard copy avoids generic backend-dashboard language", () => {
   const visibleShellCopy = [
-    homeSource,
+    mainSource,
     dashboardSource,
     JSON.stringify(SELLER_WORKSPACE_ROUTES),
   ].join("\n");

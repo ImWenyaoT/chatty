@@ -3,7 +3,7 @@
 
 Chatty 是一个用于简历展示的客服 Agent MVP。项目最高公理是 **Agent = Model + Harness**：Model 理解客户意图并选择 Tool；Harness 提供可信 Context、有界 Tools、真实执行、SQLite 持久化、Trace 与完成验证。OpenAI Agents SDK 负责唯一的 Agent Loop。
 
-当前可运行路径是 `Next.js → FastAPI → Runner.run → SQLite`。Model 可查询带来源的卖家知识、读取与修改订单、保存带 Trace 来源的显式客户 Memory，或创建可追踪 Handoff。Harness 不以关键词预判意图，也不把一段回复当作业务完成证据。
+当前可运行路径是 `React/Vite → FastAPI → Runner.run → SQLite`。Model 可查询带来源的卖家知识、读取与修改订单、保存带 Trace 来源的显式客户 Memory，或创建可追踪 Handoff。Harness 不以关键词预判意图，也不把一段回复当作业务完成证据。
 
 ## 运行
 
@@ -38,7 +38,7 @@ UV_CACHE_DIR=.cache/uv uv run python -m chatty.demo_data
 - `http://127.0.0.1:3000/dashboard`：查看真实 Agent Run、Tool、Trace 和结果。
 - `http://127.0.0.1:3000/orders`：读取 Agent 操作后的 SQLite 订单。
 
-三个页面只调用 FastAPI；浏览器请求先访问同源 `/api/chatty`，再由 Next.js rewrite 转发到本地 FastAPI。业务事实来自 `data/chatty.sqlite`，不是前端 fixtures。知识输入位于 `knowledge/records.jsonl`，导入 SQLite FTS5 后由 Agent Tool 搜索。Session、订单、Memory、Handoff receipt 与本地 Trace 也存入同一 SQLite 文件；`GET /sessions/{session_id}/messages` 可读取已绑定客户的 Session 历史。
+三个页面只调用 FastAPI；浏览器请求先访问同源 `/api/chatty`，再由 Vite 开发代理转发到本地 FastAPI。业务事实来自 `data/chatty.sqlite`，不是前端 fixtures。知识输入位于 `knowledge/records.jsonl`，导入 SQLite FTS5 后由 Agent Tool 搜索。Session、订单、Memory、Handoff receipt 与本地 Trace 也存入同一 SQLite 文件；`GET /sessions/{session_id}/messages` 可读取已绑定客户的 Session 历史。
 
 ## eval 与验证
 
@@ -57,7 +57,7 @@ pnpm build
 pnpm test:e2e
 ```
 
-`pnpm test:e2e` 会启动确定性 FastAPI 测试服务与 Next.js，并使用本机 Chrome 验证 Playground 发起 Agent Run、Harness 持久化 Trace、Dashboard 读取证据的真实浏览器路径。
+`pnpm test:e2e` 会启动确定性 FastAPI 测试服务与 Vite 开发服务，并使用本机 Chrome 验证 Playground 发起 Agent Run、Harness 持久化 Trace、Dashboard 读取证据的真实浏览器路径。
 
 有真实 DeepSeek 凭据时，显式运行 contract eval：
 

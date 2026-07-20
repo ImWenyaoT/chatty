@@ -20,7 +20,7 @@ Object.defineProperties(globalThis, {
 
 const { cleanup, fireEvent, render, screen } =
   await import("@testing-library/react");
-const { default: DashboardPage } = await import("../app/dashboard/page");
+const { default: DashboardPage } = await import("../src/pages/DashboardPage");
 
 const traces = [
   {
@@ -107,12 +107,24 @@ test("dashboard renders loading, real traces, selection, empty, and error states
   assert.ok(await screen.findByText("confirm_order:order-1:confirmed"));
   assert.ok(screen.getByText("seller-policy://rental-period"));
   assert.ok(screen.getByText("trace-memory-source"));
+  fireEvent.click(screen.getByRole("tab", { name: "Model / Tool spans" }));
   assert.ok(screen.getByText("confirm_order span completed"));
   assert.ok(screen.getByText("已确认 2"));
+  const initialDetailRequests = requestedUrls.filter((url) =>
+    url.endsWith("trace-new"),
+  ).length;
+  fireEvent.click(screen.getByRole("button", { name: "查看 trace-new" }));
+  assert.ok(screen.getByText("confirm_order span completed"));
+  assert.equal(
+    requestedUrls.filter((url) => url.endsWith("trace-new")).length,
+    initialDetailRequests,
+  );
 
   fireEvent.click(screen.getByRole("button", { name: /trace-handoff/ }));
+  await screen.findByText("handoff:support-1");
+  assert.ok(screen.getAllByText(/support-1/).length >= 1);
+  fireEvent.click(screen.getByRole("tab", { name: "Model / Tool spans" }));
   await screen.findByText("create_handoff created receipt");
-  assert.ok(screen.getAllByText("support-1").length >= 1);
 
   failDetail = true;
   fireEvent.click(screen.getByRole("button", { name: "查看 trace-new" }));

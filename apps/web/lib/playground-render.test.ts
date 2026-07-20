@@ -27,7 +27,7 @@ Object.defineProperties(globalThis, {
 
 const { cleanup, fireEvent, render, screen } =
   await import("@testing-library/react");
-const { default: PlaygroundPage } = await import("../app/playground/page");
+const { default: PlaygroundPage } = await import("../src/pages/PlaygroundPage");
 
 test("playground renders loading, success, session continuity, and errors", async () => {
   const requests: Array<Record<string, unknown>> = [];
@@ -100,6 +100,9 @@ test("playground renders loading, success, session continuity, and errors", asyn
     screen.getByText("handoff:support-1").textContent,
     "handoff:support-1",
   );
+  assert.equal(screen.getByText("需要人工处理").textContent, "需要人工处理");
+  assert.equal(screen.getByText("support-1").textContent, "support-1");
+  fireEvent.click(screen.getByRole("tab", { name: "知识" }));
   assert.equal(screen.getByText("租期计算").textContent, "租期计算");
   assert.equal(
     screen.getByRole("heading", { name: "知识检索结果" }).textContent,
@@ -109,6 +112,7 @@ test("playground renders loading, success, session continuity, and errors", asyn
     screen.getByText("seller-policy://rental-period").textContent,
     "seller-policy://rental-period",
   );
+  fireEvent.click(screen.getByRole("tab", { name: "Memory" }));
   assert.equal(
     screen.getByText("客户对羊毛过敏").textContent,
     "客户对羊毛过敏",
@@ -121,8 +125,6 @@ test("playground renders loading, success, session continuity, and errors", asyn
     screen.getByText("search_customer_memory").textContent,
     "search_customer_memory",
   );
-  assert.equal(screen.getByText("需要人工处理").textContent, "需要人工处理");
-  assert.equal(screen.getByText("support-1").textContent, "support-1");
   assert.deepEqual(requests[0], {
     message: "第一条消息",
   });

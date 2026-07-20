@@ -1,7 +1,4 @@
-"use client";
-
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { SellerNavigation } from "../components/seller/SellerNavigation";
 import { WorkspaceHeader } from "../components/seller/WorkspaceHeader";
 
@@ -63,6 +60,7 @@ export default function DashboardPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [listError, setListError] = useState<string>();
   const [detailError, setDetailError] = useState<string>();
+  const [mobilePane, setMobilePane] = useState<"list" | "detail">("list");
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -120,24 +118,18 @@ export default function DashboardPage() {
   const counts = dashboard?.order_status_counts;
 
   function selectTrace(traceId: string) {
-    setDetail(undefined);
-    setDetailError(undefined);
-    setSelectedId(traceId);
+    if (traceId !== selectedId) {
+      setDetail(undefined);
+      setDetailError(undefined);
+      setSelectedId(traceId);
+    }
+    setMobilePane("detail");
   }
 
   return (
     <main className="seller-dashboard trace-dashboard" id="main-content">
       <SellerNavigation active="dashboard" />
-      <WorkspaceHeader
-        eyebrow="SQLite Trace · Agent 复盘"
-        title="复盘视图"
-        actions={
-          <>
-            <Link href="/playground">客服会话</Link>
-            <Link href="/orders">订单跟进</Link>
-          </>
-        }
-      />
+      <WorkspaceHeader eyebrow="SQLite Trace · Agent 复盘" title="复盘视图" />
 
       {loading ? <p role="status">正在读取 Trace…</p> : null}
       {listError ? <p role="alert">{listError}</p> : null}
@@ -156,7 +148,7 @@ export default function DashboardPage() {
             <span>已取消 {counts?.cancelled ?? 0}</span>
           </section>
 
-          <div className="trace-layout">
+          <div className="trace-layout" data-mobile-pane={mobilePane}>
             <aside
               className="dashboard-panel trace-list"
               aria-label="Agent Run 列表"
@@ -192,7 +184,12 @@ export default function DashboardPage() {
             >
               {detailLoading ? <p role="status">正在读取 Run 详情…</p> : null}
               {detailError ? <p role="alert">{detailError}</p> : null}
-              {detail ? <TraceDetail trace={detail} /> : null}
+              {detail ? (
+                <TraceDetail
+                  trace={detail}
+                  onBack={() => setMobilePane("list")}
+                />
+              ) : null}
             </section>
           </div>
         </>
@@ -201,10 +198,15 @@ export default function DashboardPage() {
   );
 }
 
-function TraceDetail({ trace }: { trace: Trace }) {
+function TraceDetail({ trace, onBack }: { trace: Trace; onBack: () => void }) {
+  const [detailTab, setDetailTab] = useState<"evidence" | "spans">("evidence");
+
   return (
     <>
       <div className="dashboard-panel-head">
+        <button className="mobile-back" type="button" onClick={onBack}>
+          返回
+        </button>
         <div>
           <h2>Run 详情</h2>
           <span>{trace.trace_id}</span>
@@ -233,44 +235,79 @@ function TraceDetail({ trace }: { trace: Trace }) {
         </div>
       </dl>
 
-      <Evidence
-        title="业务完成证据"
-        values={trace.completion_evidence ? [trace.completion_evidence] : []}
-      />
-      <Evidence title="知识来源" values={trace.knowledge_sources} />
-      <Evidence title="Memory 来源" values={trace.memory_sources} />
-      <Evidence
-        title="Handoff receipt"
-        values={trace.support_request_id ? [trace.support_request_id] : []}
-      />
+      <div
+        className="pane-tabs trace-detail-tabs"
+        role="tablist"
+        aria-label="Run 详情"
+      >
+        <button
+          aria-selected={detailTab === "evidence"}
+          className={detailTab === "evidence" ? "active" : undefined}
+          role="tab"
+          type="button"
+          onClick={() => setDetailTab("evidence")}
+        >
+          完成证据
+        </button>
+        <button
+          aria-selected={detailTab === "spans"}
+          className={detailTab === "spans" ? "active" : undefined}
+          role="tab"
+          type="button"
+          onClick={() => setDetailTab("spans")}
+        >
+          Model / Tool spans
+        </button>
+      </div>
 
-      <section className="trace-spans">
-        <h3>Model / Tool spans</h3>
-        {trace.spans.length ? (
-          <ol>
-            {trace.spans.map((span) => (
-              <li key={span.span_id}>
-                <div>
-                  <strong>{span.span_type}</strong>
-                  <span className={`trace-status trace-status-${span.status}`}>
-                    {STATUS_LABELS[span.status] ?? span.status}
-                  </span>
-                </div>
-                <p>{span.summary}</p>
-                <small>
-                  {formatDuration(span.duration_ms)}
-                  {span.parent_id ? ` · parent ${span.parent_id}` : " · root"}
-                </small>
-                {span.error ? (
-                  <p className="trace-error">错误：{span.error}</p>
-                ) : null}
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <p>暂无 span 证据</p>
-        )}
-      </section>
+      {detailTab === "evidence" ? (
+        <div className="trace-evidence-list">
+          <Evidence
+            title="业务完成证据"
+            values={
+              trace.completion_evidence ? [trace.completion_evidence] : []
+            }
+          />
+          <Evidence title="知识来源" values={trace.knowledge_sources} />
+          <Evidence title="Memory 来源" values={trace.memory_sources} />
+          <Evidence
+            title="Handoff receipt"
+            values={trace.support_request_id ? [trace.support_request_id] : []}
+          />
+        </div>
+      ) : null}
+
+      {detailTab === "spans" ? (
+        <section className="trace-spans">
+          <h3>Model / Tool spans</h3>
+          {trace.spans.length ? (
+            <ol>
+              {trace.spans.map((span) => (
+                <li key={span.span_id}>
+                  <div>
+                    <strong>{span.span_type}</strong>
+                    <span
+                      className={`trace-status trace-status-${span.status}`}
+                    >
+                      {STATUS_LABELS[span.status] ?? span.status}
+                    </span>
+                  </div>
+                  <p>{span.summary}</p>
+                  <small>
+                    {formatDuration(span.duration_ms)}
+                    {span.parent_id ? ` · parent ${span.parent_id}` : " · root"}
+                  </small>
+                  {span.error ? (
+                    <p className="trace-error">错误：{span.error}</p>
+                  ) : null}
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p>暂无 span 证据</p>
+          )}
+        </section>
+      ) : null}
     </>
   );
 }

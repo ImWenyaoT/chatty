@@ -3,7 +3,7 @@
 
 Chatty is a customer-service Agent MVP built as a resume project. Its governing axiom is **Agent = Model + Harness**: the Model understands intent and selects Tools; the Harness supplies trusted Context, bounded Tools, real execution, SQLite persistence, Trace evidence, and completion verification. OpenAI Agents SDK owns the only Agent Loop.
 
-The runnable path is `Next.js → FastAPI → Runner.run → SQLite`. The Model can search source-backed seller Knowledge, read or change Orders, save explicit Customer Memory with Trace provenance, and create a traceable Handoff. A plausible reply alone is never proof that business work completed.
+The runnable path is `React/Vite → FastAPI → Runner.run → SQLite`. The Model can search source-backed seller Knowledge, read or change Orders, save explicit Customer Memory with Trace provenance, and create a traceable Handoff. A plausible reply alone is never proof that business work completed.
 
 ## Run locally
 
@@ -38,7 +38,7 @@ The only Model settings are `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `MODEL_ID`.
 - `http://127.0.0.1:3000/dashboard` shows real Agent Runs, Tools, Traces, and outcomes.
 - `http://127.0.0.1:3000/orders` reads the SQLite Orders changed by the Agent.
 
-The pages call FastAPI only. Browser requests use the same-origin `/api/chatty` path, which a Next.js rewrite forwards to local FastAPI. `data/chatty.sqlite` is the source of truth for Sessions, Orders, Customer Memory, Handoff receipts, and local Traces. Seller Knowledge comes from `knowledge/records.jsonl` and is imported into SQLite FTS5. `GET /sessions/{session_id}/messages` reads the history of a customer-bound Session.
+The pages call FastAPI only. Browser requests use the same-origin `/api/chatty` path, which the Vite development proxy forwards to local FastAPI. `data/chatty.sqlite` is the source of truth for Sessions, Orders, Customer Memory, Handoff receipts, and local Traces. Seller Knowledge comes from `knowledge/records.jsonl` and is imported into SQLite FTS5. `GET /sessions/{session_id}/messages` reads the history of a customer-bound Session.
 
 ## Eval and verification
 
@@ -57,7 +57,7 @@ pnpm build
 pnpm test:e2e
 ```
 
-`pnpm test:e2e` starts a deterministic FastAPI test server and Next.js, then uses the installed Chrome browser to verify the real path from a Playground Agent Run through Harness Trace persistence to the Dashboard.
+`pnpm test:e2e` starts a deterministic FastAPI test server and the Vite development server, then uses the installed Chrome browser to verify the real path from a Playground Agent Run through Harness Trace persistence to the Dashboard.
 
 With explicit DeepSeek credentials, opt in to the live contract eval:
 

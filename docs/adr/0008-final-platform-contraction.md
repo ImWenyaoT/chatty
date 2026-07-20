@@ -3,6 +3,8 @@
 - 状态：Accepted（2026-07-19）
 - 关联：GitHub #34、#42
 
+> 本 ADR 的平台收缩决定仍然有效；Next.js 实现细节由 [ADR-0009](0009-thin-react-vite-web.md) 取代。
+
 Chatty 的活动实现只有一个 Python 后端与一个薄 Next.js web。Python/FastAPI、OpenAI Agents SDK 与 SQLite 共同提供 Agent、Harness、Tools、业务事实、Session、Trace 和 eval；OpenAI Agents SDK 拥有唯一 Agent Loop。
 
 `apps/web` 只保留 Playground、Dashboard、Orders 与必要导航。页面只通过 HTTP 调用 FastAPI，不包含 Next.js API routes，不直接读取 SQLite，也不实现 Tool、Memory、完成判断或 Model provider 逻辑。根路由仅跳转到 Playground。

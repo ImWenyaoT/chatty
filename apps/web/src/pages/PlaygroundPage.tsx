@@ -1,5 +1,3 @@
-"use client";
-
 import { useRef, useState } from "react";
 import { Send } from "lucide-react";
 import { Button } from "../components/ui/button";
@@ -147,6 +145,10 @@ export default function PlaygroundPage() {
     useState<RunResponse["business_outcome"]>();
   const [completionEvidence, setCompletionEvidence] = useState<string>();
   const [supportRequestId, setSupportRequestId] = useState<string>();
+  const [contextOpen, setContextOpen] = useState(false);
+  const [contextTab, setContextTab] = useState<"run" | "knowledge" | "memory">(
+    "run",
+  );
   const nextId = useRef(1);
 
   async function sendMessage() {
@@ -203,10 +205,15 @@ export default function PlaygroundPage() {
               <h1>客服会话</h1>
               <p>消息直接发送给本地 FastAPI Agent</p>
             </div>
-            <span className="support-thread-status" role="status">
-              <i data-active={sending} />
-              {sending ? "运行中" : "就绪"}
-            </span>
+            <div className="support-thread-actions">
+              <span className="support-thread-status" role="status">
+                <i data-active={sending} />
+                {sending ? "运行中" : "就绪"}
+              </span>
+              <button type="button" onClick={() => setContextOpen(true)}>
+                运行详情
+              </button>
+            </div>
           </header>
 
           <section
@@ -282,57 +289,90 @@ export default function PlaygroundPage() {
           </div>
         </main>
 
-        <aside className="support-context" aria-label="运行详情">
-          <section className="support-context-section">
-            <div className="support-section-heading">
-              <h2>运行详情</h2>
+        <aside
+          className={`support-context ${contextOpen ? "open" : ""}`}
+          aria-label="运行详情"
+        >
+          <div className="pane-toolbar">
+            <div className="pane-tabs" role="tablist" aria-label="运行信息">
+              {(["run", "knowledge", "memory"] as const).map((tab) => (
+                <button
+                  aria-selected={contextTab === tab}
+                  className={contextTab === tab ? "active" : undefined}
+                  key={tab}
+                  role="tab"
+                  type="button"
+                  onClick={() => setContextTab(tab)}
+                >
+                  {tab === "run"
+                    ? "运行"
+                    : tab === "knowledge"
+                      ? "知识"
+                      : "Memory"}
+                </button>
+              ))}
             </div>
-            <dl className="support-runtime-list">
-              <div>
-                <dt>customer_id</dt>
-                <dd>{customerId}</dd>
+            <button
+              className="mobile-close"
+              type="button"
+              aria-label="关闭运行详情"
+              onClick={() => setContextOpen(false)}
+            >
+              关闭
+            </button>
+          </div>
+          {contextTab === "run" ? (
+            <section className="support-context-section">
+              <div className="support-section-heading">
+                <h2>运行详情</h2>
               </div>
-              <div>
-                <dt>session_id</dt>
-                <dd>{sessionId ?? "尚未建立"}</dd>
-              </div>
-              <div>
-                <dt>trace_id</dt>
-                <dd>{traceId ?? "尚未运行"}</dd>
-              </div>
-              <div>
-                <dt>request_id</dt>
-                <dd>{requestId ?? "尚未运行"}</dd>
-              </div>
-              <div>
-                <dt>状态</dt>
-                <dd>
-                  {runStatus === "needs_human"
-                    ? "需要人工处理"
-                    : runStatus === "completed"
-                      ? "已完成"
-                      : runStatus === "not_completed"
-                        ? "未完成"
-                        : runStatus === "responded"
-                          ? "已回复"
-                          : "尚未运行"}
-                </dd>
-              </div>
-              <div>
-                <dt>订单业务结果</dt>
-                <dd>{businessOutcome ?? "未涉及"}</dd>
-              </div>
-              <div>
-                <dt>完成证据</dt>
-                <dd>{completionEvidence ?? "无"}</dd>
-              </div>
-              <div>
-                <dt>support_request_id</dt>
-                <dd>{supportRequestId ?? "无"}</dd>
-              </div>
-            </dl>
-          </section>
-          {knowledgeResults.length > 0 ? (
+              <dl className="support-runtime-list">
+                <div>
+                  <dt>customer_id</dt>
+                  <dd>{customerId}</dd>
+                </div>
+                <div>
+                  <dt>session_id</dt>
+                  <dd>{sessionId ?? "尚未建立"}</dd>
+                </div>
+                <div>
+                  <dt>trace_id</dt>
+                  <dd>{traceId ?? "尚未运行"}</dd>
+                </div>
+                <div>
+                  <dt>request_id</dt>
+                  <dd>{requestId ?? "尚未运行"}</dd>
+                </div>
+                <div>
+                  <dt>状态</dt>
+                  <dd>
+                    {runStatus === "needs_human"
+                      ? "需要人工处理"
+                      : runStatus === "completed"
+                        ? "已完成"
+                        : runStatus === "not_completed"
+                          ? "未完成"
+                          : runStatus === "responded"
+                            ? "已回复"
+                            : "尚未运行"}
+                  </dd>
+                </div>
+                <div>
+                  <dt>订单业务结果</dt>
+                  <dd>{businessOutcome ?? "未涉及"}</dd>
+                </div>
+                <div>
+                  <dt>完成证据</dt>
+                  <dd>{completionEvidence ?? "无"}</dd>
+                </div>
+                <div>
+                  <dt>support_request_id</dt>
+                  <dd>{supportRequestId ?? "无"}</dd>
+                </div>
+              </dl>
+            </section>
+          ) : null}
+          {contextTab === "knowledge" ? (
             <section
               className="support-context-section"
               aria-labelledby="knowledge-results-heading"
@@ -340,42 +380,48 @@ export default function PlaygroundPage() {
               <div className="support-section-heading">
                 <h2 id="knowledge-results-heading">知识检索结果</h2>
               </div>
-              {knowledgeResults.map((result) => (
-                <article key={result.id} className="support-runtime-list">
-                  <strong>{result.title}</strong>
-                  <p>{result.summary}</p>
-                  <small>{result.source}</small>
-                </article>
-              ))}
+              {knowledgeResults.length > 0 ? (
+                knowledgeResults.map((result) => (
+                  <article key={result.id} className="support-runtime-list">
+                    <strong>{result.title}</strong>
+                    <p>{result.summary}</p>
+                    <small>{result.source}</small>
+                  </article>
+                ))
+              ) : (
+                <p>本次运行尚无知识检索结果。</p>
+              )}
             </section>
           ) : null}
-          <section
-            className="support-context-section"
-            aria-labelledby="memory-events-title"
-          >
-            <div className="support-section-heading">
-              <h2 id="memory-events-title">Memory Tool</h2>
-            </div>
-            {memoryEvents.length === 0 ? (
-              <p>本次运行未使用客户 Memory。</p>
-            ) : (
-              memoryEvents.map((event, eventIndex) => (
-                <div key={event.tool + "-" + eventIndex}>
-                  <strong>{event.tool}</strong>
-                  {event.memories.length === 0 ? (
-                    <p>未找到匹配事实</p>
-                  ) : (
-                    event.memories.map((memory) => (
-                      <article key={memory.memory_id}>
-                        <p>{memory.fact}</p>
-                        <small>来源 {memory.source_id}</small>
-                      </article>
-                    ))
-                  )}
-                </div>
-              ))
-            )}
-          </section>
+          {contextTab === "memory" ? (
+            <section
+              className="support-context-section"
+              aria-labelledby="memory-events-title"
+            >
+              <div className="support-section-heading">
+                <h2 id="memory-events-title">Memory Tool</h2>
+              </div>
+              {memoryEvents.length === 0 ? (
+                <p>本次运行未使用客户 Memory。</p>
+              ) : (
+                memoryEvents.map((event, eventIndex) => (
+                  <div key={event.tool + "-" + eventIndex}>
+                    <strong>{event.tool}</strong>
+                    {event.memories.length === 0 ? (
+                      <p>未找到匹配事实</p>
+                    ) : (
+                      event.memories.map((memory) => (
+                        <article key={memory.memory_id}>
+                          <p>{memory.fact}</p>
+                          <small>来源 {memory.source_id}</small>
+                        </article>
+                      ))
+                    )}
+                  </div>
+                ))
+              )}
+            </section>
+          ) : null}
         </aside>
       </div>
     </div>

@@ -17,5 +17,6 @@ test("browser reaches the real FastAPI Agent and persisted Harness trace", async
 
   await page.goto("/dashboard");
   await expect(page.getByText("browser-smoke-model")).toBeVisible();
+  await page.getByRole("tab", { name: "Model / Tool spans" }).click();
   await expect(page.getByText("Agent run completed")).toBeVisible();
 });
