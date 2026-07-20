@@ -16,10 +16,14 @@
 ## 当前运行边界
 
 - `src/chatty`：唯一活动后端；FastAPI 提供 API，OpenAI Agents SDK 提供 `Runner.run` 和 `SQLiteSession`。
+- `src/chatty/agent.py`：组装并运行 Model、Tools 与 SDK Agent Loop；可信消息、Session 和业务依赖来自同一个 Harness Context。
+- `src/chatty/harness.py`：拥有可信 Context、业务回执、Handoff、安全恢复、完成验证与完成结果持久化。
+- `src/chatty/runtime.py`：统一拥有 SQLite Stores、Knowledge 与 Tracing 生命周期；全局 tracing router 按 `trace_id` 将 SDK spans 写回对应 Runtime。
+- `src/chatty/demo_data.py`：可重复生成本地演示订单、客户 Memory 与 Handoff receipt；不伪造 Agent Trace。
 - `apps/web`：薄前端；只调用 FastAPI，不直接访问 SQLite、调用 Model、执行 Tool 或判断完成。
 - `knowledge/records.jsonl`：卖家验证的预分块知识，导入 SQLite FTS5 后由 `search_knowledge` 查询。
 - `eval/cases.jsonl`：确定性回归场景；可控 Model 只替代外部 Model API，Runner、Tools、SQLite、Trace 和完成验证均走真实路径。
-- `tests`：FastAPI + disposable SQLite 的公开行为测试。
+- `tests`：FastAPI + disposable SQLite 的公开行为测试；Playwright 另以真实 Chrome 验证 Web → FastAPI → Agent/Harness → Dashboard 路径。
 - `docs/adr`：重要决策史和当前决策状态。
 
 仓库不保留 TypeScript 后端、Next.js API routes 或内部 packages；TypeScript 只用于薄 web。
@@ -42,7 +46,7 @@
 
 **Handoff**：持久化到 SQLite 的人工支持请求，包含问题、Context、既有动作与 receipt。仅回复“请联系客服”不算 Handoff。
 
-**Trace**：本地保存的 Run 与 span 安全摘要，包括 Model、Tool、结果、错误和完成证据；默认不记录敏感 payload。
+**Trace**：本地保存的 Run 与 span 安全摘要，包括 Model、Tool、结果、错误和完成证据；默认不记录敏感 payload。多个 Runtime 并存时，全局 tracing router 以 `trace_id` 将 SDK Trace 路由到各自的 SQLite。
 
 **eval**：通过 JSONL 场景验证可观察 Agent 行为的回归门禁。确定性 eval 在 CI 运行；真实 DeepSeek contract 仅在显式 opt-in 且提供凭据时运行。
 

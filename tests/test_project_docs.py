@@ -1,3 +1,4 @@
+import json
 import re
 import subprocess
 import sys
@@ -23,6 +24,7 @@ def test_single_context_has_one_architecture_entrypoint() -> None:
         encoding="utf-8"
     )
     assert "ADR 0007" in adr_0001
+    assert "ADR 0008" in adr_0001
 
 
 def test_repository_has_only_python_backend_and_thin_web_runtime() -> None:
@@ -114,13 +116,37 @@ def test_readmes_describe_only_the_current_resume_mvp() -> None:
         assert "agent = model + harness" in lowered
         assert all(page in lowered for page in ("playground", "dashboard", "orders"))
         assert "python -m chatty.eval" in text
+        assert "python -m chatty.demo_data" in text
         assert "uv sync --locked" in text
         assert "pnpm install --frozen-lockfile" in text
+        assert "pnpm test:e2e" in text
+        assert "/api/chatty" in text
         assert all(term not in lowered for term in ("control-plane", "outbox", "worker", "jobs"))
 
     chinese = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "简历项目" in chinese
     assert "生产" in chinese
+
+
+def test_context_names_the_current_agent_harness_and_runtime_boundaries() -> None:
+    context = (ROOT / "CONTEXT.md").read_text(encoding="utf-8")
+
+    assert "`src/chatty/harness.py`" in context
+    assert "`src/chatty/runtime.py`" in context
+    assert "`trace_id`" in context
+    assert "Playwright" in context
+
+
+def test_agent_instructions_include_the_real_browser_gate() -> None:
+    agent_guide = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    root_package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
+    web_package = json.loads((ROOT / "apps/web/package.json").read_text(encoding="utf-8"))
+    playwright_config = (ROOT / "apps/web/playwright.config.ts").read_text(encoding="utf-8")
+
+    assert "`pnpm test:e2e`" in agent_guide
+    assert root_package["scripts"]["test:e2e"] == "pnpm --filter @chatty/web test:e2e"
+    assert web_package["scripts"]["test:e2e"] == "playwright test"
+    assert 'channel: "chrome"' in playwright_config
 
 
 def test_readme_eval_command_runs_the_deterministic_agent_path(tmp_path: Path) -> None:

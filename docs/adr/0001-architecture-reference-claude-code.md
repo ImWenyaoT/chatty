@@ -2,7 +2,7 @@
 
 - 状态：Superseded in part（2026-07-18）
 - 原决定日期：2026-07-12
-- 当前决定：见 ADR 0002、0003、0005、0006、0007
+- 当前决定：见 ADR 0002、0003、0005、0006、0007、0008
 
 ## 历史背景
 
@@ -26,4 +26,4 @@ Chatty 最初直接参考完整 Claude Code 的 Harness 形状，用它帮助识
 
 ## 后果
 
-当前架构以 ADR 0002 保留的 Model-directed Tool 选择、ADR 0005 的 Python Agent 运行时、ADR 0006 的显式客户 Memory 与 ADR 0007 的 single-context/eval 边界为准。任何新增机制都必须先证明它是现有可观察行为所需，而不能以“Claude Code 也有”为理由进入 Chatty；替代机制落地后删除旧实现。
+当前架构以 ADR 0002 保留的 Model-directed Tool 选择、ADR 0005 的 Python Agent 运行时、ADR 0006 的显式客户 Memory、ADR 0007 的 single-context/eval 边界与 ADR 0008 的最终平台收缩为准。任何新增机制都必须先证明它是现有可观察行为所需，而不能以“Claude Code 也有”为理由进入 Chatty；替代机制落地后删除旧实现。

@@ -38,7 +38,7 @@ UV_CACHE_DIR=.cache/uv uv run python -m chatty.demo_data
 - `http://127.0.0.1:3000/dashboard`：查看真实 Agent Run、Tool、Trace 和结果。
 - `http://127.0.0.1:3000/orders`：读取 Agent 操作后的 SQLite 订单。
 
-三个页面只调用 FastAPI；业务事实来自 `data/chatty.sqlite`，不是前端 fixtures。知识输入位于 `knowledge/records.jsonl`，导入 SQLite FTS5 后由 Agent Tool 搜索。Session、订单、Memory、Handoff receipt 与本地 Trace 也存入同一 SQLite 文件；`GET /sessions/{session_id}/messages` 可读取已绑定客户的 Session 历史。
+三个页面只调用 FastAPI；浏览器请求先访问同源 `/api/chatty`，再由 Next.js rewrite 转发到本地 FastAPI。业务事实来自 `data/chatty.sqlite`，不是前端 fixtures。知识输入位于 `knowledge/records.jsonl`，导入 SQLite FTS5 后由 Agent Tool 搜索。Session、订单、Memory、Handoff receipt 与本地 Trace 也存入同一 SQLite 文件；`GET /sessions/{session_id}/messages` 可读取已绑定客户的 Session 历史。
 
 ## eval 与验证
 
@@ -54,7 +54,10 @@ pnpm lint
 pnpm test
 pnpm typecheck
 pnpm build
+pnpm test:e2e
 ```
+
+`pnpm test:e2e` 会启动确定性 FastAPI 测试服务与 Next.js，并使用本机 Chrome 验证 Playground 发起 Agent Run、Harness 持久化 Trace、Dashboard 读取证据的真实浏览器路径。
 
 有真实 DeepSeek 凭据时，显式运行 contract eval：
 

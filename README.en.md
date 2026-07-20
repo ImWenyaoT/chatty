@@ -22,7 +22,15 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-The only Model settings are `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `MODEL_ID`. The example uses DeepSeek's OpenAI-compatible Chat Completions API with `deepseek-v4-pro`; thinking is disabled.
+To add repeatable local demo Orders, Customer Memory, and Handoff receipts:
+
+```bash
+UV_CACHE_DIR=.cache/uv uv run python -m chatty.demo_data
+```
+
+Running the command again does not duplicate the seeded records. Agent Traces still come only from real Agent Runs.
+
+The only Model settings are `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `MODEL_ID`. The example uses DeepSeek's OpenAI-compatible Chat Completions API with `deepseek-v4-pro`; thinking is disabled. Without an API key, the Run API returns an explicit configuration error.
 
 ## Three pages
 
@@ -30,7 +38,7 @@ The only Model settings are `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `MODEL_ID`.
 - `http://127.0.0.1:3000/dashboard` shows real Agent Runs, Tools, Traces, and outcomes.
 - `http://127.0.0.1:3000/orders` reads the SQLite Orders changed by the Agent.
 
-The pages call FastAPI only. `data/chatty.sqlite` is the source of truth for Sessions, Orders, Customer Memory, Handoff receipts, and local Traces. Seller Knowledge comes from `knowledge/records.jsonl` and is imported into SQLite FTS5. `GET /sessions/{session_id}/messages` reads the history of a customer-bound Session.
+The pages call FastAPI only. Browser requests use the same-origin `/api/chatty` path, which a Next.js rewrite forwards to local FastAPI. `data/chatty.sqlite` is the source of truth for Sessions, Orders, Customer Memory, Handoff receipts, and local Traces. Seller Knowledge comes from `knowledge/records.jsonl` and is imported into SQLite FTS5. `GET /sessions/{session_id}/messages` reads the history of a customer-bound Session.
 
 ## Eval and verification
 
@@ -46,7 +54,10 @@ pnpm lint
 pnpm test
 pnpm typecheck
 pnpm build
+pnpm test:e2e
 ```
+
+`pnpm test:e2e` starts a deterministic FastAPI test server and Next.js, then uses the installed Chrome browser to verify the real path from a Playground Agent Run through Harness Trace persistence to the Dashboard.
 
 With explicit DeepSeek credentials, opt in to the live contract eval:
 
