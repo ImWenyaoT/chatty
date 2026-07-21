@@ -75,6 +75,13 @@ test("documentation and CI expose the executable TypeScript gates", () => {
   ]) {
     assert.equal(ci.includes(command), true, `CI: ${command}`);
   }
+  assert.match(ci, /start --port 3101/);
+  assert.match(ci, /127\.0\.0\.1:3101\/api\/chatty\/health/);
+  const playwright = readFileSync(
+    join(root, "apps/web/playwright.config.ts"),
+    "utf8",
+  );
+  assert.match(playwright, /127\.0\.0\.1:3100/);
   assert.equal(/setup-uv|pytest|ruff|uv run/.test(ci), false);
   assert.equal(relative(root, join(root, "CONTEXT.md")), "CONTEXT.md");
 });

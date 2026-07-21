@@ -33,16 +33,16 @@ jobs:
       - run: pnpm eval
       - name: Built application smoke
         run: |
-          CHATTY_DATABASE_PATH="$RUNNER_TEMP/chatty.sqlite" pnpm --filter @chatty/web start --port 3100 &
+          CHATTY_DATABASE_PATH="$RUNNER_TEMP/chatty.sqlite" pnpm --filter @chatty/web start --port 3101 &
           web_pid=$!
           trap 'kill "$web_pid"' EXIT
           for attempt in 1 2 3 4 5 6 7 8 9 10; do
-            if curl --fail --silent --location http://127.0.0.1:3100/ > /dev/null \
-              && curl --fail --silent http://127.0.0.1:3100/orders > /dev/null \
-              && curl --fail --silent http://127.0.0.1:3100/api/chatty/health > /dev/null \
-              && curl --fail --silent http://127.0.0.1:3100/api/chatty/orders > /dev/null \
-              && curl --fail --silent http://127.0.0.1:3100/api/chatty/openapi.json > /dev/null \
-              && curl --fail --silent http://127.0.0.1:3100/api/chatty/docs > /dev/null; then
+            if curl --fail --silent --location http://127.0.0.1:3101/ > /dev/null \
+              && curl --fail --silent http://127.0.0.1:3101/orders > /dev/null \
+              && curl --fail --silent http://127.0.0.1:3101/api/chatty/health > /dev/null \
+              && curl --fail --silent http://127.0.0.1:3101/api/chatty/orders > /dev/null \
+              && curl --fail --silent http://127.0.0.1:3101/api/chatty/openapi.json > /dev/null \
+              && curl --fail --silent http://127.0.0.1:3101/api/chatty/docs > /dev/null; then
               exit 0
             fi
             sleep 1
