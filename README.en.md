@@ -1,78 +1,75 @@
-<p align="center"><strong>Chatty</strong></p>
-<p align="center"><a href="README.md">简体中文</a></p>
+# Chatty
 
-Chatty is a customer-service Agent MVP built as a resume project. Its governing axiom is **Agent = Model + Harness**: the Model understands intent and selects Tools; the Harness supplies trusted Context, bounded Tools, real execution, SQLite persistence, Trace evidence, and completion verification. OpenAI Agents SDK owns the only Agent Loop.
+[简体中文](README.md)
 
-The runnable path is `React/Vite → FastAPI → Runner.run → SQLite`. The Model can search source-backed seller Knowledge, read or change Orders, save explicit Customer Memory with Trace provenance, and create a traceable Handoff. A plausible reply alone is never proof that business work completed.
+Chatty is a full-stack TypeScript project. It demonstrates a verifiable single-Agent flow for research and content production.
+
+The project follows **Agent = Model + Harness**. The Model understands the task and selects a Tool. The Harness manages identity, permissions, execution, persistence, and completion checks. A model response alone does not prove that a task is complete.
+
+## Technology stack
+
+- **Runtime**: Node.js 24 and a pnpm workspace
+- **Web**: Next.js App Router, React, shadcn/ui, and Tailwind CSS v4
+- **Agent**: TypeScript OpenAI Agents SDK
+- **Data**: SQLite, FTS5, and JSONL
+- **Contracts**: TypeScript strict mode and Zod
+
+Next.js provides both pages and the HTTP entry point. The Route Handler in `apps/web` calls `@chatty/agent` directly. The project has no separate API server and no second business-logic path.
+
+The `@chatty/agent` package contains the Agent, Harness, Tools, Session, Trace, and SQLite access code. The `@chatty/contracts` package contains the JSON contracts shared by the Web and Agent packages.
+
+The main flow searches local Knowledge, creates a Research Artifact, creates a Content Artifact, requests human approval, and exports to a sandbox. Xiaohongshu, Douyin, and WeChat Official Account are content formats only. Chatty does not connect to these platforms.
 
 ## Run locally
 
-Python 3.12, Node.js 24, uv, and pnpm are required.
-
-```bash
-cp .env.example .env
-uv sync --locked
-uv run --env-file .env python main.py
-```
-
-In another terminal:
+Node.js 24 and pnpm 11 are required. Reuse `OPENAI_API_KEY` from the existing `.env`. You can also set `OPENAI_BASE_URL` and `MODEL_ID`. Never commit the key.
 
 ```bash
 pnpm install --frozen-lockfile
+pnpm --filter @chatty/agent demo
 pnpm dev
 ```
 
-To add repeatable local demo Orders, Customer Memory, and Handoff receipts:
+- Web: [http://127.0.0.1:3000/workbench](http://127.0.0.1:3000/workbench)
+- Agent API docs: [http://127.0.0.1:3000/api/chatty/docs](http://127.0.0.1:3000/api/chatty/docs)
+- Default database: `data/chatty.sqlite`
+- Set `CHATTY_DATABASE_PATH` to change the database path
+
+## Verify the project
 
 ```bash
-UV_CACHE_DIR=.cache/uv uv run python -m chatty.demo_data
-```
-
-Running the command again does not duplicate the seeded records. Agent Traces still come only from real Agent Runs.
-
-The only Model settings are `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `MODEL_ID`. The example uses DeepSeek's OpenAI-compatible Chat Completions API with `deepseek-v4-pro`; thinking is disabled. Without an API key, the Run API returns an explicit configuration error.
-
-## Three pages
-
-- `http://127.0.0.1:3000/playground` sends messages and shows replies, sources, and completion evidence.
-- `http://127.0.0.1:3000/dashboard` shows real Agent Runs, Tools, Traces, and outcomes.
-- `http://127.0.0.1:3000/orders` reads the SQLite Orders changed by the Agent.
-
-The pages call FastAPI only. Browser requests use the same-origin `/api/chatty` path, which the Vite development proxy forwards to local FastAPI. `data/chatty.sqlite` is the source of truth for Sessions, Orders, Customer Memory, Handoff receipts, and local Traces. Seller Knowledge comes from `knowledge/records.jsonl` and is imported into SQLite FTS5. `GET /sessions/{session_id}/messages` reads the history of a customer-bound Session.
-
-## Eval and verification
-
-Deterministic cases live in `eval/cases.jsonl`. The controllable Model replaces only the external API; FastAPI, OpenAI Agents SDK Runner, Tools, SQLite, Tracing, and completion verification use the real Agent path.
-
-```bash
-UV_CACHE_DIR=.cache/uv uv run python -m chatty.eval
-UV_CACHE_DIR=.cache/uv uv run ruff format --check .
-UV_CACHE_DIR=.cache/uv uv run ruff check .
-UV_CACHE_DIR=.cache/uv uv run ty check
-UV_CACHE_DIR=.cache/uv uv run pytest -q
 pnpm lint
 pnpm test
 pnpm typecheck
 pnpm build
+pnpm eval
 pnpm test:e2e
+pnpm test:deepseek
 ```
 
-`pnpm test:e2e` starts a deterministic FastAPI test server and the Vite development server, then uses the installed Chrome browser to verify the real path from a Playground Agent Run through Harness Trace persistence to the Dashboard.
+`pnpm eval` runs 7 repeatable Agent/Harness cases. It writes the results to `eval/results.jsonl`. One case covers the complete Runner path from Knowledge search to Research Artifact and Content Artifact.
 
-With explicit DeepSeek credentials, opt in to the live contract eval:
+`pnpm test:deepseek` uses the existing key to test the live model provider. It covers Tool schemas, Sessions, Traces, Knowledge sources, and recovery from missing arguments. The test does not print or store the key.
+
+## Build, deploy, and recover
 
 ```bash
-UV_CACHE_DIR=.cache/uv uv run pytest -q --run-deepseek tests/test_deepseek_contract.py
+pnpm build
+CHATTY_DATABASE_PATH=/absolute/path/chatty.sqlite pnpm --filter @chatty/web start
 ```
 
-The contract eval never prints or persists secrets.
+The production entry point is Next.js `next start`. The repository does not depend on a cloud platform. The deployment environment must support Node.js and persistent storage. Do not store the SQLite file in a temporary file system.
 
-## Scope
+Back up the database before a version change:
 
-This is a local resume project for demonstrating Agent/Harness boundaries, real business side effects, and verified outcomes. It is not a production customer-service or ecommerce system and makes no production availability claim. Authentication, multitenancy, payments, fulfillment, remote deployment, SLAs, multi-agent, RAG/vector databases, and streaming are out of scope.
+```bash
+pnpm --filter @chatty/agent backup --database ../../data/chatty.sqlite --output ../../backups/chatty.sqlite
+```
 
-See [`CONTEXT.md`](CONTEXT.md) for the single architecture entrypoint and [`docs/adr`](docs/adr) for decision history.
+Stop the Next.js process before recovery. Keep the failed database, restore a verified backup, and then check the health endpoint.
 
-## License
+The pre-migration code revision is `1c350fc382119c52431e1f050b616e340c1df026`. If you restore this revision, also restore the SQLite backup from the same point in time. Do not let two versions write to one database.
 
-[MIT](LICENSE)
+Legacy Web routes redirect to Workbench. Legacy Orders APIs, Tools, tests, and SQLite tables remain available for compatibility and rollback. Keep a verifiable historical revision and rollback point before removing them.
+
+This is a local MVP. It does not provide production multi-tenancy, horizontal scaling, real platform publishing, a Skill runtime, a workflow engine, or a Multi-Agent runtime.

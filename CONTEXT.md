@@ -1,55 +1,58 @@
 # Chatty 项目上下文
 
-本文件是仓库唯一的架构与领域语言入口。Chatty 是一个用于简历展示的单 Agent 客服 MVP：Python/FastAPI 后端运行真实 Agent 路径，薄 React/Vite 前端只提供 Playground、Dashboard 和 Orders 三个页面，SQLite 保存 demo 的业务事实与运行证据。
+本文件是仓库唯一的架构与领域入口。Chatty 是一个全栈 TypeScript 项目。它运行在 Node.js 24 上，并使用 Next.js、OpenAI Agents SDK 和 SQLite。shadcn/ui 与 Tailwind CSS v4 只负责界面。
 
-## 最高公理
+## 最高层边界
 
 **Agent = Model + Harness**。
 
-- **Model** 理解客户意图，并在 OpenAI Agents SDK 的 Agent Loop 中选择下一步 Tool。
-- **Harness** 提供可信 Context、有界 Tools、schema 与权限、真实执行、SQLite 持久化、运行边界、Trace 和完成验证。
-- Harness 不使用关键词或正则表达式替 Model 做客服意图路由。
-- 一段听起来合理的回复不是业务完成证据；真实 SQLite 状态、知识来源或可追踪 Handoff receipt 才是证据。
+- Model 理解自然语言，并选择 Tool 和参数。
+- Harness 提供服务端身份，限制 Tool 和 turn 数，执行操作并保存结果。
+- Harness 重新读取 SQLite 数据，以验证任务是否完成。
+- Artifact 状态、delivery receipt 或 Handoff receipt 必须已经保存并通过检查，才能作为完成证据。
+- Harness 不使用关键词提前选择业务路径。
 
-项目公理高于外部术语来源。其下，Agent 运行与 API 术语遵循 OpenAI Developers；AI coding 术语遵循 Dictionary of AI Coding。Python、TypeScript、SQLite、API、JSONL、eval 等必要技术词保持原名。
+## 模块
 
-## 当前运行边界
+- `apps/web`：Next.js 应用。它提供页面和 `/api/chatty` HTTP 入口。
+- `apps/web/src/app/api/chatty/[...path]/route.ts`：直接调用 `@chatty/agent`。它不复制业务逻辑。
+- `apps/api`：`@chatty/agent` 包的源码。它不是独立的网络服务。
+- `apps/api/src/agent-runtime.ts`：唯一 Agent Loop。它使用 TypeScript OpenAI Agents SDK 的 `Agent` 和 `Runner`。
+- `apps/api/src/harness.ts` 与 `tools.ts`：Tool 执行、权限边界、完成验证和 Handoff。
+- `apps/api/src/artifacts.ts`：Research Artifact、Content Artifact、人工批准和 sandbox delivery receipt。
+- `apps/api/src/runtime.ts`、`stores.ts` 与 `commerce.ts`：SQLite 数据访问。Orders 相关代码暂时用于兼容。
+- `apps/api/src/session.ts`：SQLite Session。它可以读取迁移前保存的 JSON。
+- `apps/api/src/knowledge.ts`：从 JSONL 导入的 FTS5 Knowledge。
+- `packages/contracts`：Web 与 Agent 共用的 HTTP JSON 契约。
 
-- `src/chatty`：唯一活动后端；FastAPI 提供 API，OpenAI Agents SDK 提供 `Runner.run` 和 `SQLiteSession`。
-- `src/chatty/agent.py`：组装并运行 Model、Tools 与 SDK Agent Loop；可信消息、Session 和业务依赖来自同一个 Harness Context。
-- `src/chatty/harness.py`：拥有可信 Context、业务回执、Handoff、安全恢复、完成验证与完成结果持久化。
-- `src/chatty/runtime.py`：统一拥有 SQLite Stores、Knowledge 与 Tracing 生命周期；全局 tracing router 按 `trace_id` 将 SDK spans 写回对应 Runtime。
-- `src/chatty/demo_data.py`：可重复生成本地演示订单、客户 Memory 与 Handoff receipt；不伪造 Agent Trace。
-- `apps/web`：React/Vite 薄 SPA；三个路由优先在视口内完成主任务，次要能力收入导航；页面只通过同源 `/api/chatty` 调用 FastAPI，不直接访问 SQLite、调用 Model、执行 Tool 或判断完成。
-- `knowledge/records.jsonl`：卖家验证的预分块知识，导入 SQLite FTS5 后由 `search_knowledge` 查询。
-- `eval/cases.jsonl`：确定性回归场景；可控 Model 只替代外部 Model API，Runner、Tools、SQLite、Trace 和完成验证均走真实路径。
-- `tests`：FastAPI + disposable SQLite 的公开行为测试；Playwright 另启动 Vite 开发服务，以真实 Chrome 验证 Web → FastAPI → Agent/Harness → Dashboard 路径。
-- `docs/adr`：重要决策史和当前决策状态。
+## 产品能力与非目标
 
-仓库不保留 TypeScript 后端、server-side web runtime 或内部 packages；TypeScript 只用于薄 web。
+主流程包含五步：
 
-## 领域语言
+1. 检索本地 Knowledge
+2. 保存 Research Artifact
+3. 根据 Research Artifact 保存 Content Artifact
+4. 人工批准 Content Artifact
+5. 导出到 sandbox，并保存 delivery receipt
 
-**Chatty Agent**：Model 与 Chatty Harness 的整体。
+外部 Skill 仓库只作为设计参考。Chatty 不加载第三方 Skill。它也没有 Skill catalog、workflow engine 或 Multi-Agent runtime。
 
-**Agent Loop**：OpenAI Agents SDK 负责的 model → tool → result → model 循环。Chatty 不维护第二套 loop。
+小红书、抖音和公众号只是 Content Artifact 的格式。MVP 不连接真实媒体平台。它也不提供实时行情、投资建议、向量数据库或产业图数据库。
 
-**Context**：当前 Run 所需的可信客户身份、Session、客户消息与业务依赖。请求或 Model 不能覆盖可信身份。
+## 外部契约与兼容边界
 
-**Tool**：Model 可选择的有界业务能力。当前包括知识搜索、客户 Memory 搜索与保存、库存与订单操作、Handoff。
+旧 Orders、Memory 和 Handoff HTTP 接口暂时保持兼容。SQLite schema、Session JSON、Knowledge JSONL、eval JSONL 和本地 Trace 格式也保持兼容。
 
-**Knowledge**：卖家验证、跨客户共享、带来源的事实。它不是 Agent Instructions、客户 Memory 或原始对话。
+`/playground`、`/orders` 和 `/dashboard` 会重定向到 `/workbench`。旧客服 Tools、测试和数据仍用于兼容。删除前必须保留可验证的历史版本和回滚点。
 
-**Customer Memory**：客户明确表达、跨交易稳定、带 Trace 来源的事实。临时需求、推断画像和自动抽取不进入 Memory。
+新的 Trace span 类型为 `agent`、`generation` 和 `function`。旧数据库中的历史 span 仍可查询。
 
-**业务结果**（代码标识 `BusinessOutcome`）：Tool 执行后由 Harness 依据 SQLite 状态或结构化结果验证的结果。`verified` 表示业务操作有证据，`not_completed` 表示尝试失败，`not_applicable` 表示普通回复无需业务副作用。
+配置来自 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`MODEL_ID` 和 `CHATTY_DATABASE_PATH`。Secret 不得进入响应、Trace、Session、SQLite 或日志。
 
-**Handoff**：持久化到 SQLite 的人工支持请求，包含问题、Context、既有动作与 receipt。仅回复“请联系客服”不算 Handoff。
+## 运行与恢复
 
-**Trace**：本地保存的 Run 与 span 安全摘要，包括 Model、Tool、结果、错误和完成证据；默认不记录敏感 payload。多个 Runtime 并存时，全局 tracing router 以 `trace_id` 将 SDK Trace 路由到各自的 SQLite。
+持续集成（CI）运行 `pnpm lint`、`pnpm test`、`pnpm typecheck`、`pnpm build`、`pnpm eval`、构建产物检查和 `pnpm test:e2e`。`pnpm test:deepseek` 手动测试真实 DeepSeek 服务。
 
-**eval**：通过 JSONL 场景验证可观察 Agent 行为的回归门禁。确定性 eval 在 CI 运行；真实 DeepSeek contract 仅在显式 opt-in 且提供凭据时运行。
+每次部署前运行 `pnpm --filter @chatty/agent backup`。部署环境必须提供 Node.js runtime 和持久化磁盘。
 
-## 不在 MVP 范围内
-
-生产电商、认证、多租户、支付、远程部署、multi-agent、RAG/vector database、streaming、后台任务系统与生产可用性承诺均不在范围内。
+回滚到 `1c350fc382119c52431e1f050b616e340c1df026` 时，也要恢复同一时间点的 SQLite 备份。不要让两个版本同时写入一个数据库。

@@ -3,10 +3,8 @@ name: CI
 on:
   pull_request:
   push:
-    branches:
-      - main
+    branches: [main]
 
-# 同一分支连推时取消旧 run，省额度也省排队
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -15,91 +13,40 @@ permissions:
   contents: read
 
 jobs:
-  python:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup uv and Python
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
-        with:
-          enable-cache: true
-          python-version: "3.12"
-
-      - name: Sync locked dependencies
-        run: uv sync --locked
-
-      - name: Ruff format
-        run: uv run ruff format --check .
-
-      - name: Ruff check
-        run: uv run ruff check .
-
-      - name: Typecheck
-        run: uv run ty check
-
-      - name: Test
-        run: uv run pytest -q
-
-      - name: Deterministic Agent eval
-        run: uv run python -m chatty.eval
-
-      - name: FastAPI smoke
-        run: |
-          uv run python main.py &
-          server_pid=$!
-          trap 'kill "$server_pid"' EXIT
-          for attempt in 1 2 3 4 5; do
-            curl --fail --silent http://127.0.0.1:8000/health && exit 0
-            sleep 1
-          done
-          exit 1
-
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
+    timeout-minutes: 20
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      # pnpm 版本从 package.json 的 packageManager 字段读取，避免两处漂移
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v5
         with:
           run_install: false
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
+      - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
           cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Web development command smoke
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm typecheck
+      - run: pnpm build
+      - run: pnpm eval
+      - name: Built application smoke
         run: |
-          pnpm dev &
-          server_pid=$!
-          trap 'kill "$server_pid"' EXIT
+          CHATTY_DATABASE_PATH="$RUNNER_TEMP/chatty.sqlite" pnpm --filter @chatty/web start --port 3100 &
+          web_pid=$!
+          trap 'kill "$web_pid"' EXIT
           for attempt in 1 2 3 4 5 6 7 8 9 10; do
-            curl --fail --silent http://127.0.0.1:3000/playground >/dev/null && exit 0
+            if curl --fail --silent --location http://127.0.0.1:3100/ > /dev/null \
+              && curl --fail --silent http://127.0.0.1:3100/orders > /dev/null \
+              && curl --fail --silent http://127.0.0.1:3100/api/chatty/health > /dev/null \
+              && curl --fail --silent http://127.0.0.1:3100/api/chatty/orders > /dev/null \
+              && curl --fail --silent http://127.0.0.1:3100/api/chatty/openapi.json > /dev/null \
+              && curl --fail --silent http://127.0.0.1:3100/api/chatty/docs > /dev/null; then
+              exit 0
+            fi
             sleep 1
           done
           exit 1
-
-      - name: Lint and format
-        run: pnpm lint
-
-      - name: Test web
-        run: pnpm test
-
-      - name: Typecheck web
-        run: pnpm typecheck
-
-      - name: Build web
-        run: pnpm build
+      - name: Browser E2E
+        run: pnpm test:e2e

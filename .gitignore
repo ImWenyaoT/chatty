@@ -13,6 +13,7 @@ __pycache__/
 coverage/
 htmlcov/
 dist/
+.next/
 *.tsbuildinfo
 *.log
 .DS_Store
@@ -50,5 +51,5 @@ data/
 *.sqlite3
 *.sqlite3-*
 
-# Eval 产物由 `python -m chatty.eval` 生成，不入库
+# Eval 产物由 `pnpm eval` 生成，不入库
 eval/results.jsonl

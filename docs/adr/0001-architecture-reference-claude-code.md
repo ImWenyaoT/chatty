@@ -2,7 +2,7 @@
 
 - 状态：Superseded in part（2026-07-18）
 - 原决定日期：2026-07-12
-- 当前决定：见 ADR 0002、0003、0005、0006、0007、0008、0009
+- 当前决定：见 ADR 0010、0012 和 0013
 
 ## 历史背景
 
@@ -26,4 +26,4 @@ Chatty 最初直接参考完整 Claude Code 的 Harness 形状，用它帮助识
 
 ## 后果
 
-当前架构以 ADR 0002 保留的 Model-directed Tool 选择、ADR 0005 的 Python Agent 运行时、ADR 0006 的显式客户 Memory、ADR 0007 的 single-context/eval 边界、ADR 0008 的最终平台收缩与 ADR 0009 的薄 React/Vite 前端为准。任何新增机制都必须先证明它是现有可观察行为所需，而不能以“Claude Code 也有”为理由进入 Chatty；替代机制落地后删除旧实现。
+当前架构以 ADR 0010 的 TypeScript 运行时、ADR 0012 的 Next.js 入口和 ADR 0013 的 Workbench 为准。ADR 0002、0006、0007 和 0008 中未被取代的边界继续有效。新增机制必须支持当前可验证行为，不能只因为 Claude Code 有相似功能就加入 Chatty。

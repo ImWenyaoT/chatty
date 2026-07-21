@@ -1,8 +1,8 @@
-/** PostCSS pipeline for Tailwind CSS v4 utilities in the Vite app. */
+/** PostCSS pipeline for Tailwind CSS v4 utilities in the Next.js app. */
 const config = {
   plugins: {
-    "@tailwindcss/postcss": {},
+    '@tailwindcss/postcss': {},
   },
-};
+}
 
-export default config;
+export default config

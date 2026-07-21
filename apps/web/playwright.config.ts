@@ -1,36 +1,27 @@
-import { defineConfig, devices } from "@playwright/test";
+import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
-  testDir: "./e2e",
-  outputDir: "../../output/playwright/test-results",
+  testDir: './e2e',
+  outputDir: '../../output/playwright/test-results',
   reporter: [
-    ["html", { outputFolder: "../../output/playwright/report", open: "never" }],
+    ['html', { outputFolder: '../../output/playwright/report', open: 'never' }],
   ],
   use: {
-    baseURL: "http://127.0.0.1:3100",
-    trace: "retain-on-failure",
-    screenshot: "only-on-failure",
+    baseURL: 'http://127.0.0.1:3100',
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
   },
   projects: [
     {
-      name: "chrome",
-      use: { ...devices["Desktop Chrome"], channel: "chrome" },
+      name: 'chrome',
+      use: { ...devices['Desktop Chrome'], channel: 'chrome' },
     },
   ],
-  webServer: [
-    {
-      command:
-        "UV_CACHE_DIR=.cache/uv CHATTY_E2E_DATABASE=.cache/browser-e2e.sqlite uv run uvicorn tests.browser_smoke_app:app --host 127.0.0.1 --port 8100",
-      cwd: "../..",
-      url: "http://127.0.0.1:8100/health",
-      reuseExistingServer: false,
-      timeout: 30_000,
-    },
-    {
-      command: "CHATTY_API_TARGET=http://127.0.0.1:8100 pnpm dev --port 3100",
-      url: "http://127.0.0.1:3100/playground",
-      reuseExistingServer: false,
-      timeout: 30_000,
-    },
-  ],
-});
+  webServer: {
+    command:
+      'CHATTY_E2E_DATABASE=.cache/browser-e2e-typescript.sqlite pnpm dev --port 3100',
+    url: 'http://127.0.0.1:3100/api/chatty/health',
+    reuseExistingServer: false,
+    timeout: 30_000,
+  },
+})

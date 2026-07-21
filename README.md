@@ -1,78 +1,77 @@
-<p align="center"><strong>Chatty</strong></p>
-<p align="center"><a href="README.en.md">English</a></p>
+# Chatty
 
-Chatty 是一个用于简历展示的客服 Agent MVP。项目最高公理是 **Agent = Model + Harness**：Model 理解客户意图并选择 Tool；Harness 提供可信 Context、有界 Tools、真实执行、SQLite 持久化、Trace 与完成验证。OpenAI Agents SDK 负责唯一的 Agent Loop。
+[English](README.en.md)
 
-当前可运行路径是 `React/Vite → FastAPI → Runner.run → SQLite`。Model 可查询带来源的卖家知识、读取与修改订单、保存带 Trace 来源的显式客户 Memory，或创建可追踪 Handoff。Harness 不以关键词预判意图，也不把一段回复当作业务完成证据。
+Chatty 是一个全栈 TypeScript 项目。它演示一个可验证的单 Agent 研究与内容生产流程。
 
-## 运行
+项目遵循 **Agent = Model + Harness**。Model 理解任务并选择 Tool。Harness 管理身份、权限、执行、数据保存和完成验证。模型回复不能单独证明任务已经完成。
 
-需要 Python 3.12、Node.js 24、uv 和 pnpm。
+## 技术栈
 
-```bash
-cp .env.example .env
-uv sync --locked
-uv run --env-file .env python main.py
-```
+- **运行环境**：Node.js 24 和 pnpm workspace
+- **Web**：Next.js App Router、React、shadcn/ui 和 Tailwind CSS v4
+- **Agent**：TypeScript OpenAI Agents SDK
+- **数据**：SQLite、FTS5 和 JSONL
+- **契约**：TypeScript strict mode 和 Zod
 
-另开终端：
+Next.js 同时提供页面和 HTTP 入口。`apps/web` 的 Route Handler 直接调用 `@chatty/agent`。项目没有单独运行的 API 服务，也没有第二套业务逻辑。
+
+`@chatty/agent` 包含 Agent、Harness、Tools、Session、Trace 和 SQLite 数据访问。`@chatty/contracts` 保存 Web 与 Agent 共用的 JSON 契约。
+
+主流程为：检索本地 Knowledge，生成 Research Artifact，生成 Content Artifact，人工批准，然后导出到 sandbox。小红书、抖音和公众号只是内容格式。项目不会连接这些平台。
+
+## 本地运行
+
+需要 Node.js 24 和 pnpm 11。复用仓库现有 `.env` 中的 `OPENAI_API_KEY`。也可以设置 `OPENAI_BASE_URL` 和 `MODEL_ID`。不要把 key 提交到 Git。
 
 ```bash
 pnpm install --frozen-lockfile
+pnpm --filter @chatty/agent demo
 pnpm dev
 ```
 
-如需为本地演示补充可重复的订单、客户 Memory 与 Handoff receipt，可运行：
+- Web：[http://127.0.0.1:3000/workbench](http://127.0.0.1:3000/workbench)
+- Agent API 文档：[http://127.0.0.1:3000/api/chatty/docs](http://127.0.0.1:3000/api/chatty/docs)
+- 默认数据库：`data/chatty.sqlite`
+- 使用 `CHATTY_DATABASE_PATH` 可以修改数据库路径
+
+## 验证
 
 ```bash
-UV_CACHE_DIR=.cache/uv uv run python -m chatty.demo_data
-```
-
-重复执行不会重复生成同一批模拟数据；Agent Trace 仍只由真实 Agent Run 产生。
-
-配置只有 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`MODEL_ID`。示例使用 DeepSeek 的 OpenAI-compatible Chat Completions API 和 `deepseek-v4-pro`；thinking 已关闭。缺少 key 时 Run API 返回明确错误。
-
-## 三个页面
-
-- `http://127.0.0.1:3000/playground`：发送消息并查看回复、来源与完成证据。
-- `http://127.0.0.1:3000/dashboard`：查看真实 Agent Run、Tool、Trace 和结果。
-- `http://127.0.0.1:3000/orders`：读取 Agent 操作后的 SQLite 订单。
-
-三个页面只调用 FastAPI；浏览器请求先访问同源 `/api/chatty`，再由 Vite 开发代理转发到本地 FastAPI。业务事实来自 `data/chatty.sqlite`，不是前端 fixtures。知识输入位于 `knowledge/records.jsonl`，导入 SQLite FTS5 后由 Agent Tool 搜索。Session、订单、Memory、Handoff receipt 与本地 Trace 也存入同一 SQLite 文件；`GET /sessions/{session_id}/messages` 可读取已绑定客户的 Session 历史。
-
-## eval 与验证
-
-确定性 eval 的用例是 `eval/cases.jsonl`。可控 Model 只替代外部 API；FastAPI、OpenAI Agents SDK Runner、Tool、SQLite、Trace 与完成验证均走真实 Agent path。
-
-```bash
-UV_CACHE_DIR=.cache/uv uv run python -m chatty.eval
-UV_CACHE_DIR=.cache/uv uv run ruff format --check .
-UV_CACHE_DIR=.cache/uv uv run ruff check .
-UV_CACHE_DIR=.cache/uv uv run ty check
-UV_CACHE_DIR=.cache/uv uv run pytest -q
 pnpm lint
 pnpm test
 pnpm typecheck
 pnpm build
+pnpm eval
 pnpm test:e2e
+pnpm test:deepseek
 ```
 
-`pnpm test:e2e` 会启动确定性 FastAPI 测试服务与 Vite 开发服务，并使用本机 Chrome 验证 Playground 发起 Agent Run、Harness 持久化 Trace、Dashboard 读取证据的真实浏览器路径。
+`pnpm eval` 运行 7 个可重复的 Agent/Harness 用例。结果写入 `eval/results.jsonl`。其中一个用例覆盖从检索到 Research Artifact，再到 Content Artifact 的完整 Runner 路径。
 
-有真实 DeepSeek 凭据时，显式运行 contract eval：
+`pnpm test:deepseek` 使用现有 key 测试真实模型服务。测试覆盖 Tool schema、Session、Trace、Knowledge 来源和缺少参数时的恢复。测试不会输出或保存 key。
+
+`pnpm --filter @chatty/agent test:resume-contract` 单独检查旧客服行为契约和对应 eval，避免演示方向升级后改变简历叙事。
+
+## 构建、部署与恢复
 
 ```bash
-UV_CACHE_DIR=.cache/uv uv run pytest -q --run-deepseek tests/test_deepseek_contract.py
+pnpm build
+CHATTY_DATABASE_PATH=/absolute/path/chatty.sqlite pnpm --filter @chatty/web start
 ```
 
-contract eval 不输出或持久化 secret。
+生产入口是 Next.js 的 `next start`。仓库不依赖特定云平台。部署环境必须支持 Node.js 和持久化磁盘。SQLite 文件不能放在临时文件系统中。
 
-## 项目边界
+切换版本前先备份数据库：
 
-这是用于说明 Agent/Harness 边界、真实业务副作用和可验证结果的本地简历项目，不是生产客服或生产电商系统。认证、多租户、支付、仓储、远程部署、SLA、multi-agent、RAG/vector database 与 streaming 均不在 MVP 范围内。
+```bash
+pnpm --filter @chatty/agent backup --database ../../data/chatty.sqlite --output ../../backups/chatty.sqlite
+```
 
-详细领域语言与架构入口见 [`CONTEXT.md`](CONTEXT.md)，决策史见 [`docs/adr`](docs/adr)。
+恢复时先停止 Next.js 进程。保留故障数据库，再恢复已验证的备份。启动后检查健康接口。
 
-## 许可
+迁移前的代码版本是 `1c350fc382119c52431e1f050b616e340c1df026`。回滚到该版本时，也要恢复同一时间点的 SQLite 备份。不要让不同版本同时写入一个数据库。
 
-[MIT](LICENSE)
+旧 Web 页面会重定向到 Workbench。旧 Orders API、Tools、测试和 SQLite 表仍用于兼容与回滚。删除前必须保留可验证的历史版本和回滚点。
+
+这是本地 MVP。它不提供生产级多租户、水平扩展、真实平台分发、Skill runtime、workflow engine 或 Multi-Agent runtime。
