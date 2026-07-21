@@ -14,8 +14,15 @@ test('browser completes research, human approval, and sandbox export', async ({
   await page.goto('/workbench')
   await page.getByRole('button', { name: '运行 Agent' }).click()
 
-  await expect(page.getByText('高精地图产业研究简报')).toBeVisible()
-  await expect(page.getByText('高精地图内容包')).toBeVisible()
+  await expect(
+    page.getByRole('heading', {
+      name: '高精地图产业研究简报',
+      exact: true,
+    }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: '高精地图内容包', exact: true }),
+  ).toBeVisible()
   await expect(page.getByText('等待人工批准').first()).toBeVisible()
 
   await page.getByRole('button', { name: '批准内容包' }).click()
