@@ -14,20 +14,24 @@
 
 ## 模块
 
-- `main.py`：uvicorn 启动入口。它在 `127.0.0.1:8000` 运行 FastAPI 应用。
-- `src/chatty/app.py`：FastAPI 应用工厂。全部路由挂在 `/api/chatty` 前缀下，可选伺服前端 `dist`。
+- `main.py`：uvicorn 启动入口薄壳。装配逻辑在 `src/chatty/server.py`。
+- `src/chatty/server.py`：唯一 uvicorn 入口工厂。`pnpm dev:api`、CI 冒烟与生产共用它，单进程伺服前端 `dist` 与 `/api/chatty/*`。
+- `src/chatty/config.py`：运行时配置解析。仓库根、数据库路径、静态目录与 knowledge 路径只有这一个来源；空环境变量等同未设置，相对路径按仓库根解析。
+- `src/chatty/env.py`：加载仓库根 `.env`。只做 setdefault，已存在的环境变量优先。
+- `src/chatty/app.py`：FastAPI 应用工厂。全部路由挂在 `/api/chatty` 前缀下，可选伺服前端 `dist`。RunFailure 到 HTTP 状态的映射也在这里，路由级差异由调用点传入。
 - `src/chatty/run.py`：唯一 Agent Loop。它使用 Python OpenAI Agents SDK 的 `Agent` 和 `Runner`。
 - `src/chatty/agent.py`：Agent 构造和 live Model Provider（DeepSeek，Chat Completions 协议）。
-- `src/chatty/harness.py` 与 `tools.py`：Tool 执行、权限边界、完成验证和 Handoff。
+- `src/chatty/harness.py` 与 `tools.py`：Tool 执行、权限边界、完成验证和 Handoff。每个 Tool 的参数 schema 只声明一次，两条校验 lane 由测试锁定一致（见 ADR 0015）。
+- `src/chatty/session.py`：会话历史。表名、SDK `SQLiteSession` 生命周期与会话归属校验都在这里。读路径不依赖模型配置。
 - `src/chatty/artifacts.py`：Research Artifact、Content Artifact、人工批准和 sandbox delivery receipt。
-- `src/chatty/sqlite.py`：SQLite 连接、写事务锁与行读取契约。所有 store 共用这一层。
+- `src/chatty/sqlite.py`：`Database` 连接句柄。它持有自己的写锁并提供 `transaction()`，调用方不需要知道锁从哪里来。
 - `src/chatty/memory.py`、`support.py`、`traces.py` 与 `commerce.py`：按领域拆分的 store（客户记忆与会话归属、人工接管请求、本地 trace/span、订单）。Orders 相关代码暂时用于兼容。
-- `src/chatty/runtime.py`：把上述 store 组装成一个进程内 runtime。
+- `src/chatty/runtime.py`：把上述 store 组装成一个进程内 runtime。它持有共享连接拓扑与关闭顺序。
 - `src/chatty/knowledge.py`：从 JSONL 导入的 FTS5 Knowledge。
 - `src/chatty/contracts.py`：Pydantic 契约。它是 HTTP JSON 契约的唯一权威；前端在 `web/src/lib/contracts.ts` 保留本地 zod 校验副本。
 - `src/chatty/tracing.py`：SDK trace 落到本地 SQLite。
 - `src/chatty/eval.py`：确定性 eval（`uv run python -m chatty.eval`）。
-- `src/chatty/browser_smoke.py` 与 `smoke.py`：Playwright e2e 与 CI 冒烟的 ASGI 工厂。
+- `src/chatty/browser_smoke.py`：Playwright e2e 用的 ASGI 工厂，装配确定性脚本模型。
 - `src/chatty/backup.py`：SQLite 在线备份 CLI。
 - `web`：Vite SPA。它只负责界面，不含第二套业务逻辑。
 
