@@ -5,57 +5,19 @@ on:
   push:
     branches: [main]
 
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
-
 permissions:
   contents: read
 
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-      - uses: pnpm/action-setup@v5
-        with:
-          run_install: false
-      - uses: actions/setup-node@v6
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-          cache-dependency-path: web/pnpm-lock.yaml
-      - run: uv sync
-      - run: pnpm -C web install --frozen-lockfile
+      - run: uv sync --locked
       - run: uv run ruff check .
       - run: uv run ty check
       - run: uv run pytest -q
-      - run: uv run python -m chatty.eval
-      - run: pnpm -C web lint
-      - run: pnpm -C web test:coverage
-      - run: pnpm -C web typecheck
-      - run: pnpm -C web build
-      - name: Built application smoke
-        run: |
-          CHATTY_DATABASE_PATH="$RUNNER_TEMP/chatty.sqlite" CHATTY_STATIC_DIR=web/dist \
-            uv run uvicorn --factory chatty.server:create_server_app --port 3101 &
-          server_pid=$!
-          trap 'kill "$server_pid"' EXIT
-          for attempt in 1 2 3 4 5 6 7 8 9 10; do
-            if curl --fail --silent --location http://127.0.0.1:3101/ > /dev/null \
-              && curl --fail --silent http://127.0.0.1:3101/orders > /dev/null \
-              && curl --fail --silent http://127.0.0.1:3101/api/chatty/health > /dev/null \
-              && curl --fail --silent http://127.0.0.1:3101/api/chatty/orders > /dev/null \
-              && curl --fail --silent http://127.0.0.1:3101/api/chatty/openapi.json > /dev/null \
-              && curl --fail --silent http://127.0.0.1:3101/api/chatty/docs > /dev/null; then
-              exit 0
-            fi
-            sleep 1
-          done
-          exit 1
-      - name: Browser E2E
-        run: pnpm test:e2e

@@ -1,6 +1,12 @@
-"""uvicorn 启动入口（`pnpm dev:api`）：装配逻辑全在 `chatty.server`（受 ty 与 pytest 覆盖）。"""
+"""Chatty FastAPI entry point."""
 
-from chatty.server import serve
+from __future__ import annotations
+
+import os
+
+import uvicorn
 
 if __name__ == "__main__":
-    serve()
+    port = int(os.environ.get("PORT", "8000"))
+    host = "0.0.0.0" if "PORT" in os.environ else "127.0.0.1"  # noqa: S104
+    uvicorn.run("chatty.app:app", host=host, port=port)

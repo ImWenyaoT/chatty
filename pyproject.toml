@@ -1,26 +1,25 @@
 [project]
 name = "chatty-agent"
 version = "0.1.0"
-description = "Chatty's Python Agent and Harness runtime."
+description = "A single-agent e-commerce recommendation and marketing demo."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-  "fastapi>=0.116,<1",
-  # Temporary compatibility pin: openai-agents 0.17.8 reads a response usage
-  # shape that changed in openai 2.45 (cache_write_tokens).
-  "openai>=2.44,<2.45",
-  "openai-agents==0.17.8",
-  "pydantic>=2.11,<3",
-  "uvicorn>=0.35,<1",
+  "fastapi>=0.139.2,<1",
+  "openai>=2.46,<3",
+  "openai-agents==0.18.3",
+  "pydantic>=2.13.4,<3",
+  "python-dotenv>=1.2.2,<2",
+  "uvicorn>=0.51,<1",
 ]
 
 [dependency-groups]
 dev = [
-  "httpx>=0.28,<1",
-  "pytest>=8.4,<9",
-  "pytest-asyncio>=1.1,<2",
-  "ruff>=0.12,<1",
-  "ty>=0.0.1a16",
+  "httpx2>=2.7,<3",
+  "pytest>=9.1.1,<10",
+  "pytest-asyncio>=1.4,<2",
+  "ruff>=0.15.22,<1",
+  "ty>=0.0.62",
 ]
 
 [build-system]
@@ -33,11 +32,6 @@ packages = ["src/chatty"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-# 默认跳过真实 DeepSeek 契约测试；`pnpm test:deepseek`（pytest -m deepseek）显式运行。
-addopts = "-m 'not deepseek'"
-markers = [
-  "deepseek: real DeepSeek provider contract tests (needs OPENAI_API_KEY from repo-root .env)",
-]
 
 [tool.ruff]
 line-length = 100
@@ -47,14 +41,10 @@ target-version = "py312"
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.ruff.lint.isort]
-# Ruff 0.12 (the version the old lockfile pinned) auto-detected the src layout;
-# newer ruff no longer classifies `chatty` as first-party, so declare it.
 known-first-party = ["chatty"]
 
 [tool.ty.environment]
 python-version = "3.12"
 
 [tool.ty.src]
-# ty 查 src/ 与根部入口 main.py；tests/ 大量使用鸭子类型 stub（如 StubTrace 代
-# Trace、直调 on_invoke_tool 的假 ToolContext），对名义类型检查是不可修的噪音。
 include = ["src", "main.py"]

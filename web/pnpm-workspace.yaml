@@ -1,6 +1,0 @@
-# pnpm 11 只从该文件读取设置（package.json#pnpm 已停用）；此处不声明 packages，
-# web/ 是独立的单包项目，不是工作区。
-allowBuilds:
-  esbuild: true
-  sharp: true
-  unrs-resolver: false

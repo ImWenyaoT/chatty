@@ -1,4 +1,0 @@
-{"id":"policy-rental-period-1","title":"租期计算","summary":"租期从签收当天开始，到约定归还日期寄回。","body":"租期从客户签收当天开始计算，到约定归还日期寄回即可；在途时间不计入租期。","source":"seller-policy://rental-period","tags":["租赁","租期"]}
-{"id":"policy-exchange-1","title":"尺码不合适可以换吗","summary":"发错尺码或推荐尺码不合身时可协助换码。","body":"如商家发错尺码或款式，可免费补发；如按客服推荐尺码仍不合身，可协助更换一次。","source":"seller-policy://exchange","tags":["售后","换码"]}
-{"id":"product-suit-001-1","title":"SUIT-001 黑色双排扣西装","summary":"面试与婚礼场景西装，首日 199 元，续租每日 99.5 元。","body":"SUIT-001 黑色双排扣西装适合面试、婚礼和商务活动。第一天租赁价格 199 元，续租每天 99.5 元，寄出一般包邮，偏远地区除外。","source":"seller-catalog://SUIT-001","tags":["西装","价格","商品"]}
-{"id":"demo-industry-map","title":"高精地图产业链演示资料","summary":"高精地图连接定位、地图更新与智能驾驶应用。","body":"本地演示资料将高精地图描述为连接定位数据、地图更新能力与智能驾驶应用的数据基础能力；不包含实时市场规模、公司排名或投资建议。","source":"demo://industry/high-definition-map","tags":["产业研究","高精地图","智能驾驶","演示"]}

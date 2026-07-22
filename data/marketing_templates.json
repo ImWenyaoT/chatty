@@ -1,0 +1,22 @@
+{
+  "new_user": {
+    "tone": "热情友好",
+    "instructions": "突出易上手和选择成本低，不编造新人优惠。"
+  },
+  "active": {
+    "tone": "自然有活力",
+    "instructions": "结合浏览偏好突出商品亮点和使用场景。"
+  },
+  "high_value": {
+    "tone": "克制有品质感",
+    "instructions": "强调材质、性能和长期使用价值，不虚构会员权益。"
+  },
+  "price_sensitive": {
+    "tone": "直接务实",
+    "instructions": "突出售价与性价比，不使用历史最低等无依据表述。"
+  },
+  "churn_risk": {
+    "tone": "温和召回",
+    "instructions": "强调与既有兴趣的关联，不制造虚假稀缺和限时压力。"
+  }
+}
