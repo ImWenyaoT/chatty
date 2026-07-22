@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -471,6 +472,44 @@ def execute_chatty_tool(
         return _failure_json(error)
 
 
+def _params_signature(
+    params_model: type[_StrictModel],
+) -> tuple[inspect.Signature, dict[str, Any]]:
+    """把 params model 的字段翻译成 SDK 需要的函数签名——schema 只声明一次。
+
+    openai-agents 的 function_schema 从函数签名反推参数 model：它读取
+    `inspect.signature` 与 `__annotations__`，并从 `Annotated[...]` 元数据里取
+    FieldInfo。所以把 params model 每个字段的 FieldInfo 原样挂回 Annotated，
+    SDK 侧 strict schema 就由 Harness 侧 params model 派生，二者不可能漂移。
+
+    两点刻意的处理：
+    - 默认值只留在 FieldInfo 里，签名参数一律无默认值。否则「有默认值的参数
+      后面不能跟无默认值参数」会强迫签名重排字段顺序（`CreateOrderParams.channel`
+      即是此例），重排即是第二份声明。
+    - 顶层字段不允许 alias：签名参数名就是模型对外的键名，alias 会让二者分叉。
+      别名只在嵌套 model 内使用（`ResearchRelationParams.from`），那部分 schema
+      由 pydantic 直接生成，不经过签名。
+    """
+    context_annotation = RunContextWrapper[AgentContext]
+    parameters = [
+        inspect.Parameter(
+            "ctx", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=context_annotation
+        )
+    ]
+    annotations: dict[str, Any] = {"ctx": context_annotation, "return": str}
+    for field_name, field_info in params_model.model_fields.items():
+        if field_info.alias is not None:
+            raise ValueError(f"top-level tool param must not use an alias: {field_name}")
+        annotation = Annotated[field_info.annotation, field_info]
+        parameters.append(
+            inspect.Parameter(
+                field_name, inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=annotation
+            )
+        )
+        annotations[field_name] = annotation
+    return inspect.Signature(parameters, return_annotation=str), annotations
+
+
 def build_chatty_tools(
     *, state: ToolExecutionState, knowledge_store: KnowledgeStore
 ) -> list[Tool]:
@@ -497,174 +536,23 @@ def build_chatty_tools(
         ctx.context.record_failure(tool_name, error)
         return _failure_json(error)
 
-    @function_tool(
-        description_override=TOOL_DESCRIPTIONS["search_knowledge"],
-        use_docstring_info=False,
-        failure_error_function=record_tool_failure,
-    )
-    async def search_knowledge(
-        ctx: RunContextWrapper[AgentContext],
-        query: Annotated[str, Field(min_length=1, max_length=500)],
-        limit: Annotated[int, Field(ge=1, le=5)] = 3,
-    ) -> str:
-        return dispatch(ctx, "search_knowledge")
+    def build(tool_name: str, spec: _ToolSpec) -> Tool:
+        signature, annotations = _params_signature(spec.params_model)
 
-    @function_tool(
-        description_override=TOOL_DESCRIPTIONS["search_customer_memory"],
-        use_docstring_info=False,
-        failure_error_function=record_tool_failure,
-    )
-    async def search_customer_memory(
-        ctx: RunContextWrapper[AgentContext],
-        query: Annotated[
-            str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
-        ],
-        limit: Annotated[int, Field(ge=1, le=10)] = 5,
-    ) -> str:
-        return dispatch(ctx, "search_customer_memory")
+        async def invoke(ctx: RunContextWrapper[AgentContext], *_values: Any) -> str:
+            # 参数值由 SDK 校验后按签名位置传入，这里刻意不用：执行统一走
+            # execute_chatty_tool 重读原始 JSON，与 eval compose lane 同一条路径。
+            return dispatch(ctx, tool_name)
 
-    @function_tool(
-        description_override=TOOL_DESCRIPTIONS["save_customer_memory"],
-        use_docstring_info=False,
-        failure_error_function=record_tool_failure,
-    )
-    async def save_customer_memory(
-        ctx: RunContextWrapper[AgentContext],
-        fact: Annotated[
-            str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)
-        ],
-        explicitly_stated: Literal[True],
-        stable: Literal[True],
-    ) -> str:
-        return dispatch(ctx, "save_customer_memory")
+        invoke.__name__ = tool_name
+        invoke.__signature__ = signature  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+        invoke.__annotations__ = annotations
+        return function_tool(
+            invoke,
+            name_override=tool_name,
+            description_override=TOOL_DESCRIPTIONS[tool_name],
+            use_docstring_info=False,
+            failure_error_function=record_tool_failure,
+        )
 
-    @function_tool(
-        description_override=TOOL_DESCRIPTIONS["check_availability"],
-        use_docstring_info=False,
-        failure_error_function=record_tool_failure,
-    )
-    async def check_availability(
-        ctx: RunContextWrapper[AgentContext],
-        product_id: str,
-        size: str,
-        fulfillment_mode: FulfillmentMode,
-        quantity: int,
-        start_date: IsoDateString | None,
-        end_date: IsoDateString | None,
-    ) -> str:
-        return dispatch(ctx, "check_availability")
-
-    @function_tool(
-        description_override=TOOL_DESCRIPTIONS["create_order"],
-        use_docstring_info=False,
-        failure_error_function=record_tool_failure,
-    )
-    async def create_order(
-        ctx: RunContextWrapper[AgentContext],
-        idempotency_key: Annotated[str, Field(min_length=1, max_length=200)],
-        product_id: Annotated[str, Field(min_length=1, max_length=100)],
-        size: Annotated[str, Field(min_length=1, max_length=40)],
-        fulfillment_mode: FulfillmentMode,
-        quantity: Annotated[int, Field(ge=1, le=100)],
-        start_date: IsoDateString | None,
-        end_date: IsoDateString | None,
-        amount_cents: Annotated[int, Field(gt=0)],
-        address: Annotated[str, Field(min_length=1, max_length=500)],
-        risk: Annotated[str, Field(min_length=1, max_length=500)],
-        channel: Annotated[str, Field(min_length=1, max_length=100)] = "Chatty",
-    ) -> str:
-        return dispatch(ctx, "create_order")
-
-    @function_tool(
-        description_override=TOOL_DESCRIPTIONS["view_order"],
-        use_docstring_info=False,
-        failure_error_function=record_tool_failure,
-    )
-    async def view_order(ctx: RunContextWrapper[AgentContext], order_id: str) -> str:
-        return dispatch(ctx, "view_order")
-
-    @function_tool(
-        description_override=TOOL_DESCRIPTIONS["confirm_order"],
-        use_docstring_info=False,
-        failure_error_function=record_tool_failure,
-    )
-    async def confirm_order(ctx: RunContextWrapper[AgentContext], order_id: str) -> str:
-        return dispatch(ctx, "confirm_order")
-
-    @function_tool(
-        description_override=TOOL_DESCRIPTIONS["cancel_order"],
-        use_docstring_info=False,
-        failure_error_function=record_tool_failure,
-    )
-    async def cancel_order(ctx: RunContextWrapper[AgentContext], order_id: str) -> str:
-        return dispatch(ctx, "cancel_order")
-
-    @function_tool(
-        description_override=TOOL_DESCRIPTIONS["create_handoff"],
-        use_docstring_info=False,
-        failure_error_function=record_tool_failure,
-    )
-    async def create_handoff(
-        ctx: RunContextWrapper[AgentContext], reason: str, context: str
-    ) -> str:
-        return dispatch(ctx, "create_handoff")
-
-    @function_tool(
-        description_override=TOOL_DESCRIPTIONS["save_research_artifact"],
-        use_docstring_info=False,
-        failure_error_function=record_tool_failure,
-    )
-    async def save_research_artifact(
-        ctx: RunContextWrapper[AgentContext],
-        idempotency_key: Annotated[str, Field(min_length=1, max_length=200)],
-        title: Annotated[str, Field(min_length=1, max_length=500)],
-        summary: Annotated[str, Field(min_length=1, max_length=2000)],
-        claims: Annotated[list[ResearchClaimParams], Field(min_length=1, max_length=30)],
-        nodes: Annotated[list[ResearchNodeParams], Field(max_length=30)],
-        relations: Annotated[list[ResearchRelationParams], Field(max_length=60)],
-        unknowns: Annotated[
-            list[Annotated[str, Field(min_length=1, max_length=500)]], Field(max_length=20)
-        ],
-    ) -> str:
-        return dispatch(ctx, "save_research_artifact")
-
-    @function_tool(
-        description_override=TOOL_DESCRIPTIONS["save_content_artifact"],
-        use_docstring_info=False,
-        failure_error_function=record_tool_failure,
-    )
-    async def save_content_artifact(
-        ctx: RunContextWrapper[AgentContext],
-        idempotency_key: Annotated[str, Field(min_length=1, max_length=200)],
-        research_artifact_id: Annotated[str, Field(min_length=1, max_length=200)],
-        title: Annotated[str, Field(min_length=1, max_length=500)],
-        channels: Annotated[list[ContentChannelParams], Field(min_length=1, max_length=3)],
-    ) -> str:
-        return dispatch(ctx, "save_content_artifact")
-
-    @function_tool(
-        description_override=TOOL_DESCRIPTIONS["export_artifact"],
-        use_docstring_info=False,
-        failure_error_function=record_tool_failure,
-    )
-    async def export_artifact(
-        ctx: RunContextWrapper[AgentContext],
-        artifact_id: Annotated[str, Field(min_length=1, max_length=200)],
-        target: Literal["sandbox"],
-    ) -> str:
-        return dispatch(ctx, "export_artifact")
-
-    return [
-        search_knowledge,
-        search_customer_memory,
-        save_customer_memory,
-        check_availability,
-        create_order,
-        view_order,
-        confirm_order,
-        cancel_order,
-        create_handoff,
-        save_research_artifact,
-        save_content_artifact,
-        export_artifact,
-    ]
+    return [build(tool_name, spec) for tool_name, spec in _TOOL_SPECS.items()]
