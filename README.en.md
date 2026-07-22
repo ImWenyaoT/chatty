@@ -14,7 +14,7 @@ The project follows **Agent = Model + Harness**. The Model understands the task 
 - **Data**: SQLite, FTS5, and JSONL
 - **Contracts**: Pydantic models + OpenAPI; the frontend keeps a local zod validation copy
 
-FastAPI is the only HTTP process and serves every `/api/chatty` endpoint. `src/chatty` contains the Agent, Harness, Tools, Artifacts, Session, Trace, and SQLite access code. `apps/web` is a Vite SPA that only renders the UI and has no second business-logic path.
+FastAPI is the only HTTP process and serves every `/api/chatty` endpoint. `src/chatty` contains the Agent, Harness, Tools, Artifacts, Session, Trace, and SQLite access code. `web` is a Vite SPA that only renders the UI and has no second business-logic path.
 
 The main flow searches local Knowledge, creates a Research Artifact, creates a Content Artifact, requests human approval, and exports to a sandbox. Xiaohongshu, Douyin, and WeChat Official Account are content formats only. Chatty does not connect to these platforms.
 
@@ -24,7 +24,7 @@ uv, Node.js 24, and pnpm 11 are required. Reuse `OPENAI_API_KEY` from the existi
 
 ```bash
 uv sync
-pnpm install --frozen-lockfile
+pnpm -C web install --frozen-lockfile
 pnpm dev:api   # FastAPI at 127.0.0.1:8000
 pnpm dev       # Vite dev server at 127.0.0.1:3000, proxying /api/chatty to FastAPI
 ```
@@ -54,11 +54,11 @@ pnpm test:deepseek
 
 ```bash
 pnpm build
-CHATTY_DATABASE_PATH=/absolute/path/chatty.sqlite CHATTY_STATIC_DIR=apps/web/dist \
+CHATTY_DATABASE_PATH=/absolute/path/chatty.sqlite CHATTY_STATIC_DIR=web/dist \
   uv run uvicorn --factory chatty.smoke:create_smoke_app --host 127.0.0.1 --port 8000
 ```
 
-The production entry point is a single FastAPI process that serves both `apps/web/dist` and `/api/chatty/*` from one origin. The repository does not depend on a cloud platform. The deployment environment must support Python and persistent storage. Do not store the SQLite file in a temporary file system.
+The production entry point is a single FastAPI process that serves both `web/dist` and `/api/chatty/*` from one origin. The repository does not depend on a cloud platform. The deployment environment must support Python and persistent storage. Do not store the SQLite file in a temporary file system.
 
 Back up the database before a version change:
 

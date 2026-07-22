@@ -28,19 +28,20 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
       - run: uv sync
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm -C web install --frozen-lockfile
       - run: uv run ruff check .
       - run: uv run ty check
       - run: uv run pytest -q
       - run: uv run python -m chatty.eval
-      - run: pnpm --filter @chatty/web lint
-      - run: pnpm --filter @chatty/web test:coverage
-      - run: pnpm --filter @chatty/web typecheck
-      - run: pnpm --filter @chatty/web build
+      - run: pnpm -C web lint
+      - run: pnpm -C web test:coverage
+      - run: pnpm -C web typecheck
+      - run: pnpm -C web build
       - name: Built application smoke
         run: |
-          CHATTY_DATABASE_PATH="$RUNNER_TEMP/chatty.sqlite" CHATTY_STATIC_DIR=apps/web/dist \
+          CHATTY_DATABASE_PATH="$RUNNER_TEMP/chatty.sqlite" CHATTY_STATIC_DIR=web/dist \
             uv run uvicorn --factory chatty.smoke:create_smoke_app --port 3101 &
           server_pid=$!
           trap 'kill "$server_pid"' EXIT

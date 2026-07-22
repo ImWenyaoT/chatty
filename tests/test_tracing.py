@@ -16,7 +16,7 @@ from test_run import MessageStep, ScriptedModel, ToolStep, make_module, write_kn
 from chatty.harness import RunFailure
 from chatty.run import ChattyRunModule
 from chatty.runtime import NativeRuntime
-from chatty.store import TraceStore
+from chatty.traces import TraceStore
 from chatty.tracing import RuntimeTracingRouter, install_runtime_tracing
 
 

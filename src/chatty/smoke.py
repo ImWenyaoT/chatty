@@ -1,7 +1,7 @@
 """CI 冒烟 ASGI 工厂（decisions §7.3）：单进程 FastAPI 伺服前端 dist + `/api/chatty/*`。
 
 启动命令：
-    CHATTY_DATABASE_PATH="$RUNNER_TEMP/chatty.sqlite" CHATTY_STATIC_DIR=apps/web/dist \
+    CHATTY_DATABASE_PATH="$RUNNER_TEMP/chatty.sqlite" CHATTY_STATIC_DIR=web/dist \
         uv run uvicorn --factory chatty.smoke:create_smoke_app --port 3101
 """
 
@@ -17,7 +17,7 @@ from chatty.env import load_root_env
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DATABASE_PATH = "data/chatty.sqlite"
-DEFAULT_STATIC_DIR = "apps/web/dist"
+DEFAULT_STATIC_DIR = "web/dist"
 
 
 def _resolve(raw: str) -> Path:

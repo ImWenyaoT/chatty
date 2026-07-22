@@ -16,7 +16,8 @@ from chatty.app import create_app
 from chatty.artifacts import ArtifactStore
 from chatty.commerce import CommerceStore, CreateOrderInput
 from chatty.eval import EvalModel, MessageScript
-from chatty.store import MemoryStore, SupportRequestStore
+from chatty.memory import MemoryStore
+from chatty.support import SupportRequestStore
 
 BASE = "/api/chatty"
 

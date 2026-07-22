@@ -12,7 +12,9 @@ from pathlib import Path
 from chatty.artifacts import ArtifactStore
 from chatty.commerce import CommerceStore
 from chatty.knowledge import KnowledgeStore
-from chatty.store import MemoryStore, SupportRequestStore, TraceStore
+from chatty.memory import MemoryStore
+from chatty.support import SupportRequestStore
+from chatty.traces import TraceStore
 
 
 class NativeRuntime:

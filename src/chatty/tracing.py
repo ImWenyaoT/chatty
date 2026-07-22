@@ -16,7 +16,7 @@ from typing import Any
 
 from agents.tracing import Span, Trace, TracingProcessor, set_trace_processors
 
-from chatty.store import TraceStore
+from chatty.traces import TraceStore
 
 
 class RuntimeTracingRouter(TracingProcessor):

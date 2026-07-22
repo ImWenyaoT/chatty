@@ -14,7 +14,7 @@ Chatty 是一个 Python/FastAPI 后端加 Vite/React 前端的项目。它演示
 - **数据**：SQLite、FTS5 和 JSONL
 - **契约**：Pydantic 模型 + OpenAPI；前端保留本地 zod 校验副本
 
-FastAPI 是唯一 HTTP 进程，提供 `/api/chatty` 全部接口。`src/chatty` 包含 Agent、Harness、Tools、Artifacts、Session、Trace 和 SQLite 数据访问。`apps/web` 是 Vite SPA，只负责界面，没有第二套业务逻辑。
+FastAPI 是唯一 HTTP 进程，提供 `/api/chatty` 全部接口。`src/chatty` 包含 Agent、Harness、Tools、Artifacts、Session、Trace 和 SQLite 数据访问。`web` 是 Vite SPA，只负责界面，没有第二套业务逻辑。
 
 主流程为：检索本地 Knowledge，生成 Research Artifact，生成 Content Artifact，人工批准，然后导出到 sandbox。小红书、抖音和公众号只是内容格式。项目不会连接这些平台。
 
@@ -24,7 +24,7 @@ FastAPI 是唯一 HTTP 进程，提供 `/api/chatty` 全部接口。`src/chatty`
 
 ```bash
 uv sync
-pnpm install --frozen-lockfile
+pnpm -C web install --frozen-lockfile
 pnpm dev:api   # FastAPI，127.0.0.1:8000
 pnpm dev       # Vite dev server，127.0.0.1:3000，代理 /api/chatty 到 FastAPI
 ```
@@ -54,11 +54,11 @@ pnpm test:deepseek
 
 ```bash
 pnpm build
-CHATTY_DATABASE_PATH=/absolute/path/chatty.sqlite CHATTY_STATIC_DIR=apps/web/dist \
+CHATTY_DATABASE_PATH=/absolute/path/chatty.sqlite CHATTY_STATIC_DIR=web/dist \
   uv run uvicorn --factory chatty.smoke:create_smoke_app --host 127.0.0.1 --port 8000
 ```
 
-生产入口是单进程 FastAPI：同时伺服 `apps/web/dist` 和 `/api/chatty/*`，保持单一 origin。仓库不依赖特定云平台。部署环境必须支持 Python 和持久化磁盘。SQLite 文件不能放在临时文件系统中。
+生产入口是单进程 FastAPI：同时伺服 `web/dist` 和 `/api/chatty/*`，保持单一 origin。仓库不依赖特定云平台。部署环境必须支持 Python 和持久化磁盘。SQLite 文件不能放在临时文件系统中。
 
 切换版本前先备份数据库：
 

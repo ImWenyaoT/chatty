@@ -15,7 +15,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from chatty.contracts import Order, OrderEvent
-from chatty.store import database_write_lock, open_connection, text, write_transaction
+from chatty.sqlite import database_write_lock, open_connection, text, write_transaction
 
 FulfillmentMode = Literal["rental", "buyout"]
 OrderStatus = Literal["pending", "confirmed", "cancelled"]

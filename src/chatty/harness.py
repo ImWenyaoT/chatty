@@ -17,12 +17,9 @@ from pydantic import ValidationError
 from chatty.artifacts import ArtifactStore
 from chatty.commerce import CommerceError, CommerceStore
 from chatty.contracts import KnowledgeRecord, MemoryEvent, Order
-from chatty.store import (
-    MemoryStore,
-    SupportRequestIdempotencyConflictError,
-    SupportRequestStore,
-    TraceStore,
-)
+from chatty.memory import MemoryStore
+from chatty.support import SupportRequestIdempotencyConflictError, SupportRequestStore
+from chatty.traces import TraceStore
 
 BusinessOutcome = Literal["verified", "not_completed", "not_applicable"]
 

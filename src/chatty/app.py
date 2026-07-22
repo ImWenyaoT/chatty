@@ -46,7 +46,7 @@ from chatty.contracts import (
 from chatty.harness import RunFailure, run_failure_http_status
 from chatty.run import ChattyRunModule
 from chatty.runtime import NativeRuntime
-from chatty.store import TraceStore, TraceSummary
+from chatty.traces import TraceStore, TraceSummary
 
 BASE_PATH = "/api/chatty"
 

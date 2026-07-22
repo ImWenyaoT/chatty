@@ -16,7 +16,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from chatty.contracts import KnowledgeRecord, KnowledgeSearchResult
-from chatty.store import database_write_lock, write_transaction
+from chatty.sqlite import database_write_lock, write_transaction
 
 _SEARCHABLE_COLUMNS = ("title", "summary", "body", "tags")
 

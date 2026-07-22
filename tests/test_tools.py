@@ -16,7 +16,8 @@ from chatty.commerce import CommerceStore, CreateOrderInput
 from chatty.contracts import KnowledgeRecord, KnowledgeSearchResult, Order
 from chatty.harness import AgentContext
 from chatty.knowledge import KnowledgeStore
-from chatty.store import MemoryStore, SupportRequestStore, TraceStore
+from chatty.memory import MemoryStore
+from chatty.support import SupportRequestStore
 from chatty.tools import (
     CHATTY_TOOL_NAMES,
     TOOL_DESCRIPTIONS,
@@ -24,6 +25,7 @@ from chatty.tools import (
     build_chatty_tools,
     execute_chatty_tool,
 )
+from chatty.traces import TraceStore
 
 KB_RECORDS = [
     {

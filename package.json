@@ -7,21 +7,18 @@
   "engines": {
     "node": ">=24"
   },
-  "workspaces": [
-    "apps/web"
-  ],
   "scripts": {
-    "dev": "pnpm --filter @chatty/web dev",
+    "dev": "pnpm -C web dev",
     "dev:api": "uv run python main.py",
-    "build": "pnpm --filter @chatty/web build",
-    "test": "uv run pytest -q && pnpm --filter @chatty/web test:frontend",
-    "typecheck": "uv run ty check && pnpm --filter @chatty/web typecheck",
-    "lint": "uv run ruff check . && pnpm --filter @chatty/web lint",
-    "lint:fix": "uv run ruff check . --fix && pnpm --filter @chatty/web lint:fix",
-    "test:frontend": "pnpm --filter @chatty/web test:frontend",
-    "test:e2e": "pnpm --filter @chatty/web test:e2e",
+    "build": "pnpm -C web build",
+    "test": "uv run pytest -q && pnpm -C web test:frontend",
+    "typecheck": "uv run ty check && pnpm -C web typecheck",
+    "lint": "uv run ruff check . && pnpm -C web lint",
+    "lint:fix": "uv run ruff check . --fix && pnpm -C web lint:fix",
+    "test:frontend": "pnpm -C web test:frontend",
+    "test:e2e": "pnpm -C web test:e2e",
     "test:deepseek": "uv run pytest -m deepseek -q",
-    "test:coverage": "pnpm --filter @chatty/web test:coverage",
+    "test:coverage": "pnpm -C web test:coverage",
     "eval": "uv run python -m chatty.eval",
     "backup": "uv run python -m chatty.backup"
   }

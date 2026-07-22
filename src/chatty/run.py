@@ -28,8 +28,8 @@ from chatty.harness import (
     persist_agent_failure,
     persist_agent_run,
 )
+from chatty.memory import SessionCustomerMismatchError, SessionNotFoundError
 from chatty.runtime import NativeRuntime
-from chatty.store import SessionCustomerMismatchError, SessionNotFoundError
 from chatty.tools import ToolExecutionState, build_chatty_tools
 from chatty.tracing import RuntimeTracingRouter, install_runtime_tracing
 

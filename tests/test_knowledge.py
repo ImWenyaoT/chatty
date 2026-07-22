@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from chatty.knowledge import KnowledgeStore
-from chatty.store import open_connection
+from chatty.sqlite import open_connection
 
 
 def record(record_id: str, **overrides: object) -> dict[str, object]:

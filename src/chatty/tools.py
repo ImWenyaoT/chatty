@@ -25,7 +25,7 @@ from chatty.commerce import CommerceError, CreateOrderInput, FulfillmentMode
 from chatty.contracts import CustomerMemory, KnowledgeRecord, MemoryEvent, Order
 from chatty.harness import AgentContext, create_handoff_receipt
 from chatty.knowledge import KnowledgeStore
-from chatty.store import CustomerMemory as StoredCustomerMemory
+from chatty.memory import CustomerMemory as StoredCustomerMemory
 
 IsoDateString = Annotated[str, Field(pattern=r"^\d{4}-\d{2}-\d{2}$")]
 

@@ -27,7 +27,7 @@ from chatty.contracts import (
     ContentArtifact,
     ResearchArtifact,
 )
-from chatty.store import database_write_lock
+from chatty.sqlite import database_write_lock
 
 _MEMORY_PATH = ":memory:"
 
@@ -171,7 +171,7 @@ def content_review_errors(artifact: Mapping[str, Any], parent: Mapping[str, Any]
 
 
 def _database_write_lock(database_path: str) -> threading.RLock:
-    """写锁获取（decisions §4.2）：文件库复用 chatty.store 的进程级注册表（按解析后
+    """写锁获取（decisions §4.2）：文件库复用 chatty.sqlite 的进程级注册表（按解析后
     路径共享一把 RLock，跨 store 串行化同文件写事务）；:memory: 库彼此独立，各自新锁。
     """
     if database_path == _MEMORY_PATH:

@@ -32,7 +32,9 @@ from chatty.harness import (
     persist_agent_run,
     run_failure_http_status,
 )
-from chatty.store import MemoryStore, SupportRequestStore, TraceStore
+from chatty.memory import MemoryStore
+from chatty.support import SupportRequestStore
+from chatty.traces import TraceStore
 
 
 @dataclass

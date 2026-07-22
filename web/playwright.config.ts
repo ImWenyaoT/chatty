@@ -2,9 +2,9 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: './e2e',
-  outputDir: '../../output/playwright/test-results',
+  outputDir: '../output/playwright/test-results',
   reporter: [
-    ['html', { outputFolder: '../../output/playwright/report', open: 'never' }],
+    ['html', { outputFolder: '../output/playwright/report', open: 'never' }],
   ],
   use: {
     baseURL: 'http://127.0.0.1:3100',
@@ -21,7 +21,7 @@ export default defineConfig({
     {
       command:
         'UV_CACHE_DIR=.cache/uv CHATTY_E2E_DATABASE=.cache/browser-e2e.sqlite uv run uvicorn --factory chatty.browser_smoke:create_app --port 8100',
-      cwd: '../..',
+      cwd: '..',
       url: 'http://127.0.0.1:8100/api/chatty/health',
       reuseExistingServer: false,
       timeout: 30_000,
