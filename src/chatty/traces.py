@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
-from chatty.sqlite import integer, nullable_text, open_connection, string_array, text
+from chatty.sqlite import Database, integer, nullable_text, string_array, text
 
 
 @dataclass(frozen=True)
@@ -57,7 +57,7 @@ class TraceStore:
 
     def __init__(self, database_path: str | Path) -> None:
         self.database_path = Path(database_path)
-        self.database = open_connection(self.database_path)
+        self.database = Database(self.database_path)
         self.database.execute(
             """
             CREATE TABLE IF NOT EXISTS local_traces (
@@ -303,7 +303,7 @@ class TraceStore:
         )
 
     @staticmethod
-    def _add_missing_columns(connection: sqlite3.Connection) -> None:
+    def _add_missing_columns(connection: Database) -> None:
         trace_columns = {row[1] for row in connection.execute("PRAGMA table_info(local_traces)")}
         for name, declaration in {
             "business_outcome": "TEXT",

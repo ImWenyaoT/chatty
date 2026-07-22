@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
-from chatty.sqlite import open_connection, text
+from chatty.sqlite import Database, text
 
 
 @dataclass(frozen=True)
@@ -57,7 +57,7 @@ class MemoryStore:
 
     def __init__(self, database_path: str | Path) -> None:
         self.database_path = Path(database_path)
-        self.database = open_connection(self.database_path)
+        self.database = Database(self.database_path)
         self.database.execute(
             """
             CREATE TABLE IF NOT EXISTS customer_memories (

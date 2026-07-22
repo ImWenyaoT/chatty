@@ -2,8 +2,8 @@
 
 ArtifactStore 管理 4 张表（artifacts / artifact_reviews / artifact_approvals /
 artifact_deliveries）与五状态机 draft → review_pending|review_failed → approved →
-exported。写事务统一 BEGIN IMMEDIATE，同一数据库文件的写事务由进程级 RLock 串行化
-（decisions §4.2）。损坏行读取时让 pydantic ValidationError 裸抛（decisions §3.2）。
+exported。连接与写事务全部经 chatty.sqlite 的 Database 句柄（BEGIN IMMEDIATE + 句柄
+自带的写事务锁，decisions §4.2）。损坏行读取时让 pydantic ValidationError 裸抛（decisions §3.2）。
 """
 
 from __future__ import annotations
@@ -12,10 +12,8 @@ import builtins
 import hashlib
 import json
 import sqlite3
-import threading
 import uuid
-from collections.abc import Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, Literal
 
@@ -27,9 +25,7 @@ from chatty.contracts import (
     ContentArtifact,
     ResearchArtifact,
 )
-from chatty.sqlite import database_write_lock
-
-_MEMORY_PATH = ":memory:"
+from chatty.sqlite import Database
 
 _REVIEWED_STATUSES = ("review_pending", "approved", "exported")
 
@@ -170,15 +166,6 @@ def content_review_errors(artifact: Mapping[str, Any], parent: Mapping[str, Any]
     return errors
 
 
-def _database_write_lock(database_path: str) -> threading.RLock:
-    """写锁获取（decisions §4.2）：文件库复用 chatty.sqlite 的进程级注册表（按解析后
-    路径共享一把 RLock，跨 store 串行化同文件写事务）；:memory: 库彼此独立，各自新锁。
-    """
-    if database_path == _MEMORY_PATH:
-        return threading.RLock()
-    return database_write_lock(database_path)
-
-
 def _as_mapping(item: Mapping[str, Any] | BaseModel) -> Mapping[str, Any]:
     if isinstance(item, BaseModel):
         return item.model_dump(by_alias=True)
@@ -266,17 +253,12 @@ class ArtifactStore:
     """Artifact 存储：创建幂等、一次性自动 review、人工 approve、sandbox export。"""
 
     def __init__(self, database_path: str | Path) -> None:
-        path = str(database_path)
-        if path != _MEMORY_PATH:
-            Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self._lock = _database_write_lock(path)
-        self._connection = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
-        self._connection.row_factory = sqlite3.Row
-        self._connection.execute("PRAGMA foreign_keys = ON")
-        self._connection.executescript(_SCHEMA)
+        # 建目录、外键、Row 工厂、写事务锁身份（含 :memory: 各自一把）全归句柄管。
+        self._database = Database(database_path)
+        self._database.executescript(_SCHEMA)
 
     def close(self) -> None:
-        self._connection.close()
+        self._database.close()
 
     # ---- 创建（§5.2–§5.4） ----
 
@@ -350,7 +332,7 @@ class ArtifactStore:
     ) -> ResearchArtifact | ContentArtifact:
         # 幂等比较是字符串等值比较，序列化必须确定性（紧凑、非 ASCII 原样、固定 key 顺序）。
         payload_json = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-        row = self._connection.execute(
+        row = self._database.execute(
             "SELECT * FROM artifacts WHERE idempotency_key = ?", (idempotency_key,)
         ).fetchone()
         if row is not None:
@@ -368,7 +350,7 @@ class ArtifactStore:
             return existing
         artifact_id = f"artifact_{uuid.uuid4().hex}"
         # 单条 INSERT 不包事务（自动提交），并发由 idempotency_key UNIQUE 兜底（§5.10）。
-        self._connection.execute(
+        self._database.execute(
             "INSERT INTO artifacts"
             " (id, idempotency_key, kind, owner_id, session_id, title, payload_json, status)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, 'draft')",
@@ -379,7 +361,7 @@ class ArtifactStore:
     # ---- 读（§5.5） ----
 
     def get(self, artifact_id: str) -> ResearchArtifact | ContentArtifact:
-        row = self._connection.execute(
+        row = self._database.execute(
             "SELECT * FROM artifacts WHERE id = ?", (artifact_id,)
         ).fetchone()
         if row is None:
@@ -391,12 +373,12 @@ class ArtifactStore:
     ) -> builtins.list[ResearchArtifact | ContentArtifact]:
         # 注：类作用域内 `list` 会解析到本方法名，故显式走 builtins。
         if session_id is None:
-            rows = self._connection.execute(
+            rows = self._database.execute(
                 "SELECT * FROM artifacts WHERE owner_id = ? ORDER BY created_at DESC, id DESC",
                 (owner_id,),
             ).fetchall()
         else:
-            rows = self._connection.execute(
+            rows = self._database.execute(
                 "SELECT * FROM artifacts WHERE owner_id = ? AND session_id = ?"
                 " ORDER BY created_at DESC, id DESC",
                 (owner_id, session_id),
@@ -407,7 +389,7 @@ class ArtifactStore:
 
     def review(self, artifact_id: str) -> ArtifactReview:
         artifact = self.get(artifact_id)
-        row = self._connection.execute(
+        row = self._database.execute(
             "SELECT * FROM artifact_reviews WHERE artifact_id = ?", (artifact_id,)
         ).fetchone()
         if row is not None:
@@ -431,8 +413,8 @@ class ArtifactStore:
             )
         passed = not errors
         review_id = f"review_{uuid.uuid4().hex}"
-        with self._transaction():
-            self._connection.execute(
+        with self._database.transaction():
+            self._database.execute(
                 "INSERT INTO artifact_reviews (id, artifact_id, passed, errors_json)"
                 " VALUES (?, ?, ?, ?)",
                 (
@@ -451,7 +433,7 @@ class ArtifactStore:
         artifact = self.get(artifact_id)
         if artifact.owner_id != owner_id:
             raise ArtifactNotFoundError(artifact_id)
-        row = self._connection.execute(
+        row = self._database.execute(
             "SELECT * FROM artifact_approvals WHERE artifact_id = ?", (artifact_id,)
         ).fetchone()
         if row is not None:
@@ -461,8 +443,8 @@ class ArtifactStore:
         if artifact.status != "review_pending":
             raise ArtifactStateError("artifact_not_reviewed")
         approval_id = f"approval_{uuid.uuid4().hex}"
-        with self._transaction():
-            self._connection.execute(
+        with self._database.transaction():
+            self._database.execute(
                 "INSERT INTO artifact_approvals (id, artifact_id, actor_id, decision)"
                 " VALUES (?, ?, ?, 'approved')",
                 (approval_id, artifact_id, actor_id),
@@ -479,7 +461,7 @@ class ArtifactStore:
         artifact = self.get(artifact_id)
         if artifact.owner_id != owner_id:
             raise ArtifactNotFoundError(artifact_id)
-        row = self._connection.execute(
+        row = self._database.execute(
             "SELECT * FROM artifact_deliveries WHERE artifact_id = ? AND target = ?",
             (artifact_id, target),
         ).fetchone()
@@ -494,8 +476,8 @@ class ArtifactStore:
             canonical_artifact_json(artifact).encode("utf-8")
         ).hexdigest()
         delivery_id = f"delivery_{uuid.uuid4().hex}"
-        with self._transaction():
-            self._connection.execute(
+        with self._database.transaction():
+            self._database.execute(
                 "INSERT INTO artifact_deliveries (id, artifact_id, target, content_hash)"
                 " VALUES (?, ?, ?, ?)",
                 (delivery_id, artifact_id, target, content_hash),
@@ -505,7 +487,7 @@ class ArtifactStore:
 
     def get_delivery(self, delivery_id: str, owner_id: str) -> DeliveryReceipt:
         """§5.9：Harness 事后验证用，无 HTTP 端点。"""
-        row = self._connection.execute(
+        row = self._database.execute(
             "SELECT artifact_deliveries.*, artifacts.status AS artifact_status"
             " FROM artifact_deliveries"
             " JOIN artifacts ON artifacts.id = artifact_deliveries.artifact_id"
@@ -521,7 +503,7 @@ class ArtifactStore:
     # ---- 内部 ----
 
     def _set_status(self, artifact_id: str, status: str) -> None:
-        self._connection.execute(
+        self._database.execute(
             "UPDATE artifacts"
             " SET status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"
             " WHERE id = ?",
@@ -530,21 +512,9 @@ class ArtifactStore:
 
     def _require_row(self, table: str, row_id: str) -> sqlite3.Row:
         # table 只来自内部字面量，无注入面。
-        row = self._connection.execute(
+        row = self._database.execute(
             f"SELECT * FROM {table} WHERE id = ?", (row_id,)
         ).fetchone()
         if row is None:  # pragma: no cover - 刚插入的行必然存在
             raise RuntimeError(f"row vanished: {table}/{row_id}")
         return row
-
-    @contextmanager
-    def _transaction(self) -> Iterator[None]:
-        """BEGIN IMMEDIATE → 写语句 → COMMIT；异常时 ROLLBACK 并重抛（§5.10）。"""
-        with self._lock:
-            self._connection.execute("BEGIN IMMEDIATE")
-            try:
-                yield
-            except BaseException:
-                self._connection.execute("ROLLBACK")
-                raise
-            self._connection.execute("COMMIT")

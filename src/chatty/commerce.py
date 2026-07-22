@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, Self
@@ -15,7 +14,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from chatty.contracts import Order, OrderEvent
-from chatty.sqlite import database_write_lock, open_connection, text, write_transaction
+from chatty.sqlite import Database, text
 
 FulfillmentMode = Literal["rental", "buyout"]
 OrderStatus = Literal["pending", "confirmed", "cancelled"]
@@ -127,11 +126,8 @@ class CommerceStore:
 
     def __init__(self, database_path: str | Path) -> None:
         self.database_path = Path(database_path)
-        self.database = open_connection(self.database_path)
-        self._write_lock = database_write_lock(self.database_path)
+        self.database = Database(self.database_path)
         self.database.executescript(SCHEMA)
-        # executescript 后重申外键（PRAGMA 属 per-connection；保险起见显式再开）
-        self.database.execute("PRAGMA foreign_keys = ON")
         self.database.execute(
             "INSERT OR IGNORE INTO products (id, name) VALUES (?, ?)",
             ("SUIT-001", "黑色双排扣西装"),
@@ -153,7 +149,7 @@ class CommerceStore:
         fulfillment_mode: FulfillmentMode,
         start_date: str | None = None,
         end_date: str | None = None,
-        connection: sqlite3.Connection | None = None,
+        connection: Database | None = None,
     ) -> Availability:
         if quantity < 1:
             raise CommerceError("invalid_quantity")
@@ -205,7 +201,7 @@ class CommerceStore:
         )
 
     def create_order(self, order_input: CreateOrderInput) -> Order:
-        with write_transaction(self.database, self._write_lock) as connection:
+        with self.database.transaction() as connection:
             existing = connection.execute(
                 "SELECT id FROM orders WHERE idempotency_key = ?",
                 (order_input.idempotency_key,),
@@ -260,7 +256,7 @@ class CommerceStore:
             return self._get_order(order_id, connection)
 
     def confirm_order(self, order_id: str) -> Order:
-        with write_transaction(self.database, self._write_lock) as connection:
+        with self.database.transaction() as connection:
             order = self._get_order(order_id, connection)
             if order.status == "confirmed":
                 return order
@@ -296,7 +292,7 @@ class CommerceStore:
             return self._get_order(order_id, connection)
 
     def cancel_order(self, order_id: str) -> Order:
-        with write_transaction(self.database, self._write_lock) as connection:
+        with self.database.transaction() as connection:
             order = self._get_order(order_id, connection)
             if order.status == "cancelled":
                 return order
@@ -336,7 +332,7 @@ class CommerceStore:
             counts[status] = int(row["count"])
         return counts
 
-    def _get_order(self, order_id: str, connection: sqlite3.Connection) -> Order:
+    def _get_order(self, order_id: str, connection: Database) -> Order:
         row = connection.execute(
             """
             SELECT orders.*, products.name AS product_name
@@ -377,7 +373,7 @@ class CommerceStore:
 
     @staticmethod
     def _record_event(
-        connection: sqlite3.Connection,
+        connection: Database,
         order_id: str,
         event_type: str,
         description: str,
