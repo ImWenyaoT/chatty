@@ -1,8 +1,8 @@
 """NativeRuntime：单 SQLite 文件上的全部 store 聚合（specs/stores.md §0.1）。
 
-连接拓扑：commerce/memory/support/traces/artifacts 各自建长连接；knowledge 复用
-commerce.database（构造函数收连接对象）；SQLiteSession（会话历史）由 run 模块按
-database_path 构造。写事务串行化由各 store 内部的进程级文件锁保证。
+连接拓扑：commerce/memory/support/traces/artifacts 各自建一个 Database 句柄；knowledge
+直接复用 commerce.database 这个句柄（连同它的写事务锁）；SQLiteSession（会话历史）由 run
+模块按 database_path 构造。写事务的串行化归句柄自己管，聚合根不参与。
 """
 
 from __future__ import annotations

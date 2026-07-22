@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
 
 import pytest
 
 from chatty.knowledge import KnowledgeStore
-from chatty.sqlite import open_connection
+from chatty.sqlite import Database
 
 
 def record(record_id: str, **overrides: object) -> dict[str, object]:
@@ -34,12 +33,12 @@ def write_jsonl(path: Path, records: list[dict[str, object]]) -> Path:
 
 
 @pytest.fixture
-def connection(tmp_path: Path) -> sqlite3.Connection:
-    return open_connection(tmp_path / "chatty.sqlite")
+def connection(tmp_path: Path) -> Database:
+    return Database(tmp_path / "chatty.sqlite")
 
 
 @pytest.fixture
-def store(connection: sqlite3.Connection) -> KnowledgeStore:
+def store(connection: Database) -> KnowledgeStore:
     return KnowledgeStore(connection)
 
 

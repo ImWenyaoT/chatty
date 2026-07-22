@@ -1,7 +1,8 @@
 """Chatty 知识库：FTS5 trigram + 单字索引 + JSONL 全量导入 + 三层回退检索。
 
-规格：specs/stores.md §5。构造函数接收已打开的连接（生产复用 commerce.database）；
-importJsonl 走 BEGIN IMMEDIATE 全量重建；search 为 catch-all 口径（TS 权威，
+规格：specs/stores.md §5。构造函数接收已打开的 Database 句柄（生产直接复用
+commerce.database，连同它的写事务锁一起复用，不再反推数据库文件）；importJsonl 走
+BEGIN IMMEDIATE 全量重建；search 为 catch-all 口径（TS 权威，
 decisions.md §6：任何异常 → knowledge_search_unavailable）。
 """
 
@@ -10,13 +11,12 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-import threading
 from pathlib import Path
 
 from pydantic import ValidationError
 
 from chatty.contracts import KnowledgeRecord, KnowledgeSearchResult
-from chatty.sqlite import database_write_lock, write_transaction
+from chatty.sqlite import Database
 
 _SEARCHABLE_COLUMNS = ("title", "summary", "body", "tags")
 
@@ -24,11 +24,8 @@ _SEARCHABLE_COLUMNS = ("title", "summary", "body", "tags")
 class KnowledgeStore:
     """Imports seller-authored chunks and exposes one bounded lexical search seam."""
 
-    def __init__(self, connection: sqlite3.Connection) -> None:
+    def __init__(self, connection: Database) -> None:
         self.database = connection
-        connection.row_factory = sqlite3.Row
-        main_file = self._main_database_file(connection)
-        self._write_lock = database_write_lock(main_file) if main_file else threading.RLock()
         connection.execute(
             """
             CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts USING fts5(
@@ -76,7 +73,7 @@ class KnowledgeStore:
             seen_ids.add(record.id)
             records.append(record)
 
-        with write_transaction(self.database, self._write_lock) as connection:
+        with self.database.transaction() as connection:
             connection.execute("DELETE FROM knowledge_fts")
             connection.execute("DELETE FROM knowledge_character_index")
             for rowid, record in enumerate(records, start=1):
@@ -276,10 +273,3 @@ class KnowledgeStore:
             source=row["source"],
             tags=json.loads(row["tags"]),
         )
-
-    @staticmethod
-    def _main_database_file(connection: sqlite3.Connection) -> str:
-        for row in connection.execute("PRAGMA database_list"):
-            if row["name"] == "main":
-                return str(row["file"] or "")
-        return ""

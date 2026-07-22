@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
-from chatty.sqlite import open_connection, string_array, text
+from chatty.sqlite import Database, string_array, text
 
 
 @dataclass(frozen=True)
@@ -34,7 +34,7 @@ class SupportRequestStore:
 
     def __init__(self, database_path: str | Path) -> None:
         self.database_path = Path(database_path)
-        self.database = open_connection(self.database_path)
+        self.database = Database(self.database_path)
         self.database.execute(
             """
             CREATE TABLE IF NOT EXISTS support_requests (
