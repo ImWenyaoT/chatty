@@ -5,7 +5,7 @@
 
 启动命令：
     CHATTY_DATABASE_PATH="$RUNNER_TEMP/chatty.sqlite" CHATTY_STATIC_DIR=web/dist \
-        uv run uvicorn --factory chatty.smoke:create_smoke_app --port 3101
+        uv run uvicorn --factory chatty.server:create_server_app --port 3101
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ HOST = "127.0.0.1"
 PORT = 8000
 
 
-def create_smoke_app() -> FastAPI:
+def create_server_app() -> FastAPI:
     """应用工厂（uvicorn --factory 入口）：先读仓库根 .env，再按 config 解析路径。"""
     load_root_env()  # setdefault + 容忍缺失文件：CI 无 .env 时是 no-op。
     return create_app(database_path=config.database_path(), static_dir=config.static_dir())
@@ -29,4 +29,4 @@ def create_smoke_app() -> FastAPI:
 
 def serve() -> None:
     """`python main.py`（`pnpm dev:api`）：同一个应用跑在 127.0.0.1:8000。"""
-    uvicorn.run(create_smoke_app(), host=HOST, port=PORT)
+    uvicorn.run(create_server_app(), host=HOST, port=PORT)

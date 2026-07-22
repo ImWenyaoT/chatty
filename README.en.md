@@ -55,7 +55,7 @@ pnpm test:deepseek
 ```bash
 pnpm build
 CHATTY_DATABASE_PATH=/absolute/path/chatty.sqlite CHATTY_STATIC_DIR=web/dist \
-  uv run uvicorn --factory chatty.smoke:create_smoke_app --host 127.0.0.1 --port 8000
+  uv run uvicorn --factory chatty.server:create_server_app --host 127.0.0.1 --port 8000
 ```
 
 The production entry point is a single FastAPI process that serves both `web/dist` and `/api/chatty/*` from one origin. The repository does not depend on a cloud platform. The deployment environment must support Python and persistent storage. Do not store the SQLite file in a temporary file system.

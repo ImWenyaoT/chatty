@@ -42,7 +42,7 @@ jobs:
       - name: Built application smoke
         run: |
           CHATTY_DATABASE_PATH="$RUNNER_TEMP/chatty.sqlite" CHATTY_STATIC_DIR=web/dist \
-            uv run uvicorn --factory chatty.smoke:create_smoke_app --port 3101 &
+            uv run uvicorn --factory chatty.server:create_server_app --port 3101 &
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
           for attempt in 1 2 3 4 5 6 7 8 9 10; do

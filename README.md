@@ -55,7 +55,7 @@ pnpm test:deepseek
 ```bash
 pnpm build
 CHATTY_DATABASE_PATH=/absolute/path/chatty.sqlite CHATTY_STATIC_DIR=web/dist \
-  uv run uvicorn --factory chatty.smoke:create_smoke_app --host 127.0.0.1 --port 8000
+  uv run uvicorn --factory chatty.server:create_server_app --host 127.0.0.1 --port 8000
 ```
 
 生产入口是单进程 FastAPI：同时伺服 `web/dist` 和 `/api/chatty/*`，保持单一 origin。仓库不依赖特定云平台。部署环境必须支持 Python 和持久化磁盘。SQLite 文件不能放在临时文件系统中。
