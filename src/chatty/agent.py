@@ -1,79 +1,178 @@
-"""Chatty Agent 构造与 live Model Provider。
-
-规格：specs/runtime-eval.md §1–§4。AGENT_INSTRUCTIONS 逐字保留（每行末尾都有换行
-符，中文引号原样）；源码里的相邻字符串拼接只为满足 100 列，不改变常量内容。
-"""
-
 from __future__ import annotations
 
+import logging
 import os
-from collections.abc import Sequence
+import re
+import time
+from uuid import uuid4
 
-from agents import Agent, AsyncOpenAI, Model, ModelSettings, OpenAIChatCompletionsModel
-from agents.tool import Tool
-
-from chatty.harness import AgentContext, RunFailure
-
-DEFAULT_BASE_URL = "https://api.deepseek.com"
-DEFAULT_MODEL_ID = "deepseek-v4-pro"
-
-AGENT_INSTRUCTIONS = (
-    "你是 Chatty，一个简洁、可靠、可追溯的研究与内容生产 Agent。\n"
-    "默认任务是把本地可信资料转成产业研究 Artifact，再生成有 Claim lineage 的渠道内容草稿。\n"
-    "研究前必须调用 search_knowledge；每条 Claim 的 source_ids 必须填写本次实际检索结果的 id 字段，"
-    "不得填写 source URL。\n"
-    "研究摘要和 Claim 只能直接复述或忠实改写检索结果；"
-    "推断、实时数据和来源未提及的细节必须放入 unknowns，不得写成事实。\n"
-    "使用 save_research_artifact 保存研究摘要、Claims、产业节点、关系和未知项。\n"
-    "使用 save_content_artifact 把已通过自动 review 的研究 Claim 改写为渠道内容草稿；"
-    "每个事实句都必须能由列出的 Claim 直接支持，"
-    "不得补充研究中没有的数字、实体、技术细节、因果判断或竞争结论。\n"
-    "自动 review 通过只表示 Artifact 可供人工审核，状态仍是 review_pending，不表示用户已批准。\n"
-    "Artifact 只能由可信用户在界面批准。"
-    "只有用户明确要求导出某个 Artifact 时才可调用 export_artifact；"
-    "此时必须直接调用 Tool，不得根据对话中的旧状态自行拒绝，"
-    "因为 Harness 会从 SQLite 重新验证当前 approved 状态。"
-    "草稿任务必须停在 review_pending，不得自动导出。\n"
-    "导出到 sandbox 只是模拟分发，不代表真实平台发布。\n"
-    "只有 Tool 返回 ok=true、Artifact 通过 review 且 SQLite 重新读取一致时，"
-    "才能声称研究产物完成。\n"
-    "旧客服/订单 Tools 仅作为迁移兼容层保留；只有用户明确提出对应需求时才使用。\n"
-    "只有 Tool 返回 ok=true 且 SQLite 状态与请求一致时，才能声称业务操作完成。\n"
-    "信息不足时提出一个聚焦的问题，不要编造事实。\n"
-    "创建订单前必须取得明确的金额、地址与风险信息；不得使用占位值补造必填字段。\n"
-    "回答政策或商品事实前必须调用 search_knowledge；使用检索内容时必须原样附上至少一个 source。\n"
-    "仅当客户明确要求记住其直接陈述、且该事实跨交易稳定时，调用 save_customer_memory。\n"
-    "临时需求、当前订单偏好、推断或画像不得保存；需要既有客户事实时主动搜索 Memory。\n"
-    "需要人工判断、授权或无法安全完成时，必须调用 create_handoff；\n"
-    "不能只回复“请联系客服”，只有持久化 receipt 才算已交接。\n"
+from agents import (
+    Agent,
+    AsyncOpenAI,
+    Model,
+    ModelSettings,
+    OpenAIChatCompletionsModel,
+    RunConfig,
+    Runner,
 )
+from pydantic import ValidationError
+
+from chatty import config
+from chatty.catalog import Catalog, CatalogError
+from chatty.experiments import ExperimentMetrics
+from chatty.models import (
+    RecommendationDraft,
+    RecommendationRequest,
+    RecommendationResponse,
+)
+from chatty.tools import TOOL_NAMES, RecommendationContext, build_tools
+
+logger = logging.getLogger(__name__)
+
+AGENT_INSTRUCTIONS = """你是 Chatty，一个电商推荐与营销 Agent。
+你必须依次完成五件事：
+1. 调用 get_user_profile 获取用户画像；
+2. 调用 search_products 搜索候选商品；
+3. 调用 check_inventory，缺货商品不得推荐；
+4. 调用 retrieve_knowledge 检索商品指南与营销知识，用检索证据支持理由和文案；
+5. 调用 get_marketing_strategy 获取当前用户分群的营销风格。
+最终只输出一个 JSON 对象，格式为
+{"recommendations":[{"product_id":"商品ID","reason":"推荐理由","marketing_copy":"营销文案"}]}。
+每个商品必须来自工具结果，并提供简洁的推荐理由和营销文案。
+不得编造商品、价格、库存、促销或折扣。不要调用不存在的工具。"""
+
+_JSON_CODE_BLOCK = re.compile(r"```(?:json)?\s*(\{.*\})\s*```", re.DOTALL | re.IGNORECASE)
 
 
-def model_from_env(
-    *, model_id: str | None = None, base_url: str | None = None
-) -> tuple[Model, str, AsyncOpenAI]:
-    """live 模式 Model Provider（§4）：Chat Completions 协议，绝不走 Responses API。
+def parse_recommendation_draft(raw_output: object) -> RecommendationDraft:
+    if isinstance(raw_output, RecommendationDraft):
+        return raw_output
+    if not isinstance(raw_output, str):
+        return RecommendationDraft.model_validate(raw_output)
 
-    优先级（§1，TS 权威）：构造参数 > 环境变量 > 常量缺省。
-    缺 OPENAI_API_KEY → RunFailure("llm_not_configured")（decisions §5.2：
-    ChattyRunModule 构造点抛，HTTP 层懒构造并映射 503）。
-    """
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        raise RunFailure("llm_not_configured")
-    resolved_model_id = model_id or os.environ.get("MODEL_ID") or DEFAULT_MODEL_ID
-    resolved_base_url = base_url or os.environ.get("OPENAI_BASE_URL") or DEFAULT_BASE_URL
-    client = AsyncOpenAI(api_key=api_key, base_url=resolved_base_url)
-    model = OpenAIChatCompletionsModel(model=resolved_model_id, openai_client=client)
-    return model, resolved_model_id, client
+    candidates = [raw_output]
+    if match := _JSON_CODE_BLOCK.search(raw_output):
+        candidates.insert(0, match.group(1))
+    for candidate in candidates:
+        try:
+            return RecommendationDraft.model_validate_json(candidate)
+        except ValidationError:
+            continue
+    return RecommendationDraft.model_validate_json(raw_output)
 
 
-def build_agent(*, model: Model, tools: Sequence[Tool]) -> Agent[AgentContext]:
-    """构造 Chatty Agent（§3）：name/instructions 逐字；DeepSeek 禁用 thinking。"""
-    return Agent(
-        name="Chatty",
-        instructions=AGENT_INSTRUCTIONS,
-        model=model,
-        model_settings=ModelSettings(extra_body={"thinking": {"type": "disabled"}}),
-        tools=list(tools),
-    )
+class RecommendationFailure(RuntimeError):
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
+
+class RecommendationService:
+    def __init__(
+        self,
+        catalog: Catalog,
+        metrics: ExperimentMetrics,
+        *,
+        model: Model | None = None,
+        model_id: str | None = None,
+    ) -> None:
+        self.catalog = catalog
+        self.metrics = metrics
+        self._model = model
+        self._model_id = model_id or (
+            "injected-model" if model is not None else config.configured_model_id()
+        )
+        self._client: AsyncOpenAI | None = None
+
+    @property
+    def model_id(self) -> str:
+        return self._model_id
+
+    def _ensure_model(self) -> Model:
+        if self._model is not None:
+            return self._model
+        config.load_root_env()
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise RecommendationFailure("llm_not_configured")
+        base_url = os.environ.get("OPENAI_BASE_URL") or config.DEFAULT_BASE_URL
+        self._model_id = os.environ.get("MODEL_ID") or config.DEFAULT_MODEL_ID
+        self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+        self._model = OpenAIChatCompletionsModel(
+            model=self._model_id,
+            openai_client=self._client,
+        )
+        return self._model
+
+    async def close(self) -> None:
+        if self._client is not None:
+            await self._client.close()
+
+        self.catalog.close()
+
+    async def recommend(self, request: RecommendationRequest) -> RecommendationResponse:
+        started = time.perf_counter()
+        group = self.metrics.assign(request.user_id)
+        try:
+            model = self._ensure_model()
+            context = RecommendationContext(
+                request=request,
+                catalog=self.catalog,
+                experiment_group=group,
+            )
+            # DeepSeek V4 Pro rejects the SDK's json_schema response_format. Keep the
+            # Chat Completions result textual, then extract and validate JSON locally.
+            agent = Agent[RecommendationContext](
+                name="Chatty",
+                instructions=AGENT_INSTRUCTIONS,
+                model=model,
+                model_settings=ModelSettings(extra_body={"thinking": {"type": "disabled"}}),
+                tools=build_tools(),
+            )
+            result = await Runner.run(
+                agent,
+                request.model_dump_json(),
+                context=context,
+                max_turns=10,
+                run_config=RunConfig(
+                    workflow_name="Chatty recommendation",
+                    tracing_disabled=True,
+                ),
+            )
+            if set(TOOL_NAMES) != context.used_tools:
+                raise RecommendationFailure("required_tools_not_used")
+            if not context.knowledge:
+                raise RecommendationFailure("knowledge_not_retrieved")
+            draft = parse_recommendation_draft(result.final_output)
+            if context.profile is None:
+                raise RecommendationFailure("profile_not_loaded")
+            products = self.catalog.finalize(
+                draft,
+                request,
+                context.profile,
+                group,
+            )
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            self.metrics.record_request(group, success=True, latency_ms=elapsed_ms)
+            return RecommendationResponse(
+                request_id=f"request_{uuid4().hex}",
+                user_id=request.user_id,
+                experiment_group=group,
+                products=products,
+                total_latency_ms=elapsed_ms,
+            )
+        except RecommendationFailure as error:
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            self.metrics.record_request(group, success=False, latency_ms=elapsed_ms)
+            logger.warning("Recommendation failed with code=%s", error.code)
+            raise
+        except (CatalogError, ValidationError) as error:
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            self.metrics.record_request(group, success=False, latency_ms=elapsed_ms)
+            logger.warning("Invalid recommendation output", exc_info=True)
+            raise RecommendationFailure("invalid_recommendation") from error
+        except Exception as error:
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            self.metrics.record_request(group, success=False, latency_ms=elapsed_ms)
+            logger.exception("Unexpected recommendation failure")
+            raise RecommendationFailure("recommendation_failed") from error

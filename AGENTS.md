@@ -1,25 +1,28 @@
-## Agent skills
+## Domain docs
 
-### Issue tracker
+工程工作开始前先读取根 `CONTEXT.md`。它是当前唯一的领域词汇入口。
 
-Issues are tracked in GitHub Issues; external pull requests are not a triage request surface. See `docs/agents/issue-tracker.md`.
+## Vocabulary
 
-### Triage labels
+- Chatty 是一个 Single Agent。
+- 用户画像、商品搜索、库存检查、知识检索和营销策略都是 Tool，不是 Agent。
+- RAG 指 `retrieve_knowledge` 执行检索、结果进入 Agent 上下文并参与生成的完整流程。
+- SQLite 保存演示业务数据；SQLite FTS5 保存并检索知识文档。
+- 技术名称和代码标识保留英文，其余说明优先使用简体中文。
 
-The repo uses the default canonical triage labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix`. See `docs/agents/triage-labels.md`.
+## Project boundaries
 
-### Domain docs
+- 不引入 Multi-Agent、Handoff、LangChain 或 LangGraph。
+- 不增加前端、外部数据库或向量数据库。
+- 商品价格和库存必须来自 SQLite，不能由模型生成。
+- JSON/JSONL 是 SQLite 的初始化种子，不是运行时业务查询接口。
 
-This repository has one architecture context; root `CONTEXT.md` is the only entry point. See `docs/agents/domain.md`.
+## Verification
 
-### Vocabulary
+提交前运行：
 
-- Chatty's highest-order project axiom is **Agent = Model + Harness**. Use it to define the system boundary before applying any external terminology source.
-- Use [OpenAI Developers](https://developers.openai.com/api/docs/guides/agents) for Agent runtime/API terms and Matt Pocock's [Dictionary of AI Coding](https://github.com/mattpocock/dictionary-of-ai-coding/tree/main/dictionary) for AI-coding terms.
-- Keep established technical names and code/API identifiers in their original form; otherwise prefer plain Chinese over invented English jargon.
-- Add to the Chatty glossary only when a recurring project-specific ambiguity affects architecture, behaviour, or acceptance criteria. Ordinary discussion does not need a new rule or glossary entry.
-
-## PR instructions
-
-- Title format: `[chatty] <Title>`
-- Before committing, run `pnpm lint`, `pnpm test`, `pnpm typecheck`, `pnpm build`, `pnpm eval`, and `pnpm test:e2e`.
+```bash
+uv run ruff check .
+uv run ty check
+uv run pytest -q
+```

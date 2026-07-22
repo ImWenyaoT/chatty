@@ -1,0 +1,5 @@
+{"user_id":"user_new","segment":"new_user","preferred_categories":["配件","家电"],"min_price_cents":0,"max_price_cents":150000,"recent_views":["快充"],"recent_purchases":[]}
+{"user_id":"user_active","segment":"active","preferred_categories":["手机","耳机"],"min_price_cents":50000,"max_price_cents":800000,"recent_views":["手机","降噪"],"recent_purchases":["配件"]}
+{"user_id":"user_vip","segment":"high_value","preferred_categories":["手机","电脑","数码"],"min_price_cents":200000,"max_price_cents":1000000,"recent_views":["旗舰","影像"],"recent_purchases":["手机","平板"]}
+{"user_id":"user_budget","segment":"price_sensitive","preferred_categories":["配件","平板"],"min_price_cents":0,"max_price_cents":300000,"recent_views":["性价比","快充"],"recent_purchases":["配件"]}
+{"user_id":"user_churn","segment":"churn_risk","preferred_categories":["服装","运动"],"min_price_cents":20000,"max_price_cents":120000,"recent_views":["商务","跑步"],"recent_purchases":[]}
