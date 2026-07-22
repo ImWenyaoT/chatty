@@ -27,6 +27,7 @@ from openai.types.responses import (
 )
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
+from chatty import config
 from chatty.run import ChattyRunModule
 from chatty.runtime import NativeRuntime
 from chatty.tools import CHATTY_TOOL_NAMES
@@ -307,16 +308,11 @@ def _read_cases(path: Path) -> list[EvalCase]:
     return cases
 
 
-def _reset_case_database(database_path: Path) -> None:
-    for path in (database_path, Path(f"{database_path}-wal"), Path(f"{database_path}-shm")):
-        path.unlink(missing_ok=True)
-
-
 async def _execute_case(case: EvalCase, *, workdir: Path, knowledge_path: Path) -> EvalCaseResult:
     """§7.5：每用例独立 SQLite + 独立 runtime/run 模块，跑完（finally）关闭。"""
     database_path = workdir / f"{case.id}.sqlite"
     workdir.mkdir(parents=True, exist_ok=True)
-    _reset_case_database(database_path)
+    config.reset_database(database_path)
     runtime = NativeRuntime(database_path)
     module = ChattyRunModule(
         runtime,
@@ -380,8 +376,8 @@ async def _execute_case(case: EvalCase, *, workdir: Path, knowledge_path: Path) 
 def run_eval(*, cases_path: Path, output_path: Path, workdir: Path) -> dict[str, int]:
     """跑完所有 case，写 results.jsonl（每 case 一行），返回汇总计数。"""
     cases_path = Path(cases_path)
-    # 知识库路径：dirname(cases)/../knowledge/records.jsonl（§7.1）。
-    knowledge_path = (cases_path.parent / ".." / "knowledge" / "records.jsonl").resolve()
+    # §7.1：知识库跟着 cases 走——`dirname(cases)/..` 就是这次 eval 的仓库根。
+    knowledge_path = config.knowledge_path(cases_path.parent.parent)
     results = [
         asyncio.run(_execute_case(case, workdir=Path(workdir), knowledge_path=knowledge_path))
         for case in _read_cases(cases_path)

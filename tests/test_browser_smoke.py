@@ -9,11 +9,16 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
-from chatty import browser_smoke
+from chatty import browser_smoke, config
 
 BASE = "/api/chatty"
+
+
+class _StopBuilding(Exception):
+    """哨兵：在应用工厂被调用的那一刻停下，只观察传进去的路径。"""
 
 
 def test_browser_smoke_six_step_flow(tmp_path: Path, monkeypatch) -> None:
@@ -76,18 +81,29 @@ def test_browser_smoke_six_step_flow(tmp_path: Path, monkeypatch) -> None:
         assert statuses[content["id"]] == "exported"
 
 
-def test_database_path_resolution(tmp_path: Path, monkeypatch) -> None:
-    absolute = tmp_path / "abs.sqlite"
-    monkeypatch.setenv("CHATTY_E2E_DATABASE", str(absolute))
-    assert browser_smoke.browser_smoke_database_path() == absolute
-    # 相对路径按仓库根解析；未设置退回旧默认。
-    monkeypatch.setenv("CHATTY_E2E_DATABASE", ".cache/custom.sqlite")
-    assert (
-        browser_smoke.browser_smoke_database_path()
-        == browser_smoke.REPO_ROOT / ".cache/custom.sqlite"
-    )
-    monkeypatch.delenv("CHATTY_E2E_DATABASE", raising=False)
-    assert (
-        browser_smoke.browser_smoke_database_path()
-        == browser_smoke.REPO_ROOT / browser_smoke.DEFAULT_E2E_DATABASE
-    )
+def test_factory_takes_paths_from_config(tmp_path: Path, monkeypatch) -> None:
+    """路径与清库都来自 chatty.config：本模块只挑脚本模型与固定身份。"""
+    captured: dict[str, object] = {}
+
+    def fake_create_http_app(**kwargs: object) -> object:
+        captured.update(kwargs)
+        raise _StopBuilding
+
+    monkeypatch.setattr(browser_smoke, "create_http_app", fake_create_http_app)
+    database_path = tmp_path / "e2e.sqlite"
+    for suffix in ("", "-wal", "-shm"):
+        Path(f"{database_path}{suffix}").write_text("stale", encoding="utf-8")
+    monkeypatch.setenv("CHATTY_E2E_DATABASE", str(database_path))
+
+    with pytest.raises(_StopBuilding):
+        browser_smoke.create_app()
+
+    assert captured["database_path"] == config.e2e_database_path() == database_path
+    assert captured["knowledge_path"] == config.knowledge_path()
+    # §10 步骤 1：db 与 -wal / -shm 旁文件在构建应用之前就已清除。
+    assert not any(Path(f"{database_path}{suffix}").exists() for suffix in ("", "-wal", "-shm"))
+
+
+def test_e2e_database_env_empty_falls_back_to_default(monkeypatch) -> None:
+    monkeypatch.setenv("CHATTY_E2E_DATABASE", "")
+    assert config.e2e_database_path() == config.REPO_ROOT / config.DEFAULT_E2E_DATABASE_PATH

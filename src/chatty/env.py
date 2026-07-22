@@ -9,12 +9,12 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+from chatty.config import REPO_ROOT
 
 
 def load_root_env(path: Path | None = None) -> None:
     """读 .env（默认仓库根）：KEY=VALUE 行 setdefault 进程环境，容忍缺失文件。"""
-    env_file = _REPO_ROOT / ".env" if path is None else path
+    env_file = REPO_ROOT / ".env" if path is None else path
     if not env_file.is_file():
         return
     for line in env_file.read_text(encoding="utf-8").splitlines():
