@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -17,6 +17,7 @@ from pydantic import ValidationError
 from chatty.artifacts import ArtifactStore
 from chatty.commerce import CommerceError, CommerceStore
 from chatty.contracts import KnowledgeRecord, MemoryEvent, Order
+from chatty.knowledge import KnowledgeStore
 from chatty.memory import MemoryStore
 from chatty.support import SupportRequestIdempotencyConflictError, SupportRequestStore
 from chatty.traces import TraceStore
@@ -95,7 +96,11 @@ class BusinessToolReceipt:
 
 @dataclass
 class HarnessContext:
-    """业务核验层状态：受信身份 + 回执/prior_actions 追加式记录（§2）。"""
+    """业务核验层状态：受信身份 + 回执/prior_actions 追加式记录（§2）。
+
+    `record_*` 只产回执，不碰 `prior_actions`：一次 tool 调用恰好一条 prior_action，
+    由 `tools.execute_chatty_tool` 这个唯一追加点记（decisions §2.3）。
+    """
 
     customer_id: str
     session_id: str
@@ -105,13 +110,11 @@ class HarnessContext:
     prior_actions: list[str] = field(default_factory=list)
 
     def record_read_success(self, tool_name: str, evidence: str) -> None:
-        self.prior_actions.append(f"{tool_name}:ok")
         self.business_receipts.append(
             BusinessToolReceipt(tool_name=tool_name, ok=True, evidence=evidence)
         )
 
     def record_order_success(self, tool_name: str, order: Order) -> None:
-        self.prior_actions.append(f"{tool_name}:ok")
         self.business_receipts.append(
             BusinessToolReceipt(
                 tool_name=tool_name,
@@ -122,7 +125,6 @@ class HarnessContext:
         )
 
     def record_artifact_success(self, tool_name: str, artifact_id: str, status: str) -> None:
-        self.prior_actions.append(f"{tool_name}:ok")
         self.business_receipts.append(
             BusinessToolReceipt(
                 tool_name=tool_name,
@@ -133,7 +135,6 @@ class HarnessContext:
         )
 
     def record_delivery_success(self, tool_name: str, delivery_id: str, content_hash: str) -> None:
-        self.prior_actions.append(f"{tool_name}:ok")
         self.business_receipts.append(
             BusinessToolReceipt(
                 tool_name=tool_name,
@@ -144,7 +145,6 @@ class HarnessContext:
         )
 
     def record_failure(self, tool_name: str, error: Exception) -> None:
-        self.prior_actions.append(f"{tool_name}:failed")
         self.business_receipts.append(
             BusinessToolReceipt(tool_name=tool_name, ok=False, error=error_code(error))
         )
@@ -184,15 +184,23 @@ class HarnessContext:
 
 @dataclass(kw_only=True)
 class AgentContext(HarnessContext):
-    """单次 run 层状态：每次 run 新建，所有 tool 在同一 context 上追加（§2）。"""
+    """单次 run 的唯一可变容器：每次 run 新建，所有 tool 在同一 context 上追加（§2）。
+
+    run 级状态只此一份、只此一条投递路径（SDK 的 `RunContextWrapper`）。
+    `knowledge` 与其余五个 store 一样挂在这里，`knowledge_search_results` 则记本次
+    run 检索到的知识——`save_research_artifact` 的 source 溯源不变量（ADR 0015）与它
+    自己那条回执因此落在同一个对象上，不再一个查 state、一个写 context。
+    """
 
     message: str
     trace_id: str
     request_id: str
+    knowledge: KnowledgeStore
     memory_store: MemoryStore
     support_store: SupportRequestStore
     trace_store: TraceStore
     memory_events: list[MemoryEvent] = field(default_factory=list)
+    knowledge_search_results: dict[str, KnowledgeRecord] = field(default_factory=dict)
     support_request_id: str | None = None
 
 
@@ -219,8 +227,6 @@ def create_handoff_receipt(
     """tool `create_handoff` 的 Harness 实现（§8.1）。
 
     context 列存客户消息（strip 后），模型的 context 参数存 model_context 列。
-    失败路径不在此追加 prior_actions：decisions §2.3 采用干净语义，统一由
-    execute_chatty_tool 的 record_failure 记一条 `create_handoff:failed` 与一条失败回执。
     """
     try:
         receipt = context.support_store.create(
@@ -251,9 +257,16 @@ def force_handoff(
     *,
     reason: str,
     details: str,
-    knowledge_search_results: Mapping[str, KnowledgeRecord],
+    prior_action: str | None = None,
 ) -> AgentRunResult:
-    """Harness 强制升级（§8.2）：与 create_handoff 共用同一幂等 key。"""
+    """Harness 强制升级（§8.2）：与 create_handoff 共用同一幂等 key。
+
+    `prior_action` 是 run 循环级事件（权限中断、无效 tool call、耗尽 turns）的唯一
+    追加点：这些事件不是 tool 调用结果——没有 tool 名、没有回执、不经 dispatcher——
+    但每一个都紧接着一次强制升级，所以由本函数在快照 prior_actions 之前记下。
+    """
+    if prior_action is not None:
+        context.prior_actions.append(prior_action)
     try:
         receipt = context.support_store.create(
             customer_id=context.customer_id,
@@ -278,7 +291,6 @@ def force_handoff(
         context,
         reply="业务无法安全完成，已创建可追踪的人工支持请求。",
         support_request_id=receipt.id,
-        knowledge_search_results=knowledge_search_results,
     )
 
 
@@ -288,40 +300,35 @@ def complete_agent_run(
     final_output: object,
     interrupted: bool,
     attempted_tool_names: Sequence[str],
-    knowledge_search_results: Mapping[str, KnowledgeRecord],
 ) -> AgentRunResult:
     """Run 正常返回后的强制规则（§8.3，按序执行）。"""
     if interrupted:
-        context.prior_actions.append("tool_permission:approval_required")
         return force_handoff(
             context,
             reason="Harness 需要人工权限或授权",
             details="Tool 权限边界中断了同步执行",
-            knowledge_search_results=knowledge_search_results,
+            prior_action="tool_permission:approval_required",
         )
     if not isinstance(final_output, str) or not final_output.strip():
         return force_handoff(
             context,
             reason="Harness 安全恢复已耗尽",
             details="Agent 未返回可验证的客户结果",
-            knowledge_search_results=knowledge_search_results,
         )
     if "create_handoff" in attempted_tool_names and context.support_request_id is None:
         return force_handoff(
             context,
             reason="Harness 强制升级",
             details="create_handoff 调用失败或参数无效",
-            knowledge_search_results=knowledge_search_results,
         )
     if context.support_request_id is not None:
         return _handoff_result(
             context,
             reply=final_output,
             support_request_id=context.support_request_id,
-            knowledge_search_results=knowledge_search_results,
         )
-    if knowledge_search_results and not any(
-        record.source in final_output for record in knowledge_search_results.values()
+    if context.knowledge_search_results and not any(
+        record.source in final_output for record in context.knowledge_search_results.values()
     ):
         raise InvalidAgentOutputError("Knowledge-backed reply omitted its source")
     business_outcome, completion_evidence = context.verify_business_outcome()
@@ -331,7 +338,7 @@ def complete_agent_run(
         reply = f"业务操作未完成：{error or 'business_tool_failed'}"
     return AgentRunResult(
         reply=reply,
-        knowledge_search_results=list(knowledge_search_results.values()),
+        knowledge_search_results=list(context.knowledge_search_results.values()),
         memory_events=list(context.memory_events),
         business_outcome=business_outcome,
         completion_evidence=completion_evidence,
@@ -365,11 +372,10 @@ def _handoff_result(
     *,
     reply: str,
     support_request_id: str,
-    knowledge_search_results: Mapping[str, KnowledgeRecord],
 ) -> AgentRunResult:
     return AgentRunResult(
         reply=reply,
-        knowledge_search_results=list(knowledge_search_results.values()),
+        knowledge_search_results=list(context.knowledge_search_results.values()),
         memory_events=list(context.memory_events),
         business_outcome="not_completed",
         completion_evidence=f"handoff:{support_request_id}",

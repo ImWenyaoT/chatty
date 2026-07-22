@@ -34,7 +34,7 @@ from chatty.harness import (
     persist_agent_run,
 )
 from chatty.runtime import NativeRuntime
-from chatty.tools import ToolExecutionState, build_chatty_tools
+from chatty.tools import build_chatty_tools
 from chatty.tracing import RuntimeTracingRouter, install_runtime_tracing
 
 DEFAULT_KNOWLEDGE_PATH = config.knowledge_path()
@@ -104,6 +104,7 @@ class ChattyRunModule:
             message=message,
             trace_id=trace_id,
             request_id=resolved_request_id,
+            knowledge=self.runtime.knowledge,
             memory_store=self.runtime.memory,
             support_store=self.runtime.support,
             trace_store=self.runtime.traces,
@@ -114,16 +115,12 @@ class ChattyRunModule:
         self.runtime.sessions.claim(
             session_id=resolved_session_id, customer_id=customer_id
         )
-        state = ToolExecutionState()
-        agent = build_agent(
-            model=self._model,
-            tools=build_chatty_tools(state=state, knowledge_store=self.runtime.knowledge),
-        )
+        agent = build_agent(model=self._model, tools=build_chatty_tools())
         with self.runtime.sessions.open(resolved_session_id) as session:
             self._tracing.register(trace_id, self.runtime.traces)
             try:
                 try:
-                    result = await self._run_agent(agent, context, state, session)
+                    result = await self._run_agent(agent, context, session)
                     persist_agent_run(context, result)
                     # 出站不变量在 trace 收尾前裁决：违约不会留下"已 completed 却被
                     # 拒绝"的 trace，也不会绕过 RunFailure 变成裸 500。
@@ -199,10 +196,14 @@ class ChattyRunModule:
         self,
         agent: Agent[AgentContext],
         context: AgentContext,
-        state: ToolExecutionState,
         session: SQLiteSession,
     ) -> AgentRunResult:
-        """Runner 调用 + §5.3 受控恢复（内层 catch）。"""
+        """Runner 调用 + §5.3 受控恢复（内层 catch）。
+
+        两条恢复路径的 prior_action 是 run 循环级事件，不是 tool 调用结果——没有
+        tool 名、没有回执、不经 execute_chatty_tool——所以不并进 tool 侧那个追加点，
+        而是随 force_handoff 一起记（记录时机必须早于 support receipt 的快照）。
+        """
         try:
             sdk_result = await Runner.run(
                 agent,
@@ -229,21 +230,18 @@ class ChattyRunModule:
                 final_output=sdk_result.final_output,
                 interrupted=bool(sdk_result.interruptions),
                 attempted_tool_names=attempted_tool_names,
-                knowledge_search_results=state.knowledge_search_results,
             )
         except (ModelBehaviorError, InvalidAgentOutputError):
-            context.prior_actions.append("model_tool_call:rejected")
             return force_handoff(
                 context,
                 reason="Harness 拒绝无效操作",
                 details="Model 请求了无效或不可用的 Tool",
-                knowledge_search_results=state.knowledge_search_results,
+                prior_action="model_tool_call:rejected",
             )
         except MaxTurnsExceeded:
-            context.prior_actions.append("agent_loop:max_turns")
             return force_handoff(
                 context,
                 reason="Harness 安全恢复已耗尽",
                 details="Agent 在受限 turns 内未完成处理",
-                knowledge_search_results=state.knowledge_search_results,
+                prior_action="agent_loop:max_turns",
             )

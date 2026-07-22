@@ -125,6 +125,29 @@ def runtime(tmp_path: Path) -> NativeRuntime:
     native_runtime.close()
 
 
+def test_runtime_closes_stores_in_documented_order(tmp_path: Path) -> None:
+    """关闭顺序是 NativeRuntime 的对外约定（specs/stores.md §0.1），此前无处断言。
+
+    commerce 必须最后关：knowledge 复用的正是它那个 Database 句柄（连同写事务锁），
+    任何把 commerce 提前的改动都会让 knowledge 落在已关闭的连接上。
+    """
+    runtime = NativeRuntime(tmp_path / "chatty.sqlite")
+    closed: list[str] = []
+
+    def spy(name: str) -> None:
+        store = getattr(runtime, name)
+        original = store.close
+        store.close = lambda: (closed.append(name), original())
+
+    for store_name in ("traces", "support", "memory", "artifacts", "commerce"):
+        spy(store_name)
+    runtime.close()
+    assert closed == ["traces", "support", "memory", "artifacts", "commerce"]
+    # knowledge 复用 commerce 的连接、sessions 不持长连接：两者都没有 close 可调。
+    assert not hasattr(runtime.knowledge, "close")
+    assert not hasattr(runtime.sessions, "close")
+
+
 def make_module(
     runtime: NativeRuntime,
     tmp_path: Path,
