@@ -14,7 +14,29 @@ ArtifactStatus = Literal["draft", "review_failed", "review_pending", "approved",
 
 RunStatus = Literal["completed", "not_completed", "responded", "needs_human"]
 
+BusinessOutcome = Literal["verified", "not_completed", "not_applicable"]
+
 NonEmptyStr = Annotated[str, Field(min_length=1)]
+
+# business_outcome → 非 handoff run 的对外 status。
+_STATUS_BY_OUTCOME: dict[BusinessOutcome, RunStatus] = {
+    "verified": "completed",
+    "not_completed": "not_completed",
+    "not_applicable": "responded",
+}
+
+
+def run_status(
+    *, business_outcome: BusinessOutcome, support_request_id: str | None
+) -> RunStatus:
+    """(business_outcome, handoff 回执) → 对外 status（http-contract §2.6）。
+
+    这条映射只在这里写一次：run 循环用它派生 status，`RunResponse` 的
+    model_validator 用它复算并比对——派生方与裁决方不可能再漂移。
+    """
+    if support_request_id is not None:
+        return "needs_human"
+    return _STATUS_BY_OUTCOME[business_outcome]
 
 
 class RunRequest(BaseModel):
@@ -74,7 +96,7 @@ class RunResponse(BaseModel):
     trace_id: str = Field(min_length=1)
     request_id: str = Field(min_length=1)
     status: RunStatus
-    business_outcome: Literal["verified", "not_completed", "not_applicable"]
+    business_outcome: BusinessOutcome
     completion_evidence: str | None
     knowledge_search_results: list[KnowledgeRecord]
     memory_events: list[MemoryEvent]
@@ -84,7 +106,7 @@ class RunResponse(BaseModel):
 
     @model_validator(mode="after")
     def _check_outcome_consistency(self) -> RunResponse:
-        # 逐条对应 zod superRefine，短路顺序与 TS 一致。
+        # 逐条对应 zod superRefine，短路顺序与 TS 一致；status 一律用 run_status 复算。
         if self.status == "needs_human":
             handoff_matches = (
                 self.needs_human is True
@@ -97,16 +119,20 @@ class RunResponse(BaseModel):
             return self
         if self.needs_human is True or self.support_request_id is not None:
             raise ValueError("non-handoff run cannot include a support request")
+        derived = run_status(
+            business_outcome=self.business_outcome,
+            support_request_id=self.support_request_id,
+        )
         if self.status == "completed" and (
-            self.business_outcome != "verified" or self.completion_evidence is None
+            derived != self.status or self.completion_evidence is None
         ):
             raise ValueError("completed run must include verified evidence")
         elif self.status == "not_completed" and (
-            self.business_outcome != "not_completed" or self.completion_evidence is None
+            derived != self.status or self.completion_evidence is None
         ):
             raise ValueError("not_completed run must include failure evidence")
         elif self.status == "responded" and (
-            self.business_outcome != "not_applicable" or self.completion_evidence is not None
+            derived != self.status or self.completion_evidence is not None
         ):
             raise ValueError("responded run cannot claim a business outcome")
         return self

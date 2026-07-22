@@ -20,6 +20,7 @@ from chatty.contracts import (
     RunResponse,
     TraceDashboard,
     TraceSpan,
+    run_status,
 )
 
 # ---------------------------------------------------------------------------
@@ -44,6 +45,30 @@ def run_response_payload(**overrides: Any) -> dict[str, Any]:
     }
     payload.update(overrides)
     return payload
+
+
+def test_run_status_is_the_single_derivation() -> None:
+    """run 循环与 model_validator 共用这一条映射，不存在第二份表。"""
+    assert run_status(business_outcome="verified", support_request_id=None) == "completed"
+    assert (
+        run_status(business_outcome="not_completed", support_request_id=None) == "not_completed"
+    )
+    assert run_status(business_outcome="not_applicable", support_request_id=None) == "responded"
+    # 有 handoff 回执时 outcome 不参与判断。
+    for outcome in ("verified", "not_completed", "not_applicable"):
+        assert run_status(business_outcome=outcome, support_request_id="sr_1") == "needs_human"
+
+
+def test_status_must_match_derivation() -> None:
+    """status 与 run_status 的派生结果不一致即违约（复算断言）。"""
+    with pytest.raises(ValidationError, match="completed run must include verified evidence"):
+        RunResponse.model_validate(
+            run_response_payload(
+                status="completed",
+                business_outcome="not_completed",
+                completion_evidence="failed:sold_out",
+            )
+        )
 
 
 def test_needs_human_valid_handoff() -> None:

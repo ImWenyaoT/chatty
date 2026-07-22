@@ -1,22 +1,26 @@
 """ChattyRunModule：一次 POST /runs 的完整 run 循环（specs/runtime-eval.md §5）。
 
-流程：会话属主校验 → SDK SQLiteSession → Runner.run（RunConfig 固定 workflow 名 /
+流程：会话属主校验 → runtime.sessions 开会话 → Runner.run（RunConfig 固定 workflow 名 /
 trace_id / group_id / metadata，max_turns 走 SDK 缺省 10，trace 脱敏）→ 三条受控
-恢复路径 forceHandoff → persist → RunResponse 组装（出站不变量由 contracts 校验）。
+恢复路径 forceHandoff → persist → RunResponse 组装（出站不变量在 trace 收尾前裁决，
+违约以 RunFailure("run_contract_violated", trace_id) 对外）。
+
+会话历史（表名、SQLiteSession 生命周期、属主规则）归 `chatty.session`；本模块只在
+run 循环里用它，读历史的 HTTP 路径不经过这里，因而不需要任何 Model 配置。
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 from uuid import uuid4
 
 from agents import Agent, Model, RunConfig, Runner, SQLiteSession
 from agents.exceptions import MaxTurnsExceeded, ModelBehaviorError
+from pydantic import ValidationError
 
 from chatty import config
 from chatty.agent import build_agent, model_from_env
-from chatty.contracts import RunResponse, RunStatus
+from chatty.contracts import RunResponse, run_status
 from chatty.harness import (
     AgentContext,
     AgentRunResult,
@@ -29,22 +33,11 @@ from chatty.harness import (
     persist_agent_failure,
     persist_agent_run,
 )
-from chatty.memory import SessionCustomerMismatchError, SessionNotFoundError
 from chatty.runtime import NativeRuntime
 from chatty.tools import ToolExecutionState, build_chatty_tools
 from chatty.tracing import RuntimeTracingRouter, install_runtime_tracing
 
-SESSIONS_TABLE = "chatty_sessions"
-MESSAGES_TABLE = "chatty_messages"
-
 DEFAULT_KNOWLEDGE_PATH = config.knowledge_path()
-
-# business_outcome → 非 handoff run 的对外 status（§5.5）。
-_STATUS_BY_OUTCOME: dict[str, RunStatus] = {
-    "verified": "completed",
-    "not_completed": "not_completed",
-    "not_applicable": "responded",
-}
 
 
 class ChattyRunModule:
@@ -61,6 +54,9 @@ class ChattyRunModule:
     ) -> None:
         """live 模式（model=None）缺 OPENAI_API_KEY 时在此抛 RunFailure("llm_not_configured")
         （decisions §5.2：HTTP 层懒构造并映射 503）；注入模式不建 client、不读 key。
+
+        构造代价只落在真正要跑 Agent 的路径上：读会话历史走 runtime.sessions，
+        不经过本模块，因此缺 key 也照常返回历史。
         """
         self.runtime = runtime
         self._client = None
@@ -96,7 +92,9 @@ class ChattyRunModule:
         resolved_session_id = session_id or f"session_{uuid4().hex}"
         # 步骤 2：仅当请求携带 session_id 时校验会话属主（此时尚无 trace_id）。
         if session_id:
-            self._require_session(resolved_session_id, customer_id)
+            self.runtime.sessions.require_owner(
+                session_id=resolved_session_id, customer_id=customer_id
+            )
         trace_id = f"trace_{uuid4().hex}"
         context = AgentContext(
             customer_id=customer_id,
@@ -110,10 +108,10 @@ class ChattyRunModule:
             support_store=self.runtime.support,
             trace_store=self.runtime.traces,
         )
-        # 步骤 5：bindSession 在受控块外（decisions §5.3，按 TS）——新会话 uuid 不会
-        # 冲突、携带 session_id 的请求已通过 require_session，异常实际不可达；
+        # 步骤 5：claim 在受控块外（decisions §5.3，按 TS）——新会话 uuid 不会
+        # 冲突、携带 session_id 的请求已通过 require_owner，异常实际不可达；
         # 万一发生则裸抛 → HTTP 500。
-        self.runtime.memory.bind_session(
+        self.runtime.sessions.claim(
             session_id=resolved_session_id, customer_id=customer_id
         )
         state = ToolExecutionState()
@@ -121,75 +119,81 @@ class ChattyRunModule:
             model=self._model,
             tools=build_chatty_tools(state=state, knowledge_store=self.runtime.knowledge),
         )
-        session = SQLiteSession(
-            resolved_session_id,
-            db_path=self.runtime.database_path,
-            sessions_table=SESSIONS_TABLE,
-            messages_table=MESSAGES_TABLE,
-        )
-        self._tracing.register(trace_id, self.runtime.traces)
-        try:
+        with self.runtime.sessions.open(resolved_session_id) as session:
+            self._tracing.register(trace_id, self.runtime.traces)
             try:
-                result = await self._run_agent(agent, context, state, session)
-                persist_agent_run(context, result)
-                # processor 的 on_trace_end 已置 completed；显式 complete 双保险（幂等）。
-                self.runtime.traces.complete(trace_id)
-            except HandoffIdempotencyConflictError as error:
-                persist_agent_failure(
-                    self.runtime.traces, trace_id, "handoff_idempotency_conflict"
-                )
-                raise RunFailure("handoff_idempotency_conflict", trace_id) from error
-            except HandoffPersistenceError as error:
-                persist_agent_failure(self.runtime.traces, trace_id, "handoff_persistence_failed")
-                raise RunFailure("handoff_persistence_failed", trace_id) from error
-            except Exception as error:
-                persist_agent_failure(self.runtime.traces, trace_id, "llm_provider_failed")
-                raise RunFailure(
-                    "llm_provider_failed",
-                    trace_id,
-                    internal_error_name=type(error).__name__,
-                ) from error
-        finally:
-            session.close()
-            self._tracing.discard(trace_id)
-        needs_human = result.support_request_id is not None
-        status = (
-            "needs_human" if needs_human else _STATUS_BY_OUTCOME[result.business_outcome]
-        )
-        return RunResponse(
-            reply=result.reply,
-            customer_id=customer_id,
-            session_id=resolved_session_id,
-            trace_id=trace_id,
-            request_id=resolved_request_id,
-            status=status,
-            business_outcome=result.business_outcome,
-            completion_evidence=result.completion_evidence,
-            knowledge_search_results=result.knowledge_search_results,
-            memory_events=result.memory_events,
-            needs_human=needs_human,
-            support_request_id=result.support_request_id,
-        )
+                try:
+                    result = await self._run_agent(agent, context, state, session)
+                    persist_agent_run(context, result)
+                    # 出站不变量在 trace 收尾前裁决：违约不会留下"已 completed 却被
+                    # 拒绝"的 trace，也不会绕过 RunFailure 变成裸 500。
+                    response = self._response(
+                        result,
+                        customer_id=customer_id,
+                        session_id=resolved_session_id,
+                        trace_id=trace_id,
+                        request_id=resolved_request_id,
+                    )
+                    # processor 的 on_trace_end 已置 completed；显式 complete 双保险（幂等）。
+                    self.runtime.traces.complete(trace_id)
+                except RunFailure:
+                    raise
+                except HandoffIdempotencyConflictError as error:
+                    persist_agent_failure(
+                        self.runtime.traces, trace_id, "handoff_idempotency_conflict"
+                    )
+                    raise RunFailure("handoff_idempotency_conflict", trace_id) from error
+                except HandoffPersistenceError as error:
+                    persist_agent_failure(
+                        self.runtime.traces, trace_id, "handoff_persistence_failed"
+                    )
+                    raise RunFailure("handoff_persistence_failed", trace_id) from error
+                except Exception as error:
+                    persist_agent_failure(self.runtime.traces, trace_id, "llm_provider_failed")
+                    raise RunFailure(
+                        "llm_provider_failed",
+                        trace_id,
+                        internal_error_name=type(error).__name__,
+                    ) from error
+            finally:
+                self._tracing.discard(trace_id)
+        return response
 
-    async def session_messages(
-        self, *, session_id: str, customer_id: str
-    ) -> list[dict[str, Any]]:
-        """§5.7：属主校验后返回存储态消息 JSON 列表（SDK 原生格式，不做转换）。
+    def _response(
+        self,
+        result: AgentRunResult,
+        *,
+        customer_id: str,
+        session_id: str,
+        trace_id: str,
+        request_id: str,
+    ) -> RunResponse:
+        """组装出站响应：status 由 contracts.run_status 派生，同一模块的 validator 复算。
 
-        错误映射由 HTTP 层完成：session_not_found → 404，mismatch → 409。
+        两者不一致（或证据形态违约）时以 RunFailure("run_contract_violated", trace_id)
+        对外——trace 同时置 failed，不会留下一个"成功"的 trace 配一个 5xx 响应。
         """
-        self._require_session(session_id, customer_id)
-        session = SQLiteSession(
-            session_id,
-            db_path=self.runtime.database_path,
-            sessions_table=SESSIONS_TABLE,
-            messages_table=MESSAGES_TABLE,
-        )
         try:
-            items = await session.get_items()
-        finally:
-            session.close()
-        return [dict(item) for item in items]
+            return RunResponse(
+                reply=result.reply,
+                customer_id=customer_id,
+                session_id=session_id,
+                trace_id=trace_id,
+                request_id=request_id,
+                status=run_status(
+                    business_outcome=result.business_outcome,
+                    support_request_id=result.support_request_id,
+                ),
+                business_outcome=result.business_outcome,
+                completion_evidence=result.completion_evidence,
+                knowledge_search_results=result.knowledge_search_results,
+                memory_events=result.memory_events,
+                needs_human=result.support_request_id is not None,
+                support_request_id=result.support_request_id,
+            )
+        except ValidationError as error:
+            persist_agent_failure(self.runtime.traces, trace_id, "run_contract_violated")
+            raise RunFailure("run_contract_violated", trace_id) from error
 
     async def _run_agent(
         self,
@@ -243,13 +247,3 @@ class ChattyRunModule:
                 details="Agent 在受限 turns 内未完成处理",
                 knowledge_search_results=state.knowledge_search_results,
             )
-
-    def _require_session(self, session_id: str, customer_id: str) -> None:
-        try:
-            self.runtime.memory.require_session(
-                session_id=session_id, customer_id=customer_id
-            )
-        except SessionNotFoundError as error:
-            raise RunFailure("session_not_found") from error
-        except SessionCustomerMismatchError as error:
-            raise RunFailure("session_customer_mismatch") from error
