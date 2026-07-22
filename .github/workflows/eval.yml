@@ -20,18 +20,14 @@ jobs:
       MODEL_ID: ${{ secrets.MODEL_ID }}
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v5
+      - uses: astral-sh/setup-uv@v7
         with:
-          run_install: false
-      - uses: actions/setup-node@v6
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+          enable-cache: true
+      - run: uv sync
       - name: Deterministic Agent eval
-        run: pnpm eval
+        run: uv run python -m chatty.eval
       - name: Real DeepSeek contract eval
-        run: pnpm test:deepseek
+        run: uv run pytest -m deepseek -q
       - name: Upload deterministic results
         if: always()
         uses: actions/upload-artifact@v4

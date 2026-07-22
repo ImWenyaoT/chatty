@@ -18,6 +18,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
       - uses: pnpm/action-setup@v5
         with:
           run_install: false
@@ -25,17 +28,22 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
+      - run: uv sync
       - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
-      - run: pnpm test
-      - run: pnpm typecheck
-      - run: pnpm build
-      - run: pnpm eval
+      - run: uv run ruff check .
+      - run: uv run ty check
+      - run: uv run pytest -q
+      - run: uv run python -m chatty.eval
+      - run: pnpm --filter @chatty/web lint
+      - run: pnpm --filter @chatty/web test:coverage
+      - run: pnpm --filter @chatty/web typecheck
+      - run: pnpm --filter @chatty/web build
       - name: Built application smoke
         run: |
-          CHATTY_DATABASE_PATH="$RUNNER_TEMP/chatty.sqlite" pnpm --filter @chatty/web start --port 3101 &
-          web_pid=$!
-          trap 'kill "$web_pid"' EXIT
+          CHATTY_DATABASE_PATH="$RUNNER_TEMP/chatty.sqlite" CHATTY_STATIC_DIR=apps/web/dist \
+            uv run uvicorn --factory chatty.smoke:create_smoke_app --port 3101 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
           for attempt in 1 2 3 4 5 6 7 8 9 10; do
             if curl --fail --silent --location http://127.0.0.1:3101/ > /dev/null \
               && curl --fail --silent http://127.0.0.1:3101/orders > /dev/null \
