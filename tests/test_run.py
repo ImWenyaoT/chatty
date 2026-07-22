@@ -32,7 +32,7 @@ from chatty.agent import (
     build_agent,
     model_from_env,
 )
-from chatty.harness import RunFailure
+from chatty.harness import AgentRunResult, RunFailure
 from chatty.run import ChattyRunModule
 from chatty.runtime import NativeRuntime
 
@@ -375,16 +375,15 @@ async def test_session_reuse_and_stored_messages(
         request_id="request-2",
     )
     assert second.session_id == first.session_id
-    messages = await module.session_messages(
+    # run 循环写入的历史由 runtime.sessions 读出（run 模块不再提供读接口）。
+    messages = await runtime.sessions.messages(
         session_id=first.session_id, customer_id="customer-1"
     )
     roles = [item.get("role") for item in messages]
     assert roles.count("user") == 2
     assert roles.count("assistant") == 2
     assert messages[0] == {"content": "第一句", "role": "user"}
-    with pytest.raises(RunFailure) as exc_info:
-        await module.session_messages(session_id="session_missing", customer_id="customer-1")
-    assert exc_info.value.code == "session_not_found"
+    assert not hasattr(module, "session_messages")
 
 
 async def test_model_exception_maps_to_llm_provider_failed(
@@ -398,6 +397,37 @@ async def test_model_exception_maps_to_llm_provider_failed(
     assert failure.trace_id is not None
     assert failure.trace_id.startswith("trace_")
     assert failure.internal_error_name == "RuntimeError"
+
+
+async def test_outcome_violation_becomes_run_failure(
+    runtime: NativeRuntime, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """出站不变量违约走 RunFailure（带 trace_id），trace 不留成"成功"。"""
+    module = make_module(runtime, tmp_path, [MessageStep("msg_1", "好的。")])
+
+    def broken_result(context: Any, **_: Any) -> AgentRunResult:
+        # verified 却没有 completion_evidence：status 会被派生成 completed，
+        # contracts 的复算立刻拒绝。
+        return AgentRunResult(
+            reply="好的。",
+            knowledge_search_results=[],
+            memory_events=[],
+            business_outcome="verified",
+            completion_evidence=None,
+            support_request_id=None,
+        )
+
+    monkeypatch.setattr("chatty.run.complete_agent_run", broken_result)
+    with pytest.raises(RunFailure) as exc_info:
+        await module.run(message="你好", customer_id="customer-1", request_id="request-1")
+    failure = exc_info.value
+    assert failure.code == "run_contract_violated"
+    assert failure.trace_id is not None
+    summary = runtime.traces.get(failure.trace_id)
+    assert summary is not None
+    assert summary.status == "failed"
+    errors = [span.error for span in runtime.traces.spans(failure.trace_id)]
+    assert "run_contract_violated" in errors
 
 
 def test_llm_not_configured_raised_at_construction(

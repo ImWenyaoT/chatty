@@ -16,6 +16,7 @@ from chatty.app import _RUN_FAILURE_STATUS, create_app, run_failure_status
 from chatty.artifacts import ArtifactStore
 from chatty.commerce import CommerceStore, CreateOrderInput
 from chatty.eval import EvalModel, MessageScript
+from chatty.harness import AgentRunResult
 from chatty.memory import MemoryStore
 from chatty.support import SupportRequestStore
 
@@ -152,13 +153,23 @@ def test_run_failure_status_mapping(database_path: Path, monkeypatch) -> None:
         )
         assert response.status_code == 409
         assert response.json() == {"detail": "session_customer_mismatch"}
-    # llm_not_configured（懒构造 run 模块时抛）→ 503；store 端点不受影响。
+    # llm_not_configured（懒构造 run 模块时抛）→ 503；不跑 Agent 的端点不受影响。
     app = create_app(database_path=database_path)
     with TestClient(app) as client:
         response = client.post(f"{BASE}/runs", json={"message": "你好"})
         assert response.status_code == 503
         assert response.json() == {"detail": "llm_not_configured"}
         assert client.get(f"{BASE}/orders").status_code == 200
+        # 会话历史是只读 store 概念：缺 key 也必须给真实答案，绝不 503。
+        store = MemoryStore(database_path)
+        store.bind_session(session_id="keyless-session", customer_id="demo-customer")
+        store.close()
+        history = client.get(f"{BASE}/sessions/keyless-session/messages")
+        assert history.status_code == 200
+        assert history.json() == {"session_id": "keyless-session", "messages": []}
+        # 属主类错误仍按会话语义映射，同样不是 503。
+        assert client.get(f"{BASE}/sessions/never-issued/messages").status_code == 404
+        assert client.get(f"{BASE}/sessions/alien-session/messages").status_code == 409
     # llm_provider_failed（脚本耗尽 → 任意异常）→ 502 + x-trace-id。
     app = build_app(database_path, model=EvalModel([]))
     with TestClient(app) as client:
@@ -166,6 +177,32 @@ def test_run_failure_status_mapping(database_path: Path, monkeypatch) -> None:
         assert response.status_code == 502
         assert response.json() == {"detail": "llm_provider_failed"}
         assert response.headers["x-trace-id"].startswith("trace_")
+
+
+def test_outcome_violation_returns_500_with_trace_id(database_path: Path, monkeypatch) -> None:
+    """出站不变量违约不再是裸 500：经 RunFailure 出场，带 X-Trace-ID，trace 记为 failed。"""
+
+    def broken_result(context, **_):
+        return AgentRunResult(
+            reply="好的。",
+            knowledge_search_results=[],
+            memory_events=[],
+            business_outcome="verified",
+            completion_evidence=None,
+            support_request_id=None,
+        )
+
+    monkeypatch.setattr("chatty.run.complete_agent_run", broken_result)
+    app = build_app(database_path)
+    with TestClient(app) as client:
+        response = client.post(f"{BASE}/runs", json={"message": "你好"})
+        assert response.status_code == 500
+        assert response.json() == {"detail": "run_contract_violated"}
+        trace_id = response.headers["x-trace-id"]
+        assert trace_id.startswith("trace_")
+        detail = client.get(f"{BASE}/traces/{trace_id}")
+        assert detail.status_code == 200
+        assert detail.json()["status"] == "failed"
 
 
 def test_session_messages(database_path: Path) -> None:
@@ -455,6 +492,7 @@ def test_run_failure_status_table_and_route_override() -> None:
         "handoff_idempotency_conflict": 409,
         "handoff_persistence_failed": 500,
         "llm_provider_failed": 502,
+        "run_contract_violated": 500,
     }
     assert run_failure_status("handoff_idempotency_conflict") == 409
     assert run_failure_status("anything_unknown") == 502

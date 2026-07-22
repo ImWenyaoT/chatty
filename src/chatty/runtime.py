@@ -1,8 +1,8 @@
 """NativeRuntime：单 SQLite 文件上的全部 store 聚合（specs/stores.md §0.1）。
 
 连接拓扑：commerce/memory/support/traces/artifacts 各自建一个 Database 句柄；knowledge
-直接复用 commerce.database 这个句柄（连同它的写事务锁）；SQLiteSession（会话历史）由 run
-模块按 database_path 构造。写事务的串行化归句柄自己管，聚合根不参与。
+直接复用 commerce.database 这个句柄（连同它的写事务锁）；sessions（会话历史）不持长连接，
+每次调用自开自关 SDK SQLiteSession。写事务的串行化归句柄自己管，聚合根不参与。
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from chatty.artifacts import ArtifactStore
 from chatty.commerce import CommerceStore
 from chatty.knowledge import KnowledgeStore
 from chatty.memory import MemoryStore
+from chatty.session import SessionHistory
 from chatty.support import SupportRequestStore
 from chatty.traces import TraceStore
 
@@ -28,11 +29,12 @@ class NativeRuntime:
         self.support = SupportRequestStore(self.database_path)
         self.traces = TraceStore(self.database_path)
         self.artifacts = ArtifactStore(self.database_path)
+        self.sessions = SessionHistory(self.database_path, self.memory)
 
     def close(self) -> None:
         """关闭顺序（§0.1）：traces → support → memory → artifacts → commerce。
 
-        knowledge 无 close：复用 commerce 连接。
+        knowledge 无 close：复用 commerce 连接；sessions 无 close：不持长连接。
         """
         self.traces.close()
         self.support.close()

@@ -3,7 +3,8 @@
 - 全部路由挂在 `/api/chatty` 前缀下（decisions §1.6），任何地方不做前缀剥离。
 - 懒初始化（§1.2）：/health、/openapi.json、/docs、/redoc 不触发 SQLite 打开或
   Agent 运行时构建；NativeRuntime 与 run 模块在首次业务请求时构建并缓存。
-  run 模块懒构造使 `llm_not_configured` 在 POST /runs 时映射 503（decisions §5.2）。
+  run 模块懒构造使 `llm_not_configured` 只在 POST /runs 时映射 503（decisions §5.2）；
+  其余端点（含会话历史只读）都只经 runtime，不受 Model 配置影响。
 - /docs、/redoc 是占位 HTML（decisions §1.1）；/openapi.json 用 FastAPI 原生生成，
   对齐 title / servers / paths 键集合（decisions §1.2：paths 剥掉前缀）。
 - 可选伺服前端 dist（SPA fallback 到 index.html，decisions §7.3 CI 冒烟）。
@@ -91,6 +92,8 @@ _RUN_FAILURE_STATUS: dict[str, int] = {
     "handoff_idempotency_conflict": 409,
     "handoff_persistence_failed": 500,
     "llm_provider_failed": 502,
+    # 出站不变量被违反：Harness 自身的 bug，不是上游 provider 的问题。
+    "run_contract_violated": 500,
 }
 
 
@@ -238,8 +241,9 @@ def create_app(
         session_id: str,
         customer_id: Annotated[str, Depends(customer_identity)],
     ) -> SessionMessagesResponse:
+        # 读历史只碰 store：不构建 run 模块，缺 OPENAI_API_KEY 也不会退化成 503。
         try:
-            messages = await services.run_module().session_messages(
+            messages = await services.runtime().sessions.messages(
                 session_id=session_id, customer_id=customer_id
             )
         except RunFailure as error:
