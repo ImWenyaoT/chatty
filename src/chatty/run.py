@@ -14,6 +14,7 @@ from uuid import uuid4
 from agents import Agent, Model, RunConfig, Runner, SQLiteSession
 from agents.exceptions import MaxTurnsExceeded, ModelBehaviorError
 
+from chatty import config
 from chatty.agent import build_agent, model_from_env
 from chatty.contracts import RunResponse, RunStatus
 from chatty.harness import (
@@ -36,8 +37,7 @@ from chatty.tracing import RuntimeTracingRouter, install_runtime_tracing
 SESSIONS_TABLE = "chatty_sessions"
 MESSAGES_TABLE = "chatty_messages"
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_KNOWLEDGE_PATH = _REPO_ROOT / "knowledge" / "records.jsonl"
+DEFAULT_KNOWLEDGE_PATH = config.knowledge_path()
 
 # business_outcome → 非 handoff run 的对外 status（§5.5）。
 _STATUS_BY_OUTCOME: dict[str, RunStatus] = {

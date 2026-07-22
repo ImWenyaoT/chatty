@@ -55,6 +55,6 @@ known-first-party = ["chatty"]
 python-version = "3.12"
 
 [tool.ty.src]
-# ty 只查 src/：tests/ 大量使用鸭子类型 stub（如 StubTrace 代 Trace、直调
-# on_invoke_tool 的假 ToolContext），对名义类型检查是不可修的噪音。
-include = ["src"]
+# ty 查 src/ 与根部入口 main.py；tests/ 大量使用鸭子类型 stub（如 StubTrace 代
+# Trace、直调 on_invoke_tool 的假 ToolContext），对名义类型检查是不可修的噪音。
+include = ["src", "main.py"]
