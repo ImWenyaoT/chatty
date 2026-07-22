@@ -1,6 +1,6 @@
 # Chatty 项目上下文
 
-本文件是仓库唯一的架构与领域入口。Chatty 是一个全栈 TypeScript 项目。它运行在 Node.js 24 上，并使用 Next.js、OpenAI Agents SDK 和 SQLite。shadcn/ui 与 Tailwind CSS v4 只负责界面。
+本文件是仓库唯一的架构与领域入口。Chatty 的后端是 Python/FastAPI 项目，使用 Python OpenAI Agents SDK 和 SQLite，用 uv 管理。前端是 Vite + React SPA，shadcn/ui 与 Tailwind CSS v4 只负责界面。
 
 ## 最高层边界
 
@@ -14,16 +14,28 @@
 
 ## 模块
 
-- `apps/web`：Next.js 应用。它提供页面和 `/api/chatty` HTTP 入口。
-- `apps/web/src/app/api/chatty/[...path]/route.ts`：直接调用 `@chatty/agent`。它不复制业务逻辑。
-- `apps/api`：`@chatty/agent` 包的源码。它不是独立的网络服务。
-- `apps/api/src/agent-runtime.ts`：唯一 Agent Loop。它使用 TypeScript OpenAI Agents SDK 的 `Agent` 和 `Runner`。
-- `apps/api/src/harness.ts` 与 `tools.ts`：Tool 执行、权限边界、完成验证和 Handoff。
-- `apps/api/src/artifacts.ts`：Research Artifact、Content Artifact、人工批准和 sandbox delivery receipt。
-- `apps/api/src/runtime.ts`、`stores.ts` 与 `commerce.ts`：SQLite 数据访问。Orders 相关代码暂时用于兼容。
-- `apps/api/src/session.ts`：SQLite Session。它可以读取迁移前保存的 JSON。
-- `apps/api/src/knowledge.ts`：从 JSONL 导入的 FTS5 Knowledge。
-- `packages/contracts`：Web 与 Agent 共用的 HTTP JSON 契约。
+- `main.py`：uvicorn 启动入口。它在 `127.0.0.1:8000` 运行 FastAPI 应用。
+- `src/chatty/app.py`：FastAPI 应用工厂。全部路由挂在 `/api/chatty` 前缀下，可选伺服前端 `dist`。
+- `src/chatty/run.py`：唯一 Agent Loop。它使用 Python OpenAI Agents SDK 的 `Agent` 和 `Runner`。
+- `src/chatty/agent.py`：Agent 构造和 live Model Provider（DeepSeek，Chat Completions 协议）。
+- `src/chatty/harness.py` 与 `tools.py`：Tool 执行、权限边界、完成验证和 Handoff。
+- `src/chatty/artifacts.py`：Research Artifact、Content Artifact、人工批准和 sandbox delivery receipt。
+- `src/chatty/runtime.py`、`store.py` 与 `commerce.py`：SQLite 数据访问。Orders 相关代码暂时用于兼容。
+- `src/chatty/knowledge.py`：从 JSONL 导入的 FTS5 Knowledge。
+- `src/chatty/contracts.py`：Pydantic 契约。它是 HTTP JSON 契约的唯一权威；前端在 `apps/web/src/lib/contracts.ts` 保留本地 zod 校验副本。
+- `src/chatty/tracing.py`：SDK trace 落到本地 SQLite。
+- `src/chatty/eval.py`：确定性 eval（`uv run python -m chatty.eval`）。
+- `src/chatty/browser_smoke.py` 与 `smoke.py`：Playwright e2e 与 CI 冒烟的 ASGI 工厂。
+- `src/chatty/backup.py`：SQLite 在线备份 CLI。
+- `apps/web`：Vite SPA。它只负责界面，不含第二套业务逻辑。
+
+## 运行时与进程模型
+
+- Python 侧用 uv 工具链：`uv sync` 安装依赖，`uv run` 执行命令。
+- FastAPI 是唯一 HTTP 进程（`127.0.0.1:8000`）。
+- 开发时 Vite dev server（`127.0.0.1:3000`）把 `/api/chatty` 原样代理到 FastAPI，不改写前缀。
+- 生产与 CI 冒烟由 FastAPI 直接伺服 `apps/web/dist`（SPA fallback 到 `index.html`），保持单一 origin。
+- 禁止两个后端进程同时写同一个 SQLite 文件。
 
 ## 产品能力与非目标
 
@@ -41,18 +53,20 @@
 
 ## 外部契约与兼容边界
 
-旧 Orders、Memory 和 Handoff HTTP 接口暂时保持兼容。SQLite schema、Session JSON、Knowledge JSONL、eval JSONL 和本地 Trace 格式也保持兼容。
+旧 Orders、Memory 和 Handoff HTTP 接口暂时保持兼容。SQLite schema、Session JSON（Python SDK 格式）、Knowledge JSONL、eval JSONL 和本地 Trace 格式也保持兼容。
 
-`/playground`、`/orders` 和 `/dashboard` 会重定向到 `/workbench`。旧客服 Tools、测试和数据仍用于兼容。删除前必须保留可验证的历史版本和回滚点。
+`/api/chatty/*` 的 JSON shape、状态码、CORS 和 OpenAPI surface 与 TypeScript 版一致。契约权威是 Pydantic 模型 + OpenAPI（见 ADR 0014）。
 
-新的 Trace span 类型为 `agent`、`generation` 和 `function`。旧数据库中的历史 span 仍可查询。
+未知前端路径渲染 Workbench。旧客服 Tools、测试和数据仍用于兼容。删除前必须保留可验证的历史版本和回滚点。
 
-配置来自 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`MODEL_ID` 和 `CHATTY_DATABASE_PATH`。Secret 不得进入响应、Trace、Session、SQLite 或日志。
+Trace span 类型为 `agent`、`generation` 和 `function`。旧数据库中的历史 span 仍可查询。
+
+配置来自 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`MODEL_ID` 和 `CHATTY_DATABASE_PATH`。CI 冒烟另用 `CHATTY_STATIC_DIR` 指定前端产物目录。Secret 不得进入响应、Trace、Session、SQLite 或日志。
 
 ## 运行与恢复
 
-持续集成（CI）运行 `pnpm lint`、`pnpm test`、`pnpm typecheck`、`pnpm build`、`pnpm eval`、构建产物检查和 `pnpm test:e2e`。`pnpm test:deepseek` 手动测试真实 DeepSeek 服务。
+持续集成（CI）运行 `uv run ruff check .`、`uv run ty check`、`uv run pytest -q`、`uv run python -m chatty.eval`、前端 lint / 测试 / typecheck / build、单进程 FastAPI 冒烟（`chatty.smoke` 伺服 `apps/web/dist`）和 `pnpm test:e2e`。根 pnpm scripts（`pnpm lint`、`pnpm test`、`pnpm typecheck`、`pnpm build`、`pnpm eval`、`pnpm test:e2e`）委托同样的命令。`pnpm test:deepseek` 手动测试真实 DeepSeek 服务。
 
-每次部署前运行 `pnpm --filter @chatty/agent backup`。部署环境必须提供 Node.js runtime 和持久化磁盘。
+每次部署前运行 `uv run python -m chatty.backup --output <备份路径>`（默认 `--database data/chatty.sqlite`）。部署环境必须提供 Python runtime 和持久化磁盘。
 
-回滚到 `1c350fc382119c52431e1f050b616e340c1df026` 时，也要恢复同一时间点的 SQLite 备份。不要让两个版本同时写入一个数据库。
+回滚边界是删除 TypeScript 实现前的最后一个 TS revision（`991c111d41db96eae4e4ac4e5ee65f385829fb39`，见 ADR 0014）。回滚到该版本时，也要恢复同一时间点的 SQLite 备份。不要让两个版本同时写入一个数据库。

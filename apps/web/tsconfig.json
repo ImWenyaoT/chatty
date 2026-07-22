@@ -5,7 +5,7 @@
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "noEmit": true,
     "incremental": true,
     "paths": {
@@ -13,18 +13,8 @@
     },
     "allowJs": false,
     "isolatedModules": true,
-    "types": ["node"],
-    "plugins": [{ "name": "next" }]
+    "types": ["node", "vite/client"]
   },
-  "include": [
-    "next-env.d.ts",
-    ".next/types/**/*.ts",
-    "app/**/*.ts",
-    "app/**/*.tsx",
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    "lib/**/*.ts",
-    "*.ts"
-  ],
-  "exclude": ["node_modules", ".next"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "lib/**/*.ts", "*.ts"],
+  "exclude": ["node_modules", "dist"]
 }

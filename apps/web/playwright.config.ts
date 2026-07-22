@@ -17,11 +17,20 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], channel: 'chrome' },
     },
   ],
-  webServer: {
-    command:
-      'CHATTY_E2E_DATABASE=.cache/browser-e2e-typescript.sqlite pnpm dev --port 3100',
-    url: 'http://127.0.0.1:3100/api/chatty/health',
-    reuseExistingServer: false,
-    timeout: 30_000,
-  },
+  webServer: [
+    {
+      command:
+        'UV_CACHE_DIR=.cache/uv CHATTY_E2E_DATABASE=.cache/browser-e2e.sqlite uv run uvicorn --factory chatty.browser_smoke:create_app --port 8100',
+      cwd: '../..',
+      url: 'http://127.0.0.1:8100/api/chatty/health',
+      reuseExistingServer: false,
+      timeout: 30_000,
+    },
+    {
+      command: 'CHATTY_API_TARGET=http://127.0.0.1:8100 pnpm dev --port 3100',
+      url: 'http://127.0.0.1:3100/api/chatty/health',
+      reuseExistingServer: false,
+      timeout: 30_000,
+    },
+  ],
 })

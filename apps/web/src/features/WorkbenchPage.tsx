@@ -1,5 +1,3 @@
-'use client'
-
 import { useState } from 'react'
 import { Check, Send, Sparkles } from 'lucide-react'
 import {
@@ -8,7 +6,7 @@ import {
   RunResponseSchema,
   type Artifact,
   type RunResponse,
-} from '@chatty/contracts'
+} from '@/lib/contracts'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
