@@ -13,7 +13,7 @@ Depends(customer_identity) 引用 create_app 闭包变量，注解必须立即�
 """
 
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
@@ -43,7 +43,7 @@ from chatty.contracts import (
     TraceDashboard,
     TraceSpan,
 )
-from chatty.harness import RunFailure, run_failure_http_status
+from chatty.harness import RunFailure
 from chatty.run import ChattyRunModule
 from chatty.runtime import NativeRuntime
 from chatty.traces import TraceStore, TraceSummary
@@ -80,6 +80,26 @@ def parsed_limit(value: str | None, fallback: int) -> int | None:
     except ValueError:
         return None
     return int(number) if number.is_integer() else None
+
+
+# RunFailure code → HTTP 状态。传输层自己的表；路由级差异由调用点显式传入 overrides，
+# 不再由 Harness 用注释指向某个调用者。
+_RUN_FAILURE_STATUS: dict[str, int] = {
+    "session_not_found": 409,
+    "session_customer_mismatch": 409,
+    "llm_not_configured": 503,
+    "handoff_idempotency_conflict": 409,
+    "handoff_persistence_failed": 500,
+    "llm_provider_failed": 502,
+}
+
+
+def run_failure_status(code: str, overrides: Mapping[str, int] | None = None) -> int:
+    """RunFailure code → HTTP 状态；未知 code 一律 502。"""
+    if overrides is not None and code in overrides:
+        return overrides[code]
+    return _RUN_FAILURE_STATUS.get(code, 502)
+
 
 
 class AppServices:
@@ -208,7 +228,7 @@ def create_app(
             )
         except RunFailure as error:
             raise HTTPException(
-                status_code=run_failure_http_status(error.code),
+                status_code=run_failure_status(error.code),
                 detail=error.code,
                 headers={"X-Trace-ID": error.trace_id} if error.trace_id else None,
             ) from error
@@ -223,10 +243,7 @@ def create_app(
                 session_id=session_id, customer_id=customer_id
             )
         except RunFailure as error:
-            # §4.3：与 /runs 不同，session_not_found 在此映射 404。
-            status_code = (
-                404 if error.code == "session_not_found" else run_failure_http_status(error.code)
-            )
+            status_code = run_failure_status(error.code, {"session_not_found": 404})
             raise HTTPException(status_code=status_code, detail=error.code) from error
         return SessionMessagesResponse(session_id=session_id, messages=messages)
 

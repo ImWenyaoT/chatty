@@ -15,7 +15,6 @@ from chatty.commerce import CommerceError, CommerceStore, CreateOrderInput
 from chatty.contracts import CustomerMemory, KnowledgeRecord, MemoryEvent, Order
 from chatty.harness import (
     MUTATION_TOOLS,
-    RUN_FAILURE_HTTP_STATUS,
     AgentContext,
     AgentRunResult,
     BusinessToolReceipt,
@@ -30,7 +29,6 @@ from chatty.harness import (
     handoff_idempotency_key,
     persist_agent_failure,
     persist_agent_run,
-    run_failure_http_status,
 )
 from chatty.memory import MemoryStore
 from chatty.support import SupportRequestStore
@@ -506,16 +504,6 @@ def test_run_failure_attributes_and_http_mapping():
     assert failure.trace_id == "trace-1"
     assert failure.internal_error_name == "CommerceError"
     assert RunFailure("llm_not_configured").trace_id is None
-    assert RUN_FAILURE_HTTP_STATUS == {
-        "session_not_found": 409,
-        "session_customer_mismatch": 409,
-        "llm_not_configured": 503,
-        "handoff_idempotency_conflict": 409,
-        "handoff_persistence_failed": 500,
-        "llm_provider_failed": 502,
-    }
-    assert run_failure_http_status("handoff_idempotency_conflict") == 409
-    assert run_failure_http_status("anything_unknown") == 502
 
 
 def test_persist_agent_run_records_outcome_with_sorted_sources(tmp_path):

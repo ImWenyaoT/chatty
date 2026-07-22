@@ -65,23 +65,6 @@ class RunFailure(RuntimeError):
         self.internal_error_name = internal_error_name
 
 
-# RunFailure code → HTTP 状态码（§9.2）。
-# 注意：`session_not_found` 在 GET /sessions/:id/messages 场景由 HTTP 层改判 404。
-RUN_FAILURE_HTTP_STATUS: dict[str, int] = {
-    "session_not_found": 409,
-    "session_customer_mismatch": 409,
-    "llm_not_configured": 503,
-    "handoff_idempotency_conflict": 409,
-    "handoff_persistence_failed": 500,
-    "llm_provider_failed": 502,
-}
-
-
-def run_failure_http_status(code: str) -> int:
-    """未知 code 一律按"其他一切异常"落 502。"""
-    return RUN_FAILURE_HTTP_STATUS.get(code, 502)
-
-
 def error_code(error: Exception) -> str:
     """回执错误码（§3）。
 

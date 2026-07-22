@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from chatty.app import create_app
+from chatty.app import _RUN_FAILURE_STATUS, create_app, run_failure_status
 from chatty.artifacts import ArtifactStore
 from chatty.commerce import CommerceStore, CreateOrderInput
 from chatty.eval import EvalModel, MessageScript
@@ -444,3 +444,22 @@ def test_lifespan_closes_run_module_and_runtime(database_path: Path) -> None:
         runtime = app.state.services.runtime()
     with pytest.raises(sqlite3.ProgrammingError):
         runtime.commerce.database.execute("SELECT 1")
+
+
+def test_run_failure_status_table_and_route_override() -> None:
+    """状态映射归传输层：全表、未知 code 与路由级 override 都在这里裁决。"""
+    assert _RUN_FAILURE_STATUS == {
+        "session_not_found": 409,
+        "session_customer_mismatch": 409,
+        "llm_not_configured": 503,
+        "handoff_idempotency_conflict": 409,
+        "handoff_persistence_failed": 500,
+        "llm_provider_failed": 502,
+    }
+    assert run_failure_status("handoff_idempotency_conflict") == 409
+    assert run_failure_status("anything_unknown") == 502
+    # GET /sessions/{id}/messages 的差异现在是调用点传入的参数，
+    # 不再是 Harness 里一条指向调用者的注释。
+    assert run_failure_status("session_not_found") == 409
+    assert run_failure_status("session_not_found", {"session_not_found": 404}) == 404
+    assert run_failure_status("llm_not_configured", {"session_not_found": 404}) == 503
