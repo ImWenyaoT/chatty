@@ -6,10 +6,12 @@ import json
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 import pytest
+from agents.strict_schema import ensure_strict_json_schema
 from agents.tool_context import ToolContext
+from pydantic import BaseModel, ConfigDict, Field
 
 from chatty.artifacts import ArtifactStore
 from chatty.commerce import CommerceStore, CreateOrderInput
@@ -19,9 +21,11 @@ from chatty.knowledge import KnowledgeStore
 from chatty.memory import MemoryStore
 from chatty.support import SupportRequestStore
 from chatty.tools import (
+    _TOOL_SPECS,
     CHATTY_TOOL_NAMES,
     TOOL_DESCRIPTIONS,
     ToolExecutionState,
+    _params_signature,
     build_chatty_tools,
     execute_chatty_tool,
 )
@@ -212,6 +216,67 @@ def test_tool_declarations_match_spec(tmp_path):
     # relation 的 from 字段按别名进 schema。
     research_schema = json.dumps(by_name["save_research_artifact"].params_json_schema)
     assert '"from"' in research_schema
+
+
+def test_sdk_schema_is_derived_from_params_model(tmp_path):
+    """漂移守卫：12 个 tool 发布给模型的 strict schema 必须等于 params model 的 schema。
+
+    SDK 层与 Harness 层的约束只在 params model 里声明一次；`build_chatty_tools`
+    把字段翻译成函数签名后交给 openai-agents 生成 schema。任何一层单方面改约束
+    （放宽 max_length、增删字段、改默认值）都会在这里失败。
+
+    唯一允许的差异是 title：SDK 把动态参数 model 命名为 `{tool}_args`，pydantic
+    用类名（且 OrderIdParams 被三个 tool 复用，类名本就无法一一对应）。
+    """
+    stores = make_stores(tmp_path)
+    tools = build_chatty_tools(
+        state=ToolExecutionState(), knowledge_store=make_knowledge(stores, tmp_path)
+    )
+    by_name = {tool.name: tool for tool in tools}
+    assert set(by_name) == set(_TOOL_SPECS)
+    for name, spec in _TOOL_SPECS.items():
+        expected = ensure_strict_json_schema(spec.params_model.model_json_schema())
+        expected["title"] = f"{name}_args"
+        assert by_name[name].params_json_schema == expected, name
+    # 派生前 StringConstraints 会被 SDK 静默丢弃，这两个字段曾只有 Harness 层设限。
+    memory_query = by_name["search_customer_memory"].params_json_schema["properties"]["query"]
+    assert (memory_query["minLength"], memory_query["maxLength"]) == (1, 200)
+    memory_fact = by_name["save_customer_memory"].params_json_schema["properties"]["fact"]
+    assert (memory_fact["minLength"], memory_fact["maxLength"]) == (1, 500)
+
+
+def test_params_signature_carries_constraints_and_defaults():
+    """签名翻译保真：约束、默认值、字段顺序都来自 params model。"""
+
+    class _Params(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        required_after_default: str = Field(min_length=2, max_length=8)
+        with_default: int = Field(default=7, ge=1, le=9)
+        tail: str = Field(min_length=1)
+
+    signature, annotations = _params_signature(_Params)
+    names = list(signature.parameters)
+    assert names == ["ctx", "required_after_default", "with_default", "tail"]
+    # 默认值只留在 FieldInfo 里，签名参数一律无默认值，否则字段顺序会被迫重排。
+    assert all(signature.parameters[name].default is signature.empty for name in names)
+    assert set(annotations) == {*names, "return"}
+    # 约束与默认值随 FieldInfo 一起挂进 Annotated 元数据，SDK 由此还原同一套限制。
+    carried = get_args(annotations["with_default"])[1]
+    assert carried is _Params.model_fields["with_default"]
+    assert carried.default == 7
+
+
+def test_params_signature_rejects_top_level_alias():
+    """顶层字段用 alias 会让签名参数名与对外键名分叉——直接拒绝，不产出第二份声明。"""
+
+    class _Aliased(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        from_: str = Field(alias="from")
+
+    with pytest.raises(ValueError, match="must not use an alias"):
+        _params_signature(_Aliased)
 
 
 def test_execute_chatty_tool_rejects_unknown_tool(tmp_path):
