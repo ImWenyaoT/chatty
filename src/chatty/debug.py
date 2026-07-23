@@ -40,7 +40,11 @@ def _structured_text(value: object) -> object:
 
 class AgentDebugHooks(RunHooksBase[RecommendationContext, Agent[RecommendationContext]]):
     def __init__(self, model_id: str) -> None:
+        # 独立 handler 保证脚本和 Uvicorn 两种启动方式都能看到调试轨迹。
+        if not logger.handlers:
+            logger.addHandler(logging.StreamHandler())
         logger.setLevel(logging.INFO)
+        logger.propagate = False
         self.model_id = model_id
         self.sequence = 0
 

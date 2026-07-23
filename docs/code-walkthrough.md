@@ -65,7 +65,7 @@ async def get_user_profile(
     ctx: RunContextWrapper[RecommendationContext],
 ) -> str:
     context = ctx.context
-    # Tool 读取本次运行的本地 context，不向模型暴露 Catalog。
+    # Tool 通过本次 RecommendationContext 使用 Catalog，不向模型暴露内部对象。
     profile = context.catalog.user_profile(
         context.request.user_id,
         context.request.context,
@@ -130,6 +130,8 @@ flowchart LR
 ## 10. `experiments.py`：稳定分桶
 
 系统对 `user_id + experiment_id` 计算 SHA-256，再按奇偶分成两个 50% 组。服务端重新计算分组，客户端不能伪造实验组。
+
+`control` 只使用商品热度；`treatment_personalized` 组合热度、偏好类目、近期行为和价格范围。
 
 ## 11. `app.py`：HTTP API
 

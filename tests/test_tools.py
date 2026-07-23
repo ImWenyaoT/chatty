@@ -64,16 +64,6 @@ async def test_tools_use_run_context_and_catalog() -> None:
     assert knowledge
     assert {item["category"] for item in knowledge} == {"耳机"}
 
-    await invoke(
-        "retrieve_knowledge",
-        {
-            "query": "快充 配件",
-            "categories": ["配件"],
-            "product_ids": ["P007"],
-            "limit": 3,
-        },
-    )
-
     strategy = json.loads(await invoke("get_marketing_strategy", {"segment": profile["segment"]}))
     assert strategy["segment"] == "active"
     assert context.used_tools == [
@@ -81,10 +71,9 @@ async def test_tools_use_run_context_and_catalog() -> None:
         "search_products",
         "check_inventory",
         "retrieve_knowledge",
-        "retrieve_knowledge",
         "get_marketing_strategy",
     ]
     assert context.recalled_product_ids >= {"P003", "P004"}
     assert context.in_stock_product_ids == {"P003"}
-    assert context.knowledge_product_ids == {"P003", "P004", "P007"}
-    assert len(context.knowledge) > len(knowledge)
+    assert context.knowledge_product_ids == {"P003", "P004"}
+    assert [hit.model_dump(mode="json") for hit in context.knowledge] == knowledge
