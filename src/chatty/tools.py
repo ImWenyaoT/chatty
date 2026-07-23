@@ -28,6 +28,8 @@ TOOL_NAMES = (
 
 @dataclass
 class RecommendationContext:
+    """一次 Runner 执行的可验证状态，由五个 Tool 逐步填充。"""
+
     request: RecommendationRequest
     catalog: Catalog
     experiment_group: ExperimentGroup
@@ -36,7 +38,8 @@ class RecommendationContext:
     recalled_product_ids: set[str] = field(default_factory=set)
     in_stock_product_ids: set[str] = field(default_factory=set)
     knowledge_product_ids: set[str] = field(default_factory=set)
-    used_tools: set[str] = field(default_factory=set)
+    used_tools: list[str] = field(default_factory=list)
+
 
 def build_tools() -> list[Tool]:
     async def get_user_profile(ctx: RunContextWrapper[RecommendationContext]) -> str:
@@ -44,7 +47,7 @@ def build_tools() -> list[Tool]:
         context = ctx.context
         profile = context.catalog.user_profile(context.request.user_id, context.request.context)
         context.profile = profile
-        context.used_tools.add("get_user_profile")
+        context.used_tools.append("get_user_profile")
         return profile.model_dump_json()
 
     async def search_products(
@@ -57,9 +60,9 @@ def build_tools() -> list[Tool]:
     ) -> str:
         """Search products stored in SQLite by category, price and tags."""
         context = ctx.context
-        profile = context.profile or context.catalog.user_profile(
-            context.request.user_id, context.request.context
-        )
+        if context.profile is None:
+            raise ValueError("profile_not_loaded")
+        profile = context.profile
         products = context.catalog.search(
             profile=profile,
             group=context.experiment_group,
@@ -69,8 +72,9 @@ def build_tools() -> list[Tool]:
             tags=tags,
             limit=limit,
         )
+        # 保存搜索结果的 ID，而不是之后从模型文本反推“是否召回”。
         context.recalled_product_ids.update(product.product_id for product in products)
-        context.used_tools.add("search_products")
+        context.used_tools.append("search_products")
         return json.dumps(
             [product.model_dump(mode="json") for product in products],
             ensure_ascii=False,
@@ -83,8 +87,9 @@ def build_tools() -> list[Tool]:
         """Return in-stock products and low-stock flags from SQLite."""
         context = ctx.context
         products = context.catalog.inventory(product_ids)
+        # 这里只记录 SQLite 确认有货的商品，供最终输出做集合校验。
         context.in_stock_product_ids.update(product.product_id for product in products)
-        context.used_tools.add("check_inventory")
+        context.used_tools.append("check_inventory")
         return json.dumps(
             [
                 {
@@ -104,7 +109,7 @@ def build_tools() -> list[Tool]:
         product_ids: list[str],
         limit: Annotated[int, Field(ge=1, le=8)],
     ) -> str:
-        """Retrieve grounded product and marketing guidance from SQLite FTS5."""
+        """Retrieve product and marketing guidance within the requested scope."""
         context = ctx.context
         hits = context.catalog.retrieve_knowledge(
             query,
@@ -115,8 +120,9 @@ def build_tools() -> list[Tool]:
         known_doc_ids = {hit.doc_id for hit in context.knowledge}
         context.knowledge.extend(hit for hit in hits if hit.doc_id not in known_doc_ids)
         if hits:
+            # 有检索结果时，记录本次请求覆盖的商品范围。最终推荐必须落在该范围内。
             context.knowledge_product_ids.update(product_ids)
-        context.used_tools.add("retrieve_knowledge")
+        context.used_tools.append("retrieve_knowledge")
         return json.dumps(
             [hit.model_dump(mode="json") for hit in hits],
             ensure_ascii=False,
@@ -128,8 +134,10 @@ def build_tools() -> list[Tool]:
     ) -> str:
         """Return the copy tone, instructions and forbidden words for a segment."""
         context = ctx.context
+        if context.profile is None or segment != context.profile.segment:
+            raise ValueError("marketing_segment_mismatch")
         strategy = context.catalog.marketing_strategy(segment)
-        context.used_tools.add("get_marketing_strategy")
+        context.used_tools.append("get_marketing_strategy")
         return strategy.model_dump_json()
 
     return [

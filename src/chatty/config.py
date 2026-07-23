@@ -19,3 +19,8 @@ def load_root_env() -> None:
 def configured_model_id() -> str:
     load_root_env()
     return os.environ.get("MODEL_ID") or DEFAULT_MODEL_ID
+
+
+def agent_debug_enabled() -> bool:
+    load_root_env()
+    return os.environ.get("CHATTY_AGENT_DEBUG", "").casefold() in {"1", "true", "yes", "on"}

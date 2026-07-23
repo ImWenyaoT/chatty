@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pytest
 from starlette.testclient import TestClient
 
 from chatty import config
@@ -29,7 +28,7 @@ def test_recommendation_api_and_openapi() -> None:
         model=ScriptedModel(successful_script()),
         model_id="scripted-model",
     )
-    app = create_app(catalog=catalog, metrics=metrics, service=service)
+    app = create_app(service=service)
     with TestClient(app) as client:
         response = client.post(
             "/api/v1/recommend",
@@ -60,11 +59,7 @@ def test_missing_model_key_maps_to_503(monkeypatch) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     catalog = Catalog()
     metrics = ExperimentMetrics()
-    app = create_app(
-        catalog=catalog,
-        metrics=metrics,
-        service=RecommendationService(catalog, metrics),
-    )
+    app = create_app(service=RecommendationService(catalog, metrics))
     with TestClient(app) as client:
         response = client.post(
             "/api/v1/recommend",
@@ -86,23 +81,3 @@ def test_experiment_outcome_and_metrics_endpoints() -> None:
     assert outcome.status_code == 200
     assert outcome.json()["status"] == "recorded"
     assert metrics.json()["requests"] == 0
-
-
-def test_mismatched_service_dependencies_are_rejected() -> None:
-    service_catalog = Catalog()
-    other_catalog = Catalog()
-    service_metrics = ExperimentMetrics()
-    other_metrics = ExperimentMetrics()
-    service = RecommendationService(
-        service_catalog,
-        service_metrics,
-        model=ScriptedModel([]),
-    )
-    try:
-        with pytest.raises(ValueError, match="service_catalog_mismatch"):
-            create_app(catalog=other_catalog, service=service)
-        with pytest.raises(ValueError, match="service_metrics_mismatch"):
-            create_app(metrics=other_metrics, service=service)
-    finally:
-        service_catalog.close()
-        other_catalog.close()

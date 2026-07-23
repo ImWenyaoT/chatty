@@ -8,6 +8,8 @@ from chatty.models import MarketingStrategy, Product, UserProfile, UserSegment
 
 
 class CommerceRepository:
+    """把 SQLite 行转换成业务模型，不承载推荐决策。"""
+
     def __init__(self, database: Database) -> None:
         self.database = database
 

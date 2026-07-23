@@ -21,7 +21,6 @@ def catalog() -> Catalog:
 
 def test_demo_data_has_twenty_sale_products(catalog: Catalog) -> None:
     assert len(catalog.products) == 20
-    assert len(catalog.products_by_id) == 20
     assert all(product.price_cents > 0 and product.stock >= 0 for product in catalog.products)
     assert len(catalog.profiles) == 5
     assert len(catalog.templates) == 5
@@ -81,7 +80,9 @@ def test_inventory_and_final_output_are_canonical(catalog: Catalog) -> None:
         ]
     )
     result = catalog.finalize(draft, request, profile, "treatment_personalized")
-    assert result[0].price_cents == catalog.products_by_id["P003"].price_cents
+    assert result[0].price_cents == next(
+        product.price_cents for product in catalog.products if product.product_id == "P003"
+    )
     assert result[0].stock == 1000
     assert "100%" not in result[0].marketing_copy
     assert "最好" not in result[0].marketing_copy
@@ -101,6 +102,52 @@ def test_unknown_recommended_product_is_rejected(catalog: Catalog) -> None:
         ]
     )
     with pytest.raises(CatalogError, match="unknown_recommended_product"):
+        catalog.finalize(draft, request, profile, "control")
+
+
+def test_finalize_reads_current_inventory(tmp_path) -> None:
+    catalog = Catalog(database_path=tmp_path / "chatty.db")
+    request = RecommendationRequest(user_id="user_active", num_items=1)
+    profile = catalog.user_profile(request.user_id, request.context)
+    draft = RecommendationDraft(
+        recommendations=[
+            RecommendationDraftItem(
+                product_id="P003",
+                reason="降噪耳机",
+                marketing_copy="适合通勤",
+            )
+        ]
+    )
+    try:
+        catalog.database.connection.execute(
+            "UPDATE products SET stock = 0 WHERE product_id = 'P003'"
+        )
+        catalog.database.connection.commit()
+
+        with pytest.raises(CatalogError, match="no_available_recommendations"):
+            catalog.finalize(draft, request, profile, "control")
+    finally:
+        catalog.close()
+
+
+def test_finalize_enforces_profile_price_range(catalog: Catalog) -> None:
+    request = RecommendationRequest(
+        user_id="user_active",
+        num_items=1,
+        context=UserContext(max_price_cents=100_000),
+    )
+    profile = catalog.user_profile(request.user_id, request.context)
+    draft = RecommendationDraft(
+        recommendations=[
+            RecommendationDraftItem(
+                product_id="P003",
+                reason="降噪耳机",
+                marketing_copy="适合通勤",
+            )
+        ]
+    )
+
+    with pytest.raises(CatalogError, match="no_available_recommendations"):
         catalog.finalize(draft, request, profile, "control")
 
 

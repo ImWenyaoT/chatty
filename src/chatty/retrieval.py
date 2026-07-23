@@ -14,6 +14,7 @@ class KnowledgeRetriever:
 
     @staticmethod
     def _match_expression(query: str) -> str:
+        # 限制词数并逐词加引号，避免把用户输入直接拼成 FTS5 语法。
         tokens = _TOKEN_PATTERN.findall(query.casefold())[:8]
         return " OR ".join(f'"{token}"' for token in tokens)
 
@@ -43,7 +44,7 @@ class KnowledgeRetriever:
             )
             parameters.extend(product_ids)
         filter_sql = f" AND {' AND '.join(filters)}" if filters else ""
-        parameters.append(max(1, min(limit, 8)))
+        parameters.append(limit)
 
         with self.database.lock:
             rows = self.database.connection.execute(
@@ -71,6 +72,7 @@ class KnowledgeRetriever:
                 category=row["category"],
                 product_id=row["product_id"],
                 source=row["source"],
+                # SQLite bm25 越小越相关；转换成便于接口展示的 0 到 1 分数。
                 relevance_score=round(1 / (1 + abs(row["rank"])), 4),
             )
             for row in rows

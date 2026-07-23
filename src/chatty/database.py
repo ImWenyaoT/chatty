@@ -70,6 +70,8 @@ CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_documents_fts USING fts5(
 
 
 class Database:
+    """初始化 SQLite；JSON/JSONL 种子不会进入运行时查询路径。"""
+
     def __init__(
         self,
         path: str | Path | None = None,
@@ -80,11 +82,11 @@ class Database:
         self.data_dir = Path(data_dir or config.DATA_DIR)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = RLock()
+        # 连接允许 FastAPI 线程池复用，所有访问仍由同一把锁串行保护。
         self._connection = sqlite3.connect(self.path, check_same_thread=False)
         self._connection.row_factory = sqlite3.Row
         try:
             with self._lock:
-                self._connection.execute("PRAGMA foreign_keys = ON")
                 self._connection.execute("PRAGMA journal_mode = WAL")
                 self._connection.executescript(SCHEMA)
                 seed_database(self._connection, self.data_dir)
