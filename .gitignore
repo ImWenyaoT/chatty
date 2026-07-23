@@ -23,10 +23,12 @@ htmlcov/
 !.env.example
 .remember/
 
-# 本地私有材料
+# 本地私有材料与历史产物
 docs/jd.md
 docs/*实习.pdf
 MISSION.md
 NOTES.md
 RESOURCES.md
 assets/
+backups/
+data/*.sqlite*

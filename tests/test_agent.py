@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import AsyncIterator, Sequence
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
@@ -16,10 +18,11 @@ from openai.types.responses import (
     ResponseOutputText,
 )
 
-from chatty.agent import RecommendationService, parse_recommendation_draft
+from chatty.agent import AGENT_INSTRUCTIONS, RecommendationService, parse_recommendation_draft
 from chatty.catalog import Catalog
 from chatty.experiments import ExperimentMetrics
 from chatty.models import RecommendationRequest
+from chatty.tools import TOOL_NAMES
 
 
 @dataclass(frozen=True)
@@ -38,6 +41,7 @@ class MessageStep:
 class ScriptedModel(Model):
     def __init__(self, script: Sequence[ToolStep | MessageStep]) -> None:
         self._script = iter(script)
+        self.calls: list[dict[str, Any]] = []
 
     async def get_response(
         self,
@@ -54,6 +58,13 @@ class ScriptedModel(Model):
         prompt: Any,
     ) -> ModelResponse:
         assert output_schema is None
+        self.calls.append(
+            {
+                "system_instructions": system_instructions,
+                "input": deepcopy(input),
+                "tool_names": [tool.name for tool in tools],
+            }
+        )
         try:
             step = next(self._script)
         except StopIteration:
@@ -151,20 +162,56 @@ def test_rejects_prose_without_json() -> None:
 
 
 @pytest.mark.asyncio
-async def test_single_agent_runs_all_five_tools_and_returns_canonical_product() -> None:
+async def test_single_agent_runs_all_five_tools_and_returns_canonical_product(
+    monkeypatch,
+    caplog,
+) -> None:
+    monkeypatch.setenv("CHATTY_AGENT_DEBUG", "1")
+    caplog.set_level(logging.INFO, logger="chatty.agent")
+    model = ScriptedModel(successful_script())
+    request = RecommendationRequest(
+        user_id="user_active",
+        num_items=1,
+        context={"preferred_categories": ["耳机"]},
+    )
     service = RecommendationService(
         Catalog(),
         ExperimentMetrics(),
-        model=ScriptedModel(successful_script()),
+        model=model,
         model_id="scripted-model",
     )
-    response = await service.recommend(
-        RecommendationRequest(
-            user_id="user_active",
-            num_items=1,
-            context={"preferred_categories": ["耳机"]},
-        )
-    )
+    response = await service.recommend(request)
     assert response.products[0].product_id == "P003"
     assert response.products[0].price_cents == 189900
     assert "100%" not in response.products[0].marketing_copy
+
+    assert all(call["system_instructions"] == AGENT_INSTRUCTIONS for call in model.calls)
+    assert all(call["tool_names"] == list(TOOL_NAMES) for call in model.calls)
+    assert model.calls[0]["input"][0]["content"] == request.model_dump_json()
+
+    events = [
+        json.loads(record.getMessage().removeprefix("agent_trace "))
+        for record in caplog.records
+        if record.getMessage().startswith("agent_trace ")
+    ]
+    assert [event["sequence"] for event in events] == list(range(1, len(events) + 1))
+    assert [event["event"] for event in events] == (
+        ["llm_input", "llm_output", "tool_call", "tool_result"] * 5
+        + ["llm_input", "llm_output", "agent_output", "response"]
+    )
+    for index, tool_name in enumerate(TOOL_NAMES):
+        _, _, tool_call, tool_result = events[index * 4 : index * 4 + 4]
+        assert tool_call["tool_name"] == tool_result["tool_name"] == tool_name
+        assert tool_call["call_id"] == tool_result["call_id"]
+        assert isinstance(tool_result["result"], dict | list)
+
+    for index, call in enumerate(model.calls[1:], start=1):
+        previous_call, previous_result = call["input"][-2:]
+        assert previous_call["type"] == "function_call"
+        assert previous_result["type"] == "function_call_output"
+        assert previous_call["call_id"] == previous_result["call_id"] == f"call-{index}"
+
+    llm_inputs = [event for event in events if event["event"] == "llm_input"]
+    assert llm_inputs[0]["request"] == request.model_dump(mode="json")
+    assert all(event["omitted_reasoning_items"] == 0 for event in llm_inputs)
+    assert events[-1]["output"]["products"][0]["marketing_copy"] == "***沉浸降噪，通勤更从容"

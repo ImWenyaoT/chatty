@@ -32,6 +32,8 @@ class CatalogError(RuntimeError):
 
 
 class Catalog:
+    """集中商品搜索与最终业务规则，避免 Agent 和 Tool 直接处理 SQL。"""
+
     def __init__(
         self,
         data_dir: str | Path | None = None,
@@ -43,10 +45,8 @@ class Catalog:
         self.repository = CommerceRepository(self.database)
         self.retriever = KnowledgeRetriever(self.database)
 
+        # 画像与排序维度使用启动投影；finalize 会重读价格和库存等响应真值。
         self.products = self.repository.list_products()
-        self.products_by_id = {product.product_id: product for product in self.products}
-        if len(self.products_by_id) != len(self.products):
-            raise CatalogError("duplicate_product_id")
         self.profiles = self.repository.profiles()
         self.forbidden_words = self.repository.forbidden_words()
         self.templates = self.repository.marketing_strategies(self.forbidden_words)
@@ -108,6 +108,7 @@ class Catalog:
         if not 1 <= limit <= 20:
             raise CatalogError("invalid_product_search_limit")
         tag_filter = {value.casefold() for value in tags if value.strip()}
+        # Tool 参数负责召回；画像价格范围仍会在 finalize 再次校验。
         candidates = [
             product
             for product in self.products
@@ -119,7 +120,7 @@ class Catalog:
             candidates,
             key=lambda product: self.score(product, profile, group),
             reverse=True,
-        )[: max(1, min(limit, 20))]
+        )[:limit]
 
     def score(
         self,
@@ -127,6 +128,7 @@ class Catalog:
         profile: UserProfile,
         group: ExperimentGroup,
     ) -> float:
+        # 对照组只用热度，实验组才加入画像与近期行为信号。
         if group == "control":
             return round(product.popularity_score, 4)
         preferred = {value.casefold() for value in profile.preferred_categories}
@@ -177,16 +179,24 @@ class Catalog:
         profile: UserProfile,
         group: ExperimentGroup,
     ) -> list[RecommendedProduct]:
+        # 最终响应重新读取 SQLite；模型输出和启动缓存都不能充当库存真值。
+        current_products = {
+            product.product_id: product for product in self.repository.list_products()
+        }
         recommendations: list[RecommendedProduct] = []
         seen: set[str] = set()
         for item in draft.recommendations:
             if item.product_id in seen:
                 continue
-            product = self.products_by_id.get(item.product_id)
+            product = current_products.get(item.product_id)
             if product is None:
                 raise CatalogError("unknown_recommended_product")
             seen.add(item.product_id)
-            if product.stock <= 0:
+            if (
+                product.stock <= 0
+                or product.price_cents < profile.min_price_cents
+                or product.price_cents > profile.max_price_cents
+            ):
                 continue
             recommendations.append(
                 RecommendedProduct(

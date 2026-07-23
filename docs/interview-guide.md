@@ -1,178 +1,228 @@
 # Chatty 面试指南
 
-本文档包含简历项目经验、STAR 话术、20 道面试题、常见追问和准备清单。
+这份指南只讲当前代码能够证明的内容。回答时先给结论，再按“机制、异常、验证、边界”
+展开；每一段都应能被单独提问和打断。
 
-## 一、简历项目经验（直接复制）
+## 30 秒项目介绍
 
-```text
-Chatty 单 Agent 电商推荐与营销系统 | 个人项目
+> Chatty 是一个单 Agent 电商推荐 Demo。我用 OpenAI Agents SDK 让模型依次调用
+> 用户画像、商品搜索、库存检查、知识检索和营销策略五个 Tool。业务事实和知识都
+> 存在 SQLite，其中 RAG 使用 FTS5 和 BM25。模型只生成商品 ID、推荐理由和文案，
+> Harness 再根据 Tool 证据和 SQLite 真值完成最终校验，通过 FastAPI 返回结果。
 
-• 基于 OpenAI Agents SDK 实现单 Agent 推荐流程，自主调用用户画像、
-  商品搜索、库存校验、知识检索和营销策略 5 个 Function Tool
-• 使用 SQLite 管理商品、用户画像和库存数据，基于 FTS5 + BM25
-  实现轻量 RAG，为推荐理由和营销文案提供知识依据
-• 使用 Pydantic 和应用层白名单校验模型输出，拒绝未知商品、
-  过滤缺货商品，并从可信目录重新填充价格和库存
-• 实现稳定 A/B 分桶、进程内指标与 FastAPI API，使用自动化测试
-  覆盖数据、Tool、Agent 和 HTTP 层
+## 一分钟项目介绍
 
-技术栈：Python · OpenAI Agents SDK · DeepSeek · FastAPI · SQLite FTS5
+> 这个项目重点解决的是：怎样让模型参与推荐决策，但不能编造商品、价格和库存。
+> Model 负责选择 Tool 和生成语义文本；Harness 负责 RunContext、Tool 执行、轮次限制、
+> 证据校验和错误映射。一次请求严格执行五个 Tool，知识检索结果会回到 Agent 上下文；
+> 最终 Catalog 重新读取 SQLite，过滤缺货和越价商品，再回填价格、库存与标签。
+> 我用脚本模型确定性测试真实 Agents SDK Tool Loop，也把调试中发现的库存缓存、
+> Tool 顺序、分群错配和指标双计数问题固化成了回归测试。
+
+## 回答结构
+
+每道项目题都按下面五步回答：
+
+1. **直接回答**：先用一句话回答问题。
+2. **代码机制**：说明输入、状态、Tool、输出和失败点。
+3. **真实异常**：讲一个实际复现过的问题。
+4. **验证证据**：指出测试、日志或数据库查询证明了什么。
+5. **能力边界**：明确当前实现没有证明什么。
+
+## 核心问题
+
+### 1. `Agent = Model + Harness` 在 Chatty 中怎么体现？
+
+**直接回答：** Model 处理不确定的语义决策，Harness 控制确定性的业务边界。
+
+**代码机制：**
+
+- Model 根据 instruction、请求和 Tool Result 决定下一步调用。
+- OpenAI Agents SDK 的 `Runner.run` 执行 Tool Loop。
+- Harness 保存 RunContext、限制最多 10 轮、验证五个 Tool 和证据集合。
+- Catalog 根据 SQLite 真值生成最终 `RecommendationResponse`。
+
+**边界：** Prompt 是软约束；库存、价格和商品范围必须由代码验证。
+
+### 2. OpenAI Agents SDK 在项目里承担什么？
+
+**直接回答：** SDK 提供 Agent、Function Tool、Runner 和 RunContext 的运行机制。
+
+**代码机制：** `Agent` 注册 instruction、model 和五个 Tool；`Runner.run` 将请求和
+`RecommendationContext` 注入一次运行；Tool Call Result 按 `call_id` 回填，模型再继续
+下一轮，直到产生最终输出或达到轮次上限。
+
+**边界：** SDK 负责循环和协议，业务完成条件仍由 Chatty 的 Harness 定义。
+
+### 3. 为什么五项能力是 Tool？
+
+**直接回答：** 它们是确定性查询能力，不负责自主规划下一步。
+
+用户画像、商品搜索、库存、知识检索和营销策略都接受明确参数并返回结构化结果。
+Agent 决定何时调用；Tool 只执行受限的业务读取或 FTS5 检索。
+
+### 4. RunContext 有什么作用？
+
+**直接回答：** 它把一次运行中的业务状态和验证证据集中到一个对象里。
+
+RunContext 保存请求、实验组、画像、召回商品、库存商品、知识范围和 Tool 调用顺序。
+五个 Tool 逐步写入，Harness 在模型输出后读取，因此不需要从自然语言历史反推业务状态。
+
+### 5. Chatty 的 RAG 流程是什么？
+
+**直接回答：** `retrieve_knowledge` 执行检索，Top-K 文档作为 Tool Result 回到 Agent，
+并参与后续生成。
+
+```mermaid
+flowchart LR
+    INPUT["query + category + product_ids"] --> MATCH["SQLite FTS5 MATCH"]
+    MATCH --> RANK["BM25 排序"]
+    RANK --> TOPK["Top-K KnowledgeHit"]
+    TOPK --> RESULT["tool result 回填"]
+    RESULT --> COPY["模型生成理由与文案"]
 ```
 
-## 二、STAR 法面试话术
+Harness 要求检索结果非空，并要求推荐商品位于这次有命中的检索请求范围内。
 
-### 完整版（3 分钟）
+**边界：** 当前是关键词 RAG，不包含 embedding、rerank 或逐商品 citation。
 
-**S：背景**
+### 6. 为什么业务数据和知识都放 SQLite？
 
-> 我想做一个能放进简历的 AI Agent 项目。电商推荐适合展示 Tool Calling，因为结果依赖用户、商品、库存和知识数据。
+商品、库存、用户画像和营销规则适合关系表；演示知识由 SQLite FTS5 检索。JSON/JSONL
+只作为可读种子，启动时通过指纹和事务导入。Catalog 从 SQLite 建立演示数据投影；
+库存检查、知识检索和最终商品回填在请求路径查询 SQLite。
 
-**T：任务**
+### 7. 如何防止模型编造价格和库存？
 
-> 我的目标是用一个 Agent 完成完整推荐流程，同时避免为了展示技术而引入多个 Agent、Redis、向量数据库和前端。
+模型草稿只允许包含 `product_id`、`reason` 和 `marketing_copy`。Catalog 在最终响应前
+重新读取 SQLite，拒绝未知商品，过滤缺货和超出用户价格范围的商品，并回填名称、价格、
+库存和标签。模型没有这些字段的最终决定权。
 
-**A：行动**
+### 8. Pydantic 和 Harness 分别校验什么？
 
-> 我使用 OpenAI Agents SDK 构建一个 Agent，并提供五个 Tool。业务数据存入 SQLite，知识检索使用 FTS5 和 BM25。DeepSeek 负责生成理由与文案，应用层使用 Pydantic 和 Catalog 校验商品 ID、库存、数量和禁词。推荐策略使用 SHA-256 稳定分桶，对比热度排序和个性化排序。
+Pydantic 校验结构：字段类型、长度、数值范围和未知字段。Harness 校验语义：Tool 是否
+严格依序完成、是否有知识结果、商品是否经过召回与库存检查，以及最终业务字段是否来自
+SQLite。两者解决的问题不同。
 
-**R：结果**
+### 9. Prompt 已经要求五步，为什么还要代码校验？
 
-> 项目可以通过 FastAPI 调用，也通过了自动化测试和真实 DeepSeek 冒烟。最终返回的商品、价格和库存都来自 SQLite，模型不能直接编造业务字段。
+模型 instruction 会提高正确调用概率，但不能构成完成证明。实际调试中，Tool 全部调用但
+顺序错误、营销分群传错，Runner 都可能正常结束。Harness 因此检查真实调用顺序和画像
+分群，而不是相信最终文本说“已经完成”。
 
-### 精简版（1 分钟）
+### 10. 如何测试概率性的 Agent？
 
-> Chatty 是一个单 Agent 电商推荐 Demo。Agent 依次调用用户画像、商品搜索、库存、RAG 和营销策略五个 Tool，再让 DeepSeek 生成理由和文案。SQLite 保存业务数据和 FTS5 知识，Pydantic 与应用层白名单负责最终校验。
+`ScriptedModel` 固定产生五个 Tool Call 和最终消息，但仍通过真实 Agents SDK Runner
+执行 Tool、回填 Result 和推进历史。它能稳定验证 Harness 合约和失败路径。
 
-## 三、面试题 20 题
+**边界：** 确定性测试不等于真实模型成功率；当前项目没有足够数据给出模型优劣结论。
 
-### Agent 基础（Q1 至 Q5）
+### 11. 如何调试 Tool Calling 问题？
 
-**Q1：什么是 AI Agent？**
+先按生命周期定位：
 
-Agent 不只完成一次模型生成。它能根据当前状态选择 Tool、读取 Observation，并继续执行，直到完成目标。
+1. Model 是否产生 Tool Call
+2. 参数是否通过 Schema
+3. Tool 是否执行成功
+4. Result 是否用正确 `call_id` 回填
+5. 后续模型输入是否包含 Result
+6. 最终输出是否通过 Harness
 
-**Q2：Chatty 为什么使用单 Agent？**
+本地可观察轨迹按 `llm_input → llm_output → tool_call → tool_result →
+agent_output → response/failure` 记录。它不记录模型隐藏思维过程。
 
-当前只有一个推荐目标和五个紧密相关的 Tool。它们共享用户、候选商品和库存上下文。
+```mermaid
+sequenceDiagram
+    participant M as Model
+    participant R as Runner
+    participant S as Tool schema
+    participant T as Function tool
+    participant H as Harness
+    M->>R: tool call
+    R->>S: 校验参数
+    S->>T: 执行
+    T-->>R: tool result
+    R-->>M: 追加 function_call_output 并关联原 call_id
+    M-->>R: final output
+    R->>H: 校验状态与证据
+```
 
-**Q3：Tool 和 Agent 有什么区别？**
+### 12. A/B 测试怎么工作？
 
-Agent 由模型驱动，负责决策下一步动作。Tool 是确定性能力，例如查询 SQLite 或执行全文检索。
+系统对 `user_id + experiment_id` 计算 SHA-256，并稳定分为 `control` 和
+`treatment_personalized`。对照组按热度排序，实验组组合类目、价格、近期行为和热度。
+指标保存在当前进程。
 
-**Q4：什么时候应该升级为 Multi-Agent？**
+### 13. 错误如何映射到 HTTP？
 
-当子任务需要独立上下文、独立权限、不同模型，或可以带来明确并行收益时再拆分。
+- 请求结构错误：FastAPI/Pydantic 返回 422。
+- 缺少模型密钥：返回 503 和 `llm_not_configured`。
+- 流程证据不足：返回 502，并保留稳定失败码。
+- 模型草稿结构或 Catalog 最终校验失败：返回 502 和 `invalid_recommendation`。
+- 未分类的模型、Tool 或 Runner 异常：返回 502 和 `recommendation_failed`。
 
-**Q5：Chatty 是 ReAct 吗？**
+失败会进入指标和日志，不会静默生成默认推荐。
 
-它具有 Action 和 Observation 循环。项目不保存或展示模型的隐藏推理文本。
+### 14. 这个项目是否上线？
 
-### 架构与数据（Q6 至 Q10）
+这是可运行、可测试的本地 API Demo。它证明了 Agent Loop、Tool Calling、SQLite、
+FTS5 RAG、业务校验和 FastAPI 接口；没有生产流量，因此不声称真实 CTR、QPS 或可用性。
 
-**Q6：为什么选择 SQLite？**
+### 15. 如果数据量和流量扩大，先改哪里？
 
-Demo 数据量小，SQLite 同时支持关系表、事务和 FTS5，也不需要额外服务。
+先根据测量结果定位瓶颈：SQLite 写并发、检索召回、模型延迟或指标持久化。当前模块已经
+把结构化查询、检索、Agent Loop 和 HTTP 分开，可以在对应 seam 替换实现；在出现真实
+瓶颈前不预先增加基础设施。
 
-**Q7：JSONL 和 SQLite 分别做什么？**
+## 四个真实调试故事
 
-JSON 和 JSONL 是可读的演示种子。运行时业务查询统一读取 SQLite。
+### 故事一：最终组装可能返回旧库存
 
-**Q8：种子数据怎么保证完整？**
-
-程序计算种子文件的 SHA-256 指纹，并检查关键表数量。不匹配时在一个事务中重新导入。
-
-**Q9：为什么使用 Repository？**
-
-Repository 隔离 SQL 和领域模型。Agent 与 Catalog 不需要了解表结构。
-
-**Q10：为什么没有 Session 和 Memory？**
-
-推荐接口是一次性结构化请求，不是聊天产品，因此不保存对话历史。
-
-### RAG 与推荐（Q11 至 Q15）
-
-**Q11：Chatty 的 RAG 怎么实现？**
-
-知识写入 SQLite FTS5。Tool 执行全文检索和 BM25 排序，把 Top-K 文档返回 Agent。
-
-**Q12：FTS5 RAG 和向量 RAG 有什么区别？**
-
-FTS5 依赖关键词匹配。向量 RAG 擅长语义近义匹配，但需要 embedding 和向量索引。
-
-**Q13：推荐排序怎么做？**
-
-对照组按热度排序。个性化组组合类目偏好、价格范围、近期行为和热度。
-
-**Q14：怎么处理新用户？**
-
-未知用户使用默认画像，再结合请求中的类目和价格偏好。没有偏好时按热度排序。
-
-**Q15：库存和推荐怎么协同？**
-
-Agent 调用库存 Tool，最终 Catalog 还会再次读取库存并过滤缺货商品。
-
-### 工程化（Q16 至 Q20）
-
-**Q16：怎么防止模型幻觉？**
-
-模型只返回商品 ID、理由和文案。应用层拒绝未知 ID，并从 SQLite 填充价格和库存。
-
-**Q17：为什么不用 SDK 的结构化 `output_type`？**
-
-SDK 会把它转换为 `json_schema response_format`，DeepSeek V4 Pro 当前不接受该参数。Chatty 接收 JSON 文本，再由 Pydantic 校验。
-
-**Q18：怎么测试 Agent？**
-
-脚本模型固定产生五次 Tool 调用和最终消息，从而稳定验证完整流程。
-
-**Q19：错误怎么返回？**
-
-缺少 API Key 返回 503。模型或输出失败返回 502。请求校验失败返回 422。
-
-**Q20：A/B 测试怎么保证分组稳定？**
-
-系统对 `user_id + experiment_id` 计算 SHA-256，再按奇偶分成两个 50% 组。
-
-## 四、常见追问
-
-### “这个项目上线了吗？”
-
-> 这是本地 API Demo，没有声称生产上线。它真实实现并测试了 Agent Loop、SQLite、FTS5 RAG、库存校验和 FastAPI。
-
-### “为什么不用 LangGraph？”
-
-> 当前流程由一个 Agent 和五个 Tool 完成，没有状态图、并行分支或人工审批需求。
-
-### “Token 成本怎么控制？”
-
-> Tool 只返回候选商品和 Top-K 知识，不发送完整数据库。搜索、检索和 Agent 轮次都有上限。
-
-### “并发量能到多少？”
-
-> 项目没有压力测试，所以不提供 QPS 或 P99。生产化前需要压测、连接池、限流和缓存。
-
-### “为什么不让模型直接查询数据库？”
-
-> 固定 Tool 能限制查询范围和参数，也避免模型生成任意 SQL。
-
-## 五、代码讲解要点
-
-1. `src/chatty/agent.py`：Agent、Runner、DeepSeek 兼容和输出解析
-2. `src/chatty/tools.py`：五个 Tool 与共享 RunContext
-3. `src/chatty/catalog.py`：排序、库存过滤和可信字段回填
-4. `src/chatty/retrieval.py`：FTS5 与 BM25
-
-完整顺序见 [代码讲解指南](code-walkthrough.md)。
-
-## 六、面试前准备清单
-
-- [ ] 能画出一个 Agent 与五个 Tool
-- [ ] 能解释为什么当前项目不需要 Multi-Agent
-- [ ] 能说明 JSONL、SQLite 和 FTS5 的分工
-- [ ] 能解释一次完整 RAG 流程
-- [ ] 能说明模型输出后的业务校验
-- [ ] 能解释 DeepSeek 的 `response_format` 兼容问题
-- [ ] 能解释稳定实验分桶
-- [ ] 能运行测试并调用推荐接口
-- [ ] 不声称未经测量的 CTR、QPS 或 P99
-- [ ] 能用 1 分钟介绍项目
+- **症状**：Catalog 启动后 SQLite 库存发生变化，最终组装仍可能返回启动缓存中的库存。
+- **根因**：Catalog finalize 使用了旧商品对象。
+- **修复**：最终组装前重新读取 SQLite。
+- **验证**：测试将数据库库存更新为 0，再直接断言 finalize 失败。
+- **理解**：启动缓存不是提交响应时的业务真值。
+
+### 故事二：模型绕过用户价格范围
+
+- **症状**：请求最高价为 1000 元，模型仍可用更大的搜索参数召回 1899 元商品。
+- **根因**：最终校验只相信 Tool 的搜索结果，没有重查画像价格范围。
+- **修复**：Catalog finalize 同时校验 `profile.min/max_price_cents`。
+- **验证**：越价草稿必须得到 `no_available_recommendations`。
+
+### 故事三：Tool 都调用了，但顺序和分群错误
+
+- **症状**：先搜索再加载画像，或 active 用户读取 new_user 营销策略，仍能成功。
+- **根因**：Harness 只检查 Tool 名称集合。
+- **修复**：记录调用顺序，并要求营销策略 segment 与当前画像一致。
+- **验证**：两条错误轨迹均进入失败路径。
+
+### 故事四：一次失败同时计入成功和失败
+
+- **症状**：推荐内容生成后，响应构造异常；指标先记成功，异常处理又记失败。
+- **根因**：成功指标写入早于 canonical response 构造。
+- **修复**：响应构造成功后才记录 success。
+- **验证**：注入响应构造异常，断言 successes 为 0、failures 为 1。
+
+## 代码走读顺序
+
+1. `models.py`：Pydantic 请求、草稿和响应契约
+2. `database.py`、`seed.py`：SQLite schema 与事务初始化
+3. `repositories.py`、`retrieval.py`：结构化查询与 FTS5/BM25
+4. `catalog.py`：搜索、排序和最终业务校验
+5. `tools.py`：五个 Function Tool 与 RunContext
+6. `agent.py`：Agent、Runner 和 Harness 验证
+7. `app.py`：FastAPI 接口与错误映射
+8. `tests/`：确定性 Tool Loop 和真实失败回归
+
+## 面试前检查
+
+- [ ] 能在 30 秒内讲清用户问题和项目路径
+- [ ] 能解释 Model、Harness、Tool 的职责
+- [ ] 能画出完整 RAG 数据流
+- [ ] 能说明 Pydantic 与业务校验的区别
+- [ ] 能从 Tool Calling 生命周期定位失败
+- [ ] 能讲至少两个真实 bug 的症状、根因和回归测试
+- [ ] 能指出确定性测试和真实模型评测的不同证明范围
+- [ ] 能诚实说明本地 Demo 的能力边界

@@ -60,6 +60,8 @@ def _is_current(
 
 
 def seed_database(connection: sqlite3.Connection, data_dir: Path) -> None:
+    """把可读种子事务性投影到运行时唯一数据源 SQLite。"""
+
     products = _model_lines(data_dir / "products.jsonl", Product)
     profiles = _model_lines(data_dir / "user_profiles.jsonl", UserProfile)
     knowledge = _model_lines(
@@ -89,6 +91,7 @@ def seed_database(connection: sqlite3.Connection, data_dir: Path) -> None:
     if _is_current(connection, fingerprint, expected_counts):
         return
 
+    # 单个事务内重建投影。任何一步失败都会回滚，避免半初始化数据库。
     with connection:
         for table in (
             "knowledge_documents_fts",

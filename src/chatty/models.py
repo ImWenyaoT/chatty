@@ -16,6 +16,8 @@ ExperimentGroup = Literal["control", "treatment_personalized"]
 
 
 class StrictModel(BaseModel):
+    """拒绝未知字段，避免请求或模型输出中的拼写错误被静默忽略。"""
+
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 

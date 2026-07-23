@@ -20,6 +20,8 @@ class GroupStats:
 
 @dataclass
 class ExperimentMetrics:
+    """保存稳定实验分桶与当前进程的演示指标。"""
+
     experiment_id: str = "ranking_strategy"
     _groups: dict[ExperimentGroup, GroupStats] = field(
         default_factory=lambda: {
@@ -30,6 +32,7 @@ class ExperimentMetrics:
     _lock: Lock = field(default_factory=Lock)
 
     def assign(self, user_id: str) -> ExperimentGroup:
+        # 相同 user_id 与 experiment_id 始终得到相同分组。
         digest = hashlib.sha256(f"{user_id}:{self.experiment_id}".encode()).digest()
         return "control" if int.from_bytes(digest[:8]) % 2 == 0 else "treatment_personalized"
 

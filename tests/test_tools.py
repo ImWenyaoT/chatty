@@ -47,9 +47,7 @@ async def test_tools_use_run_context_and_catalog() -> None:
     assert products
     assert {product["category"] for product in products} == {"耳机"}
 
-    inventory = json.loads(
-        await invoke("check_inventory", {"product_ids": ["P003", "P015"]})
-    )
+    inventory = json.loads(await invoke("check_inventory", {"product_ids": ["P003", "P015"]}))
     assert [item["product_id"] for item in inventory] == ["P003"]
 
     knowledge = json.loads(
@@ -76,11 +74,16 @@ async def test_tools_use_run_context_and_catalog() -> None:
         },
     )
 
-    strategy = json.loads(
-        await invoke("get_marketing_strategy", {"segment": profile["segment"]})
-    )
+    strategy = json.loads(await invoke("get_marketing_strategy", {"segment": profile["segment"]}))
     assert strategy["segment"] == "active"
-    assert context.used_tools == set(TOOL_NAMES)
+    assert context.used_tools == [
+        "get_user_profile",
+        "search_products",
+        "check_inventory",
+        "retrieve_knowledge",
+        "retrieve_knowledge",
+        "get_marketing_strategy",
+    ]
     assert context.recalled_product_ids >= {"P003", "P004"}
     assert context.in_stock_product_ids == {"P003"}
     assert context.knowledge_product_ids == {"P003", "P004", "P007"}
