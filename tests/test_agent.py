@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from collections.abc import AsyncIterator, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
@@ -164,10 +163,9 @@ def test_rejects_prose_without_json() -> None:
 @pytest.mark.asyncio
 async def test_single_agent_runs_all_five_tools_and_returns_canonical_product(
     monkeypatch,
-    caplog,
+    capsys,
 ) -> None:
     monkeypatch.setenv("CHATTY_AGENT_DEBUG", "1")
-    caplog.set_level(logging.INFO, logger="chatty.agent")
     model = ScriptedModel(successful_script())
     request = RecommendationRequest(
         user_id="user_active",
@@ -190,9 +188,9 @@ async def test_single_agent_runs_all_five_tools_and_returns_canonical_product(
     assert model.calls[0]["input"][0]["content"] == request.model_dump_json()
 
     events = [
-        json.loads(record.getMessage().removeprefix("agent_trace "))
-        for record in caplog.records
-        if record.getMessage().startswith("agent_trace ")
+        json.loads(line.removeprefix("agent_trace "))
+        for line in capsys.readouterr().err.splitlines()
+        if line.startswith("agent_trace ")
     ]
     assert [event["sequence"] for event in events] == list(range(1, len(events) + 1))
     assert [event["event"] for event in events] == (

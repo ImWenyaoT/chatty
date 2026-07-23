@@ -43,12 +43,21 @@ def test_agent_debug_is_explicitly_enabled(monkeypatch) -> None:
     assert config.agent_debug_enabled() is False
 
 
-def test_debug_hooks_enable_agent_trace_logger() -> None:
+def test_debug_hooks_emit_without_external_logging_setup(capsys) -> None:
     logger = logging.getLogger("chatty.agent")
     previous_level = logger.level
+    previous_handlers = logger.handlers[:]
+    previous_propagate = logger.propagate
     try:
+        logger.handlers.clear()
         logger.setLevel(logging.NOTSET)
-        AgentDebugHooks("scripted-model")
-        assert logger.isEnabledFor(logging.INFO)
+        hooks = AgentDebugHooks("scripted-model")
+        hooks.record_failure("test_failure")
+
+        assert '"event": "failure"' in capsys.readouterr().err
     finally:
+        for handler in logger.handlers:
+            handler.close()
+        logger.handlers[:] = previous_handlers
         logger.setLevel(previous_level)
+        logger.propagate = previous_propagate

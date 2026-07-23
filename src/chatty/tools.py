@@ -73,7 +73,7 @@ def build_tools() -> list[Tool]:
             limit=limit,
         )
         # 保存搜索结果的 ID，而不是之后从模型文本反推“是否召回”。
-        context.recalled_product_ids.update(product.product_id for product in products)
+        context.recalled_product_ids = {product.product_id for product in products}
         context.used_tools.append("search_products")
         return json.dumps(
             [product.model_dump(mode="json") for product in products],
@@ -88,7 +88,7 @@ def build_tools() -> list[Tool]:
         context = ctx.context
         products = context.catalog.inventory(product_ids)
         # 这里只记录 SQLite 确认有货的商品，供最终输出做集合校验。
-        context.in_stock_product_ids.update(product.product_id for product in products)
+        context.in_stock_product_ids = {product.product_id for product in products}
         context.used_tools.append("check_inventory")
         return json.dumps(
             [
@@ -117,11 +117,9 @@ def build_tools() -> list[Tool]:
             product_ids=product_ids,
             limit=limit,
         )
-        known_doc_ids = {hit.doc_id for hit in context.knowledge}
-        context.knowledge.extend(hit for hit in hits if hit.doc_id not in known_doc_ids)
-        if hits:
-            # 有检索结果时，记录本次请求覆盖的商品范围。最终推荐必须落在该范围内。
-            context.knowledge_product_ids.update(product_ids)
+        context.knowledge = hits
+        # 这是有命中结果的检索请求范围，不代表每个商品都有独立 citation。
+        context.knowledge_product_ids = set(product_ids) if hits else set()
         context.used_tools.append("retrieve_knowledge")
         return json.dumps(
             [hit.model_dump(mode="json") for hit in hits],
