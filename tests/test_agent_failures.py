@@ -87,6 +87,20 @@ async def test_empty_rag_evidence_is_rejected() -> None:
             ToolStep("call-3", "check_inventory", {"product_ids": ["P004"]}),
             "inventory_not_checked",
         ),
+        (
+            3,
+            ToolStep(
+                "call-4",
+                "retrieve_knowledge",
+                {
+                    "query": "降噪 耳机",
+                    "categories": ["耳机"],
+                    "product_ids": ["P004"],
+                    "limit": 3,
+                },
+            ),
+            "product_not_grounded",
+        ),
     ],
 )
 async def test_recommendation_requires_product_evidence(

@@ -1,183 +1,364 @@
-# 🛒 Chatty — 单 Agent 电商推荐与营销系统
+# 🛒 Chatty 单 Agent 电商推荐与营销系统
 
-> **面向学习与求职的 AI Agent 项目** — 用一个 Agent、SQLite 和轻量 RAG 完成个性化商品推荐与营销文案。
+> **面向小白的 AI Agent 求职项目**：用一个 Agent 完成用户画像、商品推荐、库存校验、知识检索和营销文案生成。
 
-Python 3.12 + OpenAI Agents SDK + DeepSeek V4 Pro + FastAPI + SQLite FTS5，20 个演示商品，5 个 function tool。
-
----
+[![Python](https://img.shields.io/badge/Python-3.12%2B-blue?logo=python)](pyproject.toml)
+[![OpenAI Agents SDK](https://img.shields.io/badge/OpenAI_Agents_SDK-0.18.3-black)](https://openai.github.io/openai-agents-python/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.139.2-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 ## 📖 目录
 
 1. [这个项目是什么？](#-这个项目是什么)
-2. [系统架构](#-系统架构)
-3. [五大核心 Tool 详解](#-五大核心-tool-详解)
+2. [系统架构（看图秒懂）](#-系统架构看图秒懂)
+3. [四大核心能力详解](#-四大核心能力详解)
 4. [技术栈](#-技术栈)
-5. [轻量 RAG 怎么工作](#-轻量-rag-怎么工作)
+5. [关键代码展示](#-关键代码展示)
 6. [快速上手运行](#-快速上手运行)
 7. [API 接口文档](#-api-接口文档)
 8. [项目文件结构](#-项目文件结构)
-9. [面试八股文精选](#-面试八股文精选)
-10. [简历写法](#-简历写法)
-11. [边界与非目标](#-边界与非目标)
-
----
+9. [配套文档](#-配套文档)
+10. [面试八股文精选](#-面试八股文精选)
+11. [简历写法（直接复制）](#-简历写法直接复制)
 
 ## 🤔 这个项目是什么？
 
 ### 用一句话解释
 
-> 让一个 AI Agent 查询用户和商品数据、检查库存、检索商品知识，再生成有依据的个性化推荐理由与营销文案。
+> Chatty 让一个 AI Agent 查询用户和商品数据、过滤缺货商品、检索商品知识，再生成个性化推荐理由与营销文案。
 
 ### 它解决了什么问题？
 
 | 痛点 | 常见做法 | Chatty 的做法 |
 |---|---|---|
-| 推荐结果与用户偏好脱节 | 所有人看到相同榜单 | 根据类目、价格和近期行为调整排序 |
-| 推荐到缺货商品 | 模型直接根据商品文本回答 | 返回前校验 SQLite 库存，缺货商品直接过滤 |
-| 推荐理由缺少依据 | 让模型凭常识自由发挥 | 用 FTS5 检索商品指南和场景知识 |
-| 营销文案千篇一律 | 所有用户使用同一套话术 | 5 类用户画像对应 5 种营销语气 |
-| Demo 架构过重 | 引入多个 Agent 和外部数据库 | 单 Agent + 5 个 Tool + 单文件 SQLite |
+| 推荐结果和库存脱节 | 模型直接推荐商品 | 返回前重新查询库存，自动剔除缺货商品 |
+| 推荐理由缺少依据 | 模型根据常识自由生成 | 通过 SQLite FTS5 检索商品知识 |
+| 营销文案千篇一律 | 所有用户使用同一段文案 | 按 5 类用户画像选择营销语气 |
+| Demo 架构过重 | 多个 Agent 加多个外部服务 | 一个 Agent、五个 Tool、一个 SQLite 文件 |
 
-### 技术关键词
+### 技术关键词（面试常考）
 
-`Single Agent` · `Function Calling` · `Structured Output` · `RAG` · `SQLite FTS5` · `FastAPI` · `A/B Testing` · `DeepSeek`
+`Single Agent` · `Tool Calling` · `OpenAI Agents SDK` · `RAG` · `SQLite FTS5` · `Pydantic` · `FastAPI` · `A/B Testing`
 
----
+## 🏗 系统架构（看图秒懂）
 
-## 🏗 系统架构
+```mermaid
+flowchart TD
+    A["POST /api/v1/recommend<br/>user_id · scene · num_items · context"] --> B["Chatty Agent<br/>OpenAI Agents SDK + DeepSeek"]
 
-### 整体架构图
+    B --> T1[get_user_profile<br/>读取用户画像]
+    B --> T2[search_products<br/>搜索候选商品]
+    B --> T3[check_inventory<br/>检查可信库存]
+    B --> T4[retrieve_knowledge<br/>检索商品知识]
+    B --> T5[get_marketing_strategy<br/>选择营销语气]
 
-```
-POST /api/v1/recommend
-          │
-          ▼
-Chatty 单 Agent（OpenAI Agents SDK）
-          │
-          ├── get_user_profile       ─┐
-          ├── search_products         │ SQLite 业务数据
-          ├── check_inventory        ─┘
-          ├── retrieve_knowledge     ── SQLite FTS5 知识检索
-          └── get_marketing_strategy ── SQLite 营销规则
-          │
-          ▼
-结构化推荐草稿
-          │
-          ▼
-应用层校验：商品存在 · 库存大于 0 · 数量限制 · 禁词替换
-          │
-          ▼
-商品 + 推荐理由 + 营销文案
+    T1 --> C[Agent 生成结构化推荐草稿]
+    T2 --> C
+    T3 --> C
+    T4 --> C
+    T5 --> C
+
+    C --> D["应用层安全校验<br/>Pydantic · 商品白名单 · 库存复查 · 禁词替换"]
+    D --> E[商品 + 推荐理由 + 营销文案]
 ```
 
-### 为什么用单 Agent？
+Chatty 不拆分子 Agent。一个 Agent 使用 5 个 Tool 完成用户画像、商品推荐、营销文案和库存决策四大核心能力。其中商品推荐包含商品搜索和知识检索两个 Tool。
 
-这个 Demo 只有一个目标：完成一次商品推荐。画像、商品、库存、知识和营销策略共享同一个请求上下文，没有必要在多个 Agent 之间传递状态。
+## 🔧 四大核心能力详解
 
-| | 单 Agent | Multi-Agent |
-|---|---|---|
-| 上下文 | 一处维护 | 需要在 Agent 间同步 |
-| 调试 | 一条 Runner 流程 | 需要定位编排与子 Agent |
-| 适用场景 | 工具少、目标集中 | 领域隔离或并行收益明显 |
-| 本项目 | ✅ 采用 | ❌ 不采用 |
+### 能力 1：用户画像
 
----
-
-## 🔧 五大核心 Tool 详解
-
-### Tool 1：用户画像
+**文件**：[`src/chatty/tools.py`](src/chatty/tools.py)、[`src/chatty/catalog.py`](src/chatty/catalog.py)
 
 **它做什么？**
 
-从 SQLite 读取演示用户画像，并使用当前请求中的浏览、购买、类目和价格偏好覆盖默认值。
+读取用户的演示画像，再合并当前请求中的浏览、购买、类目和价格偏好，供后续推荐使用。
 
-### Tool 2：商品搜索
+**核心逻辑（简化）**：
+
+```python
+# Step 1：从 SQLite 读取演示用户画像
+base_profile = catalog.profiles.get(user_id)
+# 返回: {"segment": "price_sensitive", "preferred_categories": ["耳机", "配件"]}
+
+# Step 2：合并本次请求携带的实时偏好
+profile = catalog.user_profile(
+    request.user_id,
+    request.context,
+)
+# 请求中的类目、价格、浏览和购买记录会覆盖默认画像
+
+# Step 3：保存到 Agent Run Context，供后续 Tool 复用
+context.profile = profile
+# 输出: 经过 Pydantic 校验的 UserProfile
+```
+
+**关键技术**：
+
+- SQLite `user_profiles` 表保存五类演示用户
+- 请求 Context 覆盖默认画像，不修改原始数据
+- Pydantic `UserProfile` 校验画像结构
+
+### 能力 2：商品推荐
+
+**文件**：[`src/chatty/tools.py`](src/chatty/tools.py)、[`src/chatty/catalog.py`](src/chatty/catalog.py)、[`src/chatty/retrieval.py`](src/chatty/retrieval.py)
 
 **它做什么？**
 
-从 20 个 SQLite 商品中按类目、价格和标签搜索候选商品。A/B 分组决定热度优先还是个性化优先。
+先按类目、价格和标签搜索候选商品，再检索相关商品知识。Agent 根据用户画像、候选商品和知识证据选择最终商品。
 
-### Tool 3：库存校验
+**推荐流程**：
+
+```mermaid
+flowchart LR
+    A[用户画像<br/>推荐场景]
+
+    subgraph Recall[候选召回]
+        direction TB
+        B[search_products] --> C{A/B 排序}
+        C -->|control| D[热度优先]
+        C -->|treatment| E[个性化优先]
+        D --> F[候选商品]
+        E --> F
+    end
+
+    subgraph RAG[知识检索]
+        direction TB
+        G[retrieve_knowledge] --> H[FTS5 + BM25]
+        H --> I[知识依据]
+    end
+
+    subgraph Rank[生成结果]
+        direction TB
+        J[DeepSeek 综合精排] --> K[TopN 推荐草稿]
+    end
+
+    A --> B
+    F --> G
+    F --> J
+    I --> J
+```
+
+**关键技术**：
+
+- `search_products` Tool 完成候选商品搜索
+- `retrieve_knowledge` Tool 使用 SQLite FTS5 + BM25 完成轻量 RAG
+- A/B 分组对比热度优先与个性化优先排序
+
+### 能力 3：营销文案
+
+**文件**：[`src/chatty/agent.py`](src/chatty/agent.py)、[`src/chatty/tools.py`](src/chatty/tools.py)、[`data/marketing_templates.json`](data/marketing_templates.json)
 
 **它做什么？**
 
-重新查询 SQLite 库存，过滤缺货商品，并标记库存不超过 100 件的低库存商品。
+根据用户分群选择营销语气，再由 DeepSeek 为每个推荐商品生成推荐理由和个性化文案。
 
-### Tool 4：知识检索
+**核心逻辑（简化）**：
+
+```python
+# 5 套营销策略 × 5 类用户分群
+STRATEGIES = {
+    "new_user": "热情友好，突出易上手和选择成本低",
+    "active": "自然有活力，结合浏览偏好和使用场景",
+    "high_value": "克制有品质感，强调性能和长期价值",
+    "price_sensitive": "直接务实，突出售价与性价比",
+    "churn_risk": "温和召回，强调与既有兴趣的关联",
+}
+
+# Step 1：Tool 根据画像选择策略
+strategy = catalog.marketing_strategy(profile.segment)
+
+# Step 2：DeepSeek 生成推荐理由与营销文案
+draft = parse_recommendation_draft(result.final_output)
+
+# Step 3：广告法禁词过滤
+FORBIDDEN_WORDS = ["最好", "第一", "最便宜", "绝对", "100%"]
+safe_copy = catalog.sanitize(draft.recommendations[0].marketing_copy)
+# 命中的禁词会替换为 ***，不允许模型原样输出
+```
+
+**关键技术**：
+
+- 五类用户分群对应五套营销语气
+- DeepSeek V4 Pro 通过 Chat Completions 生成文本
+- Pydantic 校验 JSON，禁词表过滤广告绝对化用语
+
+### 能力 4：库存决策
+
+**文件**：[`src/chatty/tools.py`](src/chatty/tools.py)、[`src/chatty/repositories.py`](src/chatty/repositories.py)、[`src/chatty/catalog.py`](src/chatty/catalog.py)
 
 **它做什么？**
 
-使用 SQLite FTS5 检索商品选购指南、使用场景和营销知识。检索结果会作为 Tool 输出回到 Agent 上下文，支持推荐理由和营销文案生成。
+查询候选商品库存，过滤缺货商品，并标记库存不超过 100 件的低库存商品。
 
-### Tool 5：营销策略
+**核心逻辑（简化）**：
 
-**它做什么？**
+```python
+# 输入: Agent 选出的商品 ID ["P001", "P002", "P003"]
+# 查询 SQLite 中的可信库存，不采用模型生成的库存数字
+products = catalog.inventory(product_ids)
 
-根据新用户、活跃用户、高价值用户、价格敏感用户和流失风险用户五种分群，返回文案语气、写作要求和禁词。
+# 输出 1: 缺货商品不会进入最终推荐
+available = [product for product in products if product.stock > 0]
 
----
+# 输出 2: 库存不超过 100 件时添加低库存标记
+low_stock = [
+    product.product_id
+    for product in available
+    if product.stock <= 100
+]
+
+# 最终防线: Catalog.finalize() 再次校验商品存在性和库存
+# 同时从 SQLite 回填商品名称、价格、库存和标签
+```
+
+**关键技术**：
+
+- `check_inventory` Tool 从 SQLite 读取可信库存
+- Agent 生成后由 Catalog 再次过滤缺货商品
+- 最终价格、库存和标签统一从商品目录回填
 
 ## 🌐 技术栈
 
-**框架**：OpenAI Agents SDK<br>
-**LLM**：DeepSeek V4 Pro（通过 OpenAI-compatible Chat Completions API 调用）<br>
-**存储**：SQLite（业务数据）+ SQLite FTS5（轻量 RAG 知识检索）<br>
-**Web**：FastAPI<br>
-**工程工具**：uv、ruff、ty、pytest
+| 模块 | 技术 |
+|---|---|
+| Agent 框架 | OpenAI Agents SDK |
+| 大模型 | DeepSeek V4 Pro，通过 OpenAI-compatible Chat Completions API 调用 |
+| 数据校验 | Pydantic |
+| 业务数据 | SQLite |
+| 轻量 RAG | SQLite FTS5 + BM25 |
+| Web API | FastAPI + Uvicorn |
+| 工程工具 | uv + Ruff + ty + pytest |
 
-| 技术 | 锁定版本 | 用途 |
-|---|---:|---|
-| Python | 3.12+ | 唯一运行语言 |
-| OpenAI Agents SDK | 0.18.3 | Agent Loop 与 Tool Calling |
-| OpenAI Python SDK | 2.46.0 | 调用 OpenAI-compatible Chat Completions API |
-| DeepSeek V4 Pro | `deepseek-v4-pro` | 推荐理由和营销文案生成 |
-| FastAPI | 0.139.2 | HTTP 接口与 OpenAPI 文档 |
-| Pydantic | 2.13.4 | 请求、数据、Tool 参数和结构化 Agent 输出校验 |
-| python-dotenv | 1.2.2 | 从仓库根目录加载本地 `.env` 配置 |
-| Uvicorn | 0.51.0 | ASGI 服务启动 |
-| SQLite / FTS5 | Python 标准库 | 业务数据与知识全文检索 |
-| httpx2 | 2.7.0 | FastAPI/Starlette API 测试客户端 |
-| pytest / pytest-asyncio | 9.1.1 / 1.4.0 | 自动化测试 |
-| ruff / ty | 0.15.22 / 0.0.62 | Lint、格式化和类型检查 |
-| uv | 锁文件驱动 | 依赖与虚拟环境管理 |
+项目只使用 Python，不包含 Java、Go、LangChain、LangGraph 或前端。
 
-DeepSeek V4 Pro 不使用 Agents SDK 的 `json_schema response_format`；模型通过普通
-Chat Completions 返回 JSON 文本，应用层提取后再由 Pydantic 严格校验。
+## 💻 关键代码展示
 
-项目不依赖 LangChain、LangGraph、Redis、Milvus、MySQL 或浏览器前端。
+### 单 Agent 工具编排（核心代码）
+
+**文件**：[`src/chatty/agent.py`](src/chatty/agent.py)
+
+```python
+async def recommend(self, request: RecommendationRequest) -> RecommendationResponse:
+    started = time.perf_counter()
+
+    # ① 请求开始时完成 A/B 分组
+    group = self.metrics.assign(request.user_id)
+
+    # ② Run Context 保存请求、商品目录、实验组和 Tool 中间结果
+    context = RecommendationContext(
+        request=request, catalog=self.catalog, experiment_group=group
+    )
+
+    # ③ 一个 Agent 挂载五个 Tool，不创建子 Agent 或 Handoff
+    agent = Agent[RecommendationContext](
+        name="Chatty",
+        instructions=AGENT_INSTRUCTIONS,
+        model=self._ensure_model(),
+        tools=build_tools(),
+    )
+
+    # ④ Agents SDK 负责 Tool Calling 循环，最多运行 10 轮
+    result = await Runner.run(
+        agent, request.model_dump_json(), context=context, max_turns=10
+    )
+
+    # ⑤ 五个 Tool 必须全部调用，关键上下文不能缺失
+    if set(TOOL_NAMES) != context.used_tools:
+        raise RecommendationFailure("required_tools_not_used")
+    if not context.knowledge:
+        raise RecommendationFailure("knowledge_not_retrieved")
+    if context.profile is None:
+        raise RecommendationFailure("profile_not_loaded")
+
+    # ⑥ 最终商品必须经过召回、库存检查和知识检索
+    draft = parse_recommendation_draft(result.final_output)
+    recommended_ids = {item.product_id for item in draft.recommendations}
+    if not recommended_ids <= context.recalled_product_ids:
+        raise RecommendationFailure("product_not_recalled")
+    if not recommended_ids <= context.in_stock_product_ids:
+        raise RecommendationFailure("inventory_not_checked")
+    if not recommended_ids <= context.knowledge_product_ids:
+        raise RecommendationFailure("product_not_grounded")
+
+    # ⑦ 再用 SQLite 可信数据生成最终响应
+    products = self.catalog.finalize(draft, request, context.profile, group)
+```
+
+> 💡 **小白解读**：Agent 像一个导购员，五个 Tool 是它能调用的业务能力。Run Context 相当于同一次推荐任务的工作台，避免画像、候选商品和知识证据散落在多个 Agent 之间。
 
 ---
 
-## 🔎 轻量 RAG 怎么工作
+### A/B 测试引擎（稳定分桶）
 
+**文件**：[`src/chatty/experiments.py`](src/chatty/experiments.py)
+
+```python
+@dataclass
+class ExperimentMetrics:
+    experiment_id: str = "ranking_strategy"
+
+    def assign(self, user_id: str) -> ExperimentGroup:
+        # 用户 ID + 实验 ID 做 SHA-256，避免 Python hash 随进程变化
+        key = f"{user_id}:{self.experiment_id}".encode()
+        digest = hashlib.sha256(key).digest()
+
+        # 奇偶分桶为两个 50% 组，同一用户始终进入同一组
+        bucket = int.from_bytes(digest[:8]) % 2
+        return "control" if bucket == 0 else "treatment_personalized"
+
+    def record_outcome(self, user_id: str, success: bool) -> ExperimentGroup:
+        # 服务端重新分组，不信任客户端提交的实验组
+        group = self.assign(user_id)
+        with self._lock:
+            stats = self._groups[group]
+            if success:
+                stats.positive_outcomes += 1
+            else:
+                stats.negative_outcomes += 1
+        return group
 ```
-用户场景与候选商品
-        │
-        ▼
-retrieve_knowledge Tool
-        │
-        ▼
-SQLite FTS5 MATCH + BM25 排序
-        │
-        ▼
-Top-K 商品指南与营销知识
-        │
-        ▼
-注入 Agent 当前运行上下文
-        │
-        ▼
-生成推荐理由与营销文案
-```
 
-这是一个真实可运行的检索增强生成流程，但不是向量 RAG：
+- **control**：按商品热度排序
+- **treatment_personalized**：综合类目、价格和近期行为排序
+- **线程安全**：使用 `Lock` 保护进程内指标写入
 
-- 知识文档进入 `knowledge_documents` 和 `knowledge_documents_fts`。
-- 查询通过 FTS5 `MATCH` 执行，结果使用 BM25 排序。
-- Tool 返回标题、正文、商品 ID、来源和相关度。
-- Agent 必须调用知识检索 Tool，最终业务字段仍由应用层校验。
-- 当前数据量很小，因此不引入 embedding 模型和向量数据库。
+> 💡 **小白解读**：稳定分桶就像按用户身份证号固定分班。用户重复访问时不会一会儿进对照组、一会儿进实验组，因此两种排序策略才具有可比性。
 
 ---
+
+### 结构化校验 + 业务护栏（可靠性保障）
+
+**文件**：[`src/chatty/agent.py`](src/chatty/agent.py)、[`src/chatty/catalog.py`](src/chatty/catalog.py)、[`src/chatty/app.py`](src/chatty/app.py)
+
+```python
+# ① DeepSeek 返回文本或 Markdown JSON 时，先提取再交给 Pydantic
+draft = parse_recommendation_draft(result.final_output)
+
+# ② Catalog.finalize() 是最终业务防线
+for item in draft.recommendations:
+    product = products_by_id.get(item.product_id)
+    if product is None:
+        raise CatalogError("unknown_recommended_product")  # 拒绝虚构商品
+    if product.stock <= 0:
+        continue                                           # 过滤缺货商品
+
+    recommendations.append(
+        RecommendedProduct(
+            product_id=product.product_id,
+            price_cents=product.price_cents,               # 价格来自 SQLite
+            stock=product.stock,                           # 库存来自 SQLite
+            reason=sanitize(item.reason),                  # 替换广告禁词
+            marketing_copy=sanitize(item.marketing_copy),
+        )
+    )
+
+# ③ 不静默吞错：缺少模型配置返回 503，其余 Agent 失败返回 502
+status_code = 503 if error.code == "llm_not_configured" else 502
+raise HTTPException(status_code=status_code, detail=error.code)
+```
+
+> 💡 **小白解读**：模型只负责提出“推荐哪个商品、为什么推荐、怎么写文案”。商品是否存在、价格多少、有没有库存由应用层重新确认。失败时返回明确错误，而不是伪造一份看似成功的默认推荐。
 
 ## 🚀 快速上手运行
 
@@ -185,147 +366,112 @@ Top-K 商品指南与营销知识
 
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/)
-- 一个 OpenAI-compatible API Key
+- DeepSeek API Key
 
-### 三步运行
+### 启动服务
 
 ```bash
+git clone https://github.com/ImWenyaoT/chatty.git
+cd chatty
 cp .env.example .env
 # 编辑 .env，填写 OPENAI_API_KEY
-uv sync
+uv sync --locked
 uv run python main.py
 ```
 
-首次启动会自动创建 `.local/chatty.db`，并从 `data/` 导入演示业务数据和知识文档。数据库文件不会提交到 Git。
+首次启动会从 `data/` 导入演示数据，并创建 `.local/chatty.db`。
 
-打开 <http://127.0.0.1:8000/docs> 查看接口文档。
-
-### 质量检查
+### 调用推荐接口
 
 ```bash
-uv run ruff check .
-uv run ty check
-uv run pytest -q
+curl -X POST http://127.0.0.1:8000/api/v1/recommend \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "user_active",
+    "scene": "homepage",
+    "num_items": 3,
+    "context": {
+      "recent_views": ["手机", "降噪"],
+      "preferred_categories": ["手机", "耳机"]
+    }
+  }'
 ```
 
----
+打开 [FastAPI 接口文档](http://127.0.0.1:8000/docs) 查看请求和响应模型。
 
 ## 📡 API 接口文档
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| `GET` | `/health` | 服务状态、模型、商品数和知识数 |
+| `GET` | `/health` | 查看服务状态、模型和数据量 |
 | `POST` | `/api/v1/recommend` | 生成个性化商品推荐 |
-| `GET` | `/api/v1/experiments` | 查看分组和实验统计 |
+| `GET` | `/api/v1/experiments` | 查看实验分组与统计 |
 | `POST` | `/api/v1/experiments/ranking_strategy/outcomes` | 记录实验结果 |
 | `GET` | `/api/v1/metrics` | 查看进程内指标 |
 
-### 推荐请求示例
-
-```json
-{
-  "user_id": "user_active",
-  "scene": "homepage",
-  "num_items": 3,
-  "context": {
-    "recent_views": ["手机", "降噪"],
-    "preferred_categories": ["手机", "耳机"],
-    "min_price_cents": 50000,
-    "max_price_cents": 800000
-  }
-}
-```
-
-指标与实验结果只保存在当前进程内，服务重启后会清空；商品和知识数据保存在本地 SQLite 中。
-
----
-
 ## 📁 项目文件结构
 
-```
+```text
 chatty/
-├── data/
-│   ├── products.jsonl              # 20 个商品种子
-│   ├── user_profiles.jsonl         # 5 类演示用户
-│   ├── marketing_templates.json    # 5 类营销语气
-│   ├── forbidden_words.json        # 演示广告禁词
-│   └── knowledge_documents.jsonl   # RAG 知识种子
+├── data/                         # 商品、用户、营销和知识种子
+├── docs/                         # 架构、代码、面试和简历文档
 ├── src/chatty/
-│   ├── agent.py                    # 单 Agent + Runner
-│   ├── tools.py                    # 5 个 function tool
-│   ├── database.py                 # SQLite schema 与连接
-│   ├── seed.py                     # JSON/JSONL 数据初始化
-│   ├── repositories.py             # 业务数据查询
-│   ├── retrieval.py                # FTS5 检索与 BM25 排序
-│   ├── catalog.py                  # 排序、检索入口与出站校验
-│   ├── experiments.py              # 稳定分桶与内存指标
-│   ├── models.py                   # Pydantic 数据模型
-│   ├── app.py                      # FastAPI
-│   └── config.py                   # 环境配置
+│   ├── agent.py                  # Agent + Runner
+│   ├── tools.py                  # 五个 Function Tool
+│   ├── catalog.py                # 搜索、排序和结果校验
+│   ├── database.py               # SQLite schema 与连接
+│   ├── retrieval.py              # FTS5 + BM25 检索
+│   ├── experiments.py            # 稳定分桶与指标
+│   ├── models.py                 # Pydantic 模型
+│   └── app.py                    # FastAPI 路由
 ├── tests/
 ├── main.py
 └── pyproject.toml
 ```
 
----
+## 📚 配套文档
+
+| 文档 | 内容 |
+|---|---|
+| [系统架构](docs/architecture.md) | Agent Loop、数据流、RAG 和业务校验 |
+| [代码讲解](docs/code-walkthrough.md) | 按文件读懂核心实现 |
+| [项目方案](docs/project-plan.md) | 技术选型、功能范围和实施结果 |
+| [面试指南](docs/interview-guide.md) | STAR 话术、八股文和追问 |
+| [简历模板](docs/resume-template.md) | 初级与后端岗位写法 |
+| [性能测量](docs/benchmark.md) | QPS、延迟、样本成功率和测量边界 |
 
 ## ❓ 面试八股文精选
 
-### Q1：为什么用单 Agent，而不是 Multi-Agent？
+### Q1：为什么用单 Agent？
 
-当前任务只有一次推荐目标和五个紧密相关的 Tool。拆成多个 Agent 会增加上下文传递、编排和失败处理成本，却没有产生新的领域边界。
+当前流程只有一个目标和五个紧密相关的 Tool。单 Agent 能共享上下文，也避免额外的编排与状态同步。
 
-### Q2：这个项目的 RAG 是怎么实现的？
+### Q2：RAG 怎么实现？
 
-知识文档初始化到 SQLite FTS5。Agent 调用 `retrieve_knowledge`，后端执行全文检索和 BM25 排序，再把 Top-K 文档作为 Tool 输出返回模型，用于生成有依据的推荐理由和营销文案。
+知识文档写入 SQLite FTS5。Agent 调用 `retrieve_knowledge` 后，系统执行全文检索和 BM25 排序，再把 Top-K 文档返回模型。
 
-### Q3：为什么不用向量数据库？
+### Q3：怎么防止模型幻觉？
 
-当前只有 12 条演示知识，FTS5 已经能完成检索增强流程，而且没有外部服务。它不擅长语义近义匹配；数据量和需求增长后，可以将检索器替换为 embedding + 向量索引，而不改变 Agent Tool 契约。
+模型只提交商品 ID 和生成文本。价格、库存和标签由应用层从 SQLite 重新读取。
 
-### Q4：怎么防止模型推荐不存在的商品？
+更多问题见 [面试指南](docs/interview-guide.md)。
 
-模型只提交商品 ID、理由和文案。应用层拒绝未知商品、过滤缺货商品，并从可信商品目录填充价格、库存和标签。
-
-### Q5：Agent 输出不确定，怎么测试？
-
-测试使用脚本模型确定性地产生五次 Tool 调用和最终结构化输出，同时使用临时 SQLite 数据库验证建表、种子导入、FTS5 召回和 API 错误映射。
-
----
-
-## 📋 简历写法
+## 📋 简历写法（直接复制）
 
 > **Chatty｜单 Agent 电商推荐与营销系统**
 > Python / OpenAI Agents SDK / DeepSeek V4 Pro / FastAPI / SQLite FTS5
 >
-> - 基于 OpenAI Agents SDK 实现单 Agent 推荐流程，自主调用用户画像、商品搜索、库存校验、知识检索和营销策略 5 个 function tool。
-> - 使用 SQLite 管理 20 个商品、5 类用户画像与库存数据，并基于 FTS5 + BM25 实现轻量 RAG，为推荐理由和营销文案提供知识依据。
-> - 设计模型输出后的业务校验，拒绝未知商品、过滤缺货商品，并从可信目录填充价格和库存，减少模型业务幻觉。
-> - 实现 SHA-256 稳定 A/B 分桶、进程内指标统计与 FastAPI 推荐接口，使用脚本模型完成确定性 Agent 测试。
+> - 基于 OpenAI Agents SDK 实现单 Agent 推荐流程，自主调用用户画像、商品搜索、库存校验、知识检索和营销策略 5 个 Tool
+> - 使用 SQLite 管理 20 个商品、5 类用户画像与库存数据，基于 FTS5 + BM25 实现轻量 RAG
+> - 使用 Pydantic 和应用层白名单校验模型输出，拒绝未知商品并过滤缺货商品
+> - 实现 SHA-256 稳定实验分桶、进程内指标与 FastAPI 推荐接口，使用 30 个测试覆盖核心流程
 
----
+这是本地 API Demo。数据和指标均为演示用途，不代表真实业务收益。
 
-## 🚧 边界与非目标
-
-这是本地 API Demo，明确不提供：
-
-- Multi-Agent runtime、Supervisor 或 Agent handoff
-- Java、Go、LangChain 或 LangGraph 实现
-- Redis、Milvus、MySQL、embedding 或向量检索
-- 真实协同过滤和模型训练
-- 浏览器前端、用户登录或多租户
-- 订单、支付、仓储和履约
-- 持久化实验指标和生产监控
-- 已测量的 P99、点击率提升或业务收益
-
-商品价格、库存、用户行为和知识文档均为演示数据。FTS5 RAG 适合展示完整流程，不代表生产级语义检索效果。
-
----
-
-## 🔗 参考资料
+## 🔗 参考资料与致谢
 
 - [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/)
-- [multi-agent-ecommerce-system](https://github.com/bcefghj/multi-agent-ecommerce-system) — 业务场景与 README 结构参考
+- [multi-agent-ecommerce-system](https://github.com/bcefghj/multi-agent-ecommerce-system)：业务场景和文档结构参考
 
 ## 📄 License
 

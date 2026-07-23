@@ -151,6 +151,8 @@ class RecommendationService:
                 raise RecommendationFailure("product_not_recalled")
             if not recommended_ids <= context.in_stock_product_ids:
                 raise RecommendationFailure("inventory_not_checked")
+            if not recommended_ids <= context.knowledge_product_ids:
+                raise RecommendationFailure("product_not_grounded")
             products = self.catalog.finalize(
                 draft,
                 request,
