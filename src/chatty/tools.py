@@ -38,95 +38,14 @@ class RecommendationContext:
     knowledge_product_ids: set[str] = field(default_factory=set)
     used_tools: set[str] = field(default_factory=set)
 
-
-def profile_payload(context: RecommendationContext) -> str:
-    profile = context.catalog.user_profile(context.request.user_id, context.request.context)
-    context.profile = profile
-    context.used_tools.add("get_user_profile")
-    return profile.model_dump_json()
-
-
-def product_search_payload(
-    context: RecommendationContext,
-    *,
-    categories: list[str],
-    min_price_cents: int,
-    max_price_cents: int,
-    tags: list[str],
-    limit: int,
-) -> str:
-    profile = context.profile or context.catalog.user_profile(
-        context.request.user_id, context.request.context
-    )
-    products = context.catalog.search(
-        profile=profile,
-        group=context.experiment_group,
-        categories=categories,
-        min_price_cents=min_price_cents,
-        max_price_cents=max_price_cents,
-        tags=tags,
-        limit=limit,
-    )
-    context.recalled_product_ids.update(product.product_id for product in products)
-    context.used_tools.add("search_products")
-    return json.dumps(
-        [product.model_dump(mode="json") for product in products],
-        ensure_ascii=False,
-    )
-
-
-def inventory_payload(context: RecommendationContext, product_ids: list[str]) -> str:
-    products = context.catalog.inventory(product_ids)
-    context.in_stock_product_ids.update(product.product_id for product in products)
-    context.used_tools.add("check_inventory")
-    return json.dumps(
-        [
-            {
-                "product_id": product.product_id,
-                "stock": product.stock,
-                "low_stock": product.stock <= 100,
-            }
-            for product in products
-        ],
-        ensure_ascii=False,
-    )
-
-
-def knowledge_payload(
-    context: RecommendationContext,
-    *,
-    query: str,
-    categories: list[str],
-    product_ids: list[str],
-    limit: int,
-) -> str:
-    hits = context.catalog.retrieve_knowledge(
-        query,
-        categories=categories,
-        product_ids=product_ids,
-        limit=limit,
-    )
-    known_doc_ids = {hit.doc_id for hit in context.knowledge}
-    context.knowledge.extend(hit for hit in hits if hit.doc_id not in known_doc_ids)
-    if hits:
-        context.knowledge_product_ids.update(product_ids)
-    context.used_tools.add("retrieve_knowledge")
-    return json.dumps(
-        [hit.model_dump(mode="json") for hit in hits],
-        ensure_ascii=False,
-    )
-
-
-def marketing_payload(context: RecommendationContext, segment: UserSegment) -> str:
-    strategy = context.catalog.marketing_strategy(segment)
-    context.used_tools.add("get_marketing_strategy")
-    return strategy.model_dump_json()
-
-
 def build_tools() -> list[Tool]:
     async def get_user_profile(ctx: RunContextWrapper[RecommendationContext]) -> str:
         """Load the demo profile and apply request context overrides."""
-        return profile_payload(ctx.context)
+        context = ctx.context
+        profile = context.catalog.user_profile(context.request.user_id, context.request.context)
+        context.profile = profile
+        context.used_tools.add("get_user_profile")
+        return profile.model_dump_json()
 
     async def search_products(
         ctx: RunContextWrapper[RecommendationContext],
@@ -137,13 +56,24 @@ def build_tools() -> list[Tool]:
         limit: Annotated[int, Field(ge=1, le=20)],
     ) -> str:
         """Search products stored in SQLite by category, price and tags."""
-        return product_search_payload(
-            ctx.context,
+        context = ctx.context
+        profile = context.profile or context.catalog.user_profile(
+            context.request.user_id, context.request.context
+        )
+        products = context.catalog.search(
+            profile=profile,
+            group=context.experiment_group,
             categories=categories,
             min_price_cents=min_price_cents,
             max_price_cents=max_price_cents,
             tags=tags,
             limit=limit,
+        )
+        context.recalled_product_ids.update(product.product_id for product in products)
+        context.used_tools.add("search_products")
+        return json.dumps(
+            [product.model_dump(mode="json") for product in products],
+            ensure_ascii=False,
         )
 
     async def check_inventory(
@@ -151,7 +81,21 @@ def build_tools() -> list[Tool]:
         product_ids: list[str],
     ) -> str:
         """Return in-stock products and low-stock flags from SQLite."""
-        return inventory_payload(ctx.context, product_ids)
+        context = ctx.context
+        products = context.catalog.inventory(product_ids)
+        context.in_stock_product_ids.update(product.product_id for product in products)
+        context.used_tools.add("check_inventory")
+        return json.dumps(
+            [
+                {
+                    "product_id": product.product_id,
+                    "stock": product.stock,
+                    "low_stock": product.stock <= 100,
+                }
+                for product in products
+            ],
+            ensure_ascii=False,
+        )
 
     async def retrieve_knowledge(
         ctx: RunContextWrapper[RecommendationContext],
@@ -161,12 +105,21 @@ def build_tools() -> list[Tool]:
         limit: Annotated[int, Field(ge=1, le=8)],
     ) -> str:
         """Retrieve grounded product and marketing guidance from SQLite FTS5."""
-        return knowledge_payload(
-            ctx.context,
-            query=query,
+        context = ctx.context
+        hits = context.catalog.retrieve_knowledge(
+            query,
             categories=categories,
             product_ids=product_ids,
             limit=limit,
+        )
+        known_doc_ids = {hit.doc_id for hit in context.knowledge}
+        context.knowledge.extend(hit for hit in hits if hit.doc_id not in known_doc_ids)
+        if hits:
+            context.knowledge_product_ids.update(product_ids)
+        context.used_tools.add("retrieve_knowledge")
+        return json.dumps(
+            [hit.model_dump(mode="json") for hit in hits],
+            ensure_ascii=False,
         )
 
     async def get_marketing_strategy(
@@ -174,7 +127,10 @@ def build_tools() -> list[Tool]:
         segment: UserSegment,
     ) -> str:
         """Return the copy tone, instructions and forbidden words for a segment."""
-        return marketing_payload(ctx.context, segment)
+        context = ctx.context
+        strategy = context.catalog.marketing_strategy(segment)
+        context.used_tools.add("get_marketing_strategy")
+        return strategy.model_dump_json()
 
     return [
         function_tool(
