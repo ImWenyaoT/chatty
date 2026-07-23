@@ -17,7 +17,7 @@ from openai.types.responses import (
     ResponseOutputText,
 )
 
-from chatty.agent import AGENT_INSTRUCTIONS, RecommendationService, parse_recommendation_draft
+from chatty.agent import AGENT_INSTRUCTIONS, Recommender, parse_recommendation_draft
 from chatty.catalog import Catalog
 from chatty.experiments import ExperimentMetrics
 from chatty.models import RecommendationRequest
@@ -172,7 +172,7 @@ async def test_single_agent_runs_all_five_tools_and_returns_canonical_product(
         num_items=1,
         context={"preferred_categories": ["耳机"]},
     )
-    service = RecommendationService(
+    service = Recommender(
         Catalog(),
         ExperimentMetrics(),
         model=model,

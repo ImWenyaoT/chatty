@@ -88,7 +88,7 @@ Tool 的业务调用、证据记录和 JSON 序列化集中在同一个实现中
 
 ## 8. `agent.py`：Agent Loop
 
-`RecommendationService` 创建一个 Agent，并通过 `Runner.run` 执行最多 10 轮。
+`Recommender` 创建一个 Agent，并通过 `Runner.run` 执行最多 10 轮。
 
 ```python
 # Agent 声明 instructions、model 和可用 tools。
@@ -135,7 +135,7 @@ flowchart LR
 
 ## 11. `app.py`：HTTP API
 
-应用提供推荐、健康检查、实验结果和指标接口。`RecommendationFailure` 在 HTTP 层映射为 502 或 503。
+应用提供推荐、健康检查、实验结果和指标接口。`RecommendationError` 在 HTTP 层映射为 502 或 503。
 
 ## 12. 测试设计
 

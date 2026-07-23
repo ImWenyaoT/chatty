@@ -3,7 +3,7 @@ from __future__ import annotations
 from starlette.testclient import TestClient
 
 from chatty import config
-from chatty.agent import RecommendationService
+from chatty.agent import Recommender
 from chatty.app import create_app
 from chatty.catalog import Catalog
 from chatty.experiments import ExperimentMetrics
@@ -22,13 +22,13 @@ def test_health_does_not_require_model_key() -> None:
 def test_recommendation_api_and_openapi() -> None:
     catalog = Catalog()
     metrics = ExperimentMetrics()
-    service = RecommendationService(
+    service = Recommender(
         catalog,
         metrics,
         model=ScriptedModel(successful_script()),
         model_id="scripted-model",
     )
-    app = create_app(service=service)
+    app = create_app(recommender=service)
     with TestClient(app) as client:
         response = client.post(
             "/api/v1/recommend",
@@ -59,7 +59,7 @@ def test_missing_model_key_maps_to_503(monkeypatch) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     catalog = Catalog()
     metrics = ExperimentMetrics()
-    app = create_app(service=RecommendationService(catalog, metrics))
+    app = create_app(recommender=Recommender(catalog, metrics))
     with TestClient(app) as client:
         response = client.post(
             "/api/v1/recommend",
@@ -73,7 +73,7 @@ def test_experiment_outcome_and_metrics_endpoints() -> None:
     with TestClient(create_app()) as client:
         experiment = client.get("/api/v1/experiments")
         outcome = client.post(
-            "/api/v1/experiments/ranking_strategy/outcomes",
+            "/api/v1/outcomes",
             json={"user_id": "user_active", "success": True},
         )
         metrics = client.get("/api/v1/metrics")

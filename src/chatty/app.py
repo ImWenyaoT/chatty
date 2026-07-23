@@ -6,11 +6,11 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException
 
-from chatty.agent import RecommendationFailure, RecommendationService
+from chatty.agent import RecommendationError, Recommender
 from chatty.catalog import Catalog
 from chatty.experiments import ExperimentMetrics
 from chatty.models import (
-    ExperimentOutcomeRequest,
+    OutcomeRequest,
     RecommendationRequest,
     RecommendationResponse,
 )
@@ -18,14 +18,14 @@ from chatty.models import (
 
 def create_app(
     *,
-    service: RecommendationService | None = None,
+    recommender: Recommender | None = None,
 ) -> FastAPI:
-    resolved_service = service or RecommendationService(Catalog(), ExperimentMetrics())
+    recommender = recommender or Recommender(Catalog(), ExperimentMetrics())
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         yield
-        await resolved_service.close()
+        await recommender.close()
 
     app = FastAPI(
         title="Chatty Single-Agent E-Commerce Recommendation",
@@ -38,31 +38,31 @@ def create_app(
     async def health() -> dict[str, str | int]:
         return {
             "status": "healthy",
-            "model": resolved_service.model_id,
-            "product_count": len(resolved_service.catalog.products),
-            "knowledge_count": resolved_service.catalog.knowledge_count,
+            "model": recommender.model_id,
+            "product_count": len(recommender.catalog.products),
+            "knowledge_count": recommender.catalog.knowledge_count,
         }
 
     @app.post("/api/v1/recommend", response_model=RecommendationResponse)
     async def recommend(request: RecommendationRequest) -> RecommendationResponse:
         try:
-            return await resolved_service.recommend(request)
-        except RecommendationFailure as error:
+            return await recommender.recommend(request)
+        except RecommendationError as error:
             status_code = 503 if error.code == "llm_not_configured" else 502
             raise HTTPException(status_code=status_code, detail=error.code) from error
 
     @app.get("/api/v1/experiments")
-    async def experiments() -> dict[str, Any]:
-        return resolved_service.metrics.experiment_snapshot()
+    async def experiment_stats() -> dict[str, Any]:
+        return recommender.metrics.experiment_snapshot()
 
-    @app.post("/api/v1/experiments/ranking_strategy/outcomes")
-    async def record_outcome(payload: ExperimentOutcomeRequest) -> dict[str, str]:
-        group = resolved_service.metrics.record_outcome(payload.user_id, payload.success)
+    @app.post("/api/v1/outcomes")
+    async def record_outcome(payload: OutcomeRequest) -> dict[str, str]:
+        group = recommender.metrics.record_outcome(payload.user_id, payload.success)
         return {"status": "recorded", "experiment_group": group}
 
     @app.get("/api/v1/metrics")
-    async def metrics_snapshot() -> dict[str, Any]:
-        return resolved_service.metrics.metrics_snapshot()
+    async def metrics() -> dict[str, Any]:
+        return recommender.metrics.metrics_snapshot()
 
     return app
 

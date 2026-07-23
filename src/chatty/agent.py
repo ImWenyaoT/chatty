@@ -75,13 +75,13 @@ def parse_recommendation_draft(raw_output: object) -> RecommendationDraft:
     return RecommendationDraft.model_validate_json(raw_output)
 
 
-class RecommendationFailure(RuntimeError):
+class RecommendationError(RuntimeError):
     def __init__(self, code: str) -> None:
         super().__init__(code)
         self.code = code
 
 
-class RecommendationService:
+class Recommender:
     def __init__(
         self,
         catalog: Catalog,
@@ -108,7 +108,7 @@ class RecommendationService:
         config.load_root_env()
         api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
-            raise RecommendationFailure("llm_not_configured")
+            raise RecommendationError("llm_not_configured")
         base_url = os.environ.get("OPENAI_BASE_URL") or config.DEFAULT_BASE_URL
         self._model_id = os.environ.get("MODEL_ID") or config.DEFAULT_MODEL_ID
         self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
@@ -159,20 +159,20 @@ class RecommendationService:
             )
             # Model 决定如何调用 Tool；Harness 用可观察状态验证它是否真的完成了流程。
             if context.used_tools != list(TOOL_NAMES):
-                raise RecommendationFailure("required_tools_not_used")
+                raise RecommendationError("required_tools_not_used")
             if not context.knowledge:
-                raise RecommendationFailure("knowledge_not_retrieved")
+                raise RecommendationError("knowledge_not_retrieved")
             draft = parse_recommendation_draft(result.final_output)
             if context.profile is None:
-                raise RecommendationFailure("profile_not_loaded")
+                raise RecommendationError("profile_not_loaded")
             # 模型草稿只有文本建议权，商品范围必须由 Tool 留下的证据集合证明。
             recommended_ids = {item.product_id for item in draft.recommendations}
             if not recommended_ids <= context.recalled_product_ids:
-                raise RecommendationFailure("product_not_recalled")
+                raise RecommendationError("product_not_recalled")
             if not recommended_ids <= context.in_stock_product_ids:
-                raise RecommendationFailure("inventory_not_checked")
+                raise RecommendationError("inventory_not_checked")
             if not recommended_ids <= context.knowledge_product_ids:
-                raise RecommendationFailure("product_not_grounded")
+                raise RecommendationError("product_not_grounded")
             products = self.catalog.finalize(
                 draft,
                 request,
@@ -191,7 +191,7 @@ class RecommendationService:
             if debug_hooks is not None:
                 debug_hooks.record_response(response)
             return response
-        except RecommendationFailure as error:
+        except RecommendationError as error:
             elapsed_ms = (time.perf_counter() - started) * 1000
             self.metrics.record_request(group, success=False, latency_ms=elapsed_ms)
             if debug_hooks is not None:
@@ -204,11 +204,11 @@ class RecommendationService:
             if debug_hooks is not None:
                 debug_hooks.record_failure("invalid_recommendation")
             logger.warning("Invalid recommendation output", exc_info=True)
-            raise RecommendationFailure("invalid_recommendation") from error
+            raise RecommendationError("invalid_recommendation") from error
         except Exception as error:
             elapsed_ms = (time.perf_counter() - started) * 1000
             self.metrics.record_request(group, success=False, latency_ms=elapsed_ms)
             if debug_hooks is not None:
                 debug_hooks.record_failure("recommendation_failed")
             logger.exception("Unexpected recommendation failure")
-            raise RecommendationFailure("recommendation_failed") from error
+            raise RecommendationError("recommendation_failed") from error

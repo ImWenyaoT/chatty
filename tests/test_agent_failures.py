@@ -6,7 +6,7 @@ import pytest
 from starlette.testclient import TestClient
 
 import chatty.agent
-from chatty.agent import RecommendationFailure, RecommendationService
+from chatty.agent import RecommendationError, Recommender
 from chatty.app import create_app
 from chatty.catalog import Catalog
 from chatty.experiments import ExperimentMetrics
@@ -18,13 +18,13 @@ def test_model_failure_maps_to_502(caplog) -> None:
     caplog.set_level(logging.ERROR, logger="chatty.agent")
     catalog = Catalog()
     metrics = ExperimentMetrics()
-    service = RecommendationService(
+    service = Recommender(
         catalog,
         metrics,
         model=ScriptedModel([]),
         model_id="failing-scripted-model",
     )
-    app = create_app(service=service)
+    app = create_app(recommender=service)
 
     with TestClient(app) as client:
         response = client.post(
@@ -50,7 +50,7 @@ async def test_empty_rag_evidence_is_rejected() -> None:
             "limit": 3,
         },
     )
-    service = RecommendationService(
+    service = Recommender(
         Catalog(),
         ExperimentMetrics(),
         model=ScriptedModel(script),
@@ -58,7 +58,7 @@ async def test_empty_rag_evidence_is_rejected() -> None:
     )
 
     try:
-        with pytest.raises(RecommendationFailure, match="knowledge_not_retrieved"):
+        with pytest.raises(RecommendationError, match="knowledge_not_retrieved"):
             await service.recommend(RecommendationRequest(user_id="user_active"))
     finally:
         await service.close()
@@ -68,7 +68,7 @@ async def test_empty_rag_evidence_is_rejected() -> None:
 async def test_missing_required_tool_is_rejected() -> None:
     script = successful_script()
     del script[0]
-    service = RecommendationService(
+    service = Recommender(
         Catalog(),
         ExperimentMetrics(),
         model=ScriptedModel(script),
@@ -76,7 +76,7 @@ async def test_missing_required_tool_is_rejected() -> None:
     )
 
     try:
-        with pytest.raises(RecommendationFailure, match="required_tools_not_used"):
+        with pytest.raises(RecommendationError, match="required_tools_not_used"):
             await service.recommend(RecommendationRequest(user_id="user_active"))
     finally:
         await service.close()
@@ -86,7 +86,7 @@ async def test_missing_required_tool_is_rejected() -> None:
 async def test_tools_must_run_in_order() -> None:
     script = successful_script()
     script[0], script[1] = script[1], script[0]
-    service = RecommendationService(
+    service = Recommender(
         Catalog(),
         ExperimentMetrics(),
         model=ScriptedModel(script),
@@ -94,7 +94,7 @@ async def test_tools_must_run_in_order() -> None:
     )
 
     try:
-        with pytest.raises(RecommendationFailure, match="required_tools_not_used"):
+        with pytest.raises(RecommendationError, match="required_tools_not_used"):
             await service.recommend(RecommendationRequest(user_id="user_active"))
     finally:
         await service.close()
@@ -108,7 +108,7 @@ async def test_marketing_strategy_must_match_profile() -> None:
         "get_marketing_strategy",
         {"segment": "new_user"},
     )
-    service = RecommendationService(
+    service = Recommender(
         Catalog(),
         ExperimentMetrics(),
         model=ScriptedModel(script),
@@ -116,7 +116,7 @@ async def test_marketing_strategy_must_match_profile() -> None:
     )
 
     try:
-        with pytest.raises(RecommendationFailure, match="required_tools_not_used"):
+        with pytest.raises(RecommendationError, match="required_tools_not_used"):
             await service.recommend(RecommendationRequest(user_id="user_active"))
     finally:
         await service.close()
@@ -125,7 +125,7 @@ async def test_marketing_strategy_must_match_profile() -> None:
 @pytest.mark.asyncio
 async def test_response_construction_failure_is_not_counted_as_success(monkeypatch) -> None:
     metrics = ExperimentMetrics()
-    service = RecommendationService(
+    service = Recommender(
         Catalog(),
         metrics,
         model=ScriptedModel(successful_script()),
@@ -137,7 +137,7 @@ async def test_response_construction_failure_is_not_counted_as_success(monkeypat
 
     monkeypatch.setattr(chatty.agent, "RecommendationResponse", fail_response)
     try:
-        with pytest.raises(RecommendationFailure, match="recommendation_failed"):
+        with pytest.raises(RecommendationError, match="recommendation_failed"):
             await service.recommend(RecommendationRequest(user_id="user_active"))
     finally:
         await service.close()
@@ -194,7 +194,7 @@ async def test_recommendation_requires_product_evidence(
 ) -> None:
     script = successful_script()
     script[script_index] = replacement
-    service = RecommendationService(
+    service = Recommender(
         Catalog(),
         ExperimentMetrics(),
         model=ScriptedModel(script),
@@ -202,7 +202,7 @@ async def test_recommendation_requires_product_evidence(
     )
 
     try:
-        with pytest.raises(RecommendationFailure, match=failure):
+        with pytest.raises(RecommendationError, match=failure):
             await service.recommend(RecommendationRequest(user_id="user_active"))
     finally:
         await service.close()

@@ -132,7 +132,7 @@ curl -X POST http://127.0.0.1:8000/api/v1/recommend \
 | `GET` | `/health` | 模型、商品和知识状态 |
 | `POST` | `/api/v1/recommend` | 生成推荐 |
 | `GET` | `/api/v1/experiments` | 查看实验分组统计 |
-| `POST` | `/api/v1/experiments/ranking_strategy/outcomes` | 记录正负反馈 |
+| `POST` | `/api/v1/outcomes` | 记录正负反馈 |
 | `GET` | `/api/v1/metrics` | 查看进程内指标 |
 
 错误约定：

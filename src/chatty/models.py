@@ -123,6 +123,6 @@ class RecommendationResponse(StrictModel):
     total_latency_ms: float = Field(ge=0)
 
 
-class ExperimentOutcomeRequest(StrictModel):
+class OutcomeRequest(StrictModel):
     user_id: str = Field(min_length=1, max_length=64)
     success: bool
