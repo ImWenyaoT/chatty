@@ -33,6 +33,9 @@ class RecommendationContext:
     experiment_group: ExperimentGroup
     profile: UserProfile | None = None
     knowledge: list[KnowledgeHit] = field(default_factory=list)
+    recalled_product_ids: set[str] = field(default_factory=set)
+    in_stock_product_ids: set[str] = field(default_factory=set)
+    knowledge_product_ids: set[str] = field(default_factory=set)
     used_tools: set[str] = field(default_factory=set)
 
 
@@ -64,6 +67,7 @@ def product_search_payload(
         tags=tags,
         limit=limit,
     )
+    context.recalled_product_ids.update(product.product_id for product in products)
     context.used_tools.add("search_products")
     return json.dumps(
         [product.model_dump(mode="json") for product in products],
@@ -73,6 +77,7 @@ def product_search_payload(
 
 def inventory_payload(context: RecommendationContext, product_ids: list[str]) -> str:
     products = context.catalog.inventory(product_ids)
+    context.in_stock_product_ids.update(product.product_id for product in products)
     context.used_tools.add("check_inventory")
     return json.dumps(
         [
@@ -101,7 +106,10 @@ def knowledge_payload(
         product_ids=product_ids,
         limit=limit,
     )
-    context.knowledge = hits
+    known_doc_ids = {hit.doc_id for hit in context.knowledge}
+    context.knowledge.extend(hit for hit in hits if hit.doc_id not in known_doc_ids)
+    if hits:
+        context.knowledge_product_ids.update(product_ids)
     context.used_tools.add("retrieve_knowledge")
     return json.dumps(
         [hit.model_dump(mode="json") for hit in hits],

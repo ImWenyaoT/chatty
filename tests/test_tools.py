@@ -55,6 +55,17 @@ def test_tool_payloads_use_run_context_and_catalog() -> None:
     )
     assert knowledge
     assert {item["category"] for item in knowledge} == {"耳机"}
+    knowledge_payload(
+        context,
+        query="快充 配件",
+        categories=["配件"],
+        product_ids=["P007"],
+        limit=3,
+    )
     strategy = json.loads(marketing_payload(context, profile["segment"]))
     assert strategy["segment"] == "active"
     assert context.used_tools == set(TOOL_NAMES)
+    assert context.recalled_product_ids >= {"P003", "P004"}
+    assert context.in_stock_product_ids == {"P003"}
+    assert context.knowledge_product_ids == {"P003", "P004", "P007"}
+    assert len(context.knowledge) > len(knowledge)

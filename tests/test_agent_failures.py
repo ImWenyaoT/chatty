@@ -61,3 +61,50 @@ async def test_empty_rag_evidence_is_rejected() -> None:
             await service.recommend(RecommendationRequest(user_id="user_active"))
     finally:
         await service.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("script_index", "replacement", "failure"),
+    [
+        (
+            1,
+            ToolStep(
+                "call-2",
+                "search_products",
+                {
+                    "categories": ["手机"],
+                    "min_price_cents": 0,
+                    "max_price_cents": 1_000_000,
+                    "tags": [],
+                    "limit": 5,
+                },
+            ),
+            "product_not_recalled",
+        ),
+        (
+            2,
+            ToolStep("call-3", "check_inventory", {"product_ids": ["P004"]}),
+            "inventory_not_checked",
+        ),
+    ],
+)
+async def test_recommendation_requires_product_evidence(
+    script_index: int,
+    replacement: ToolStep,
+    failure: str,
+) -> None:
+    script = successful_script()
+    script[script_index] = replacement
+    service = RecommendationService(
+        Catalog(),
+        ExperimentMetrics(),
+        model=ScriptedModel(script),
+        model_id="scripted-model",
+    )
+
+    try:
+        with pytest.raises(RecommendationFailure, match=failure):
+            await service.recommend(RecommendationRequest(user_id="user_active"))
+    finally:
+        await service.close()

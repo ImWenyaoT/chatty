@@ -146,6 +146,11 @@ class RecommendationService:
             draft = parse_recommendation_draft(result.final_output)
             if context.profile is None:
                 raise RecommendationFailure("profile_not_loaded")
+            recommended_ids = {item.product_id for item in draft.recommendations}
+            if not recommended_ids <= context.recalled_product_ids:
+                raise RecommendationFailure("product_not_recalled")
+            if not recommended_ids <= context.in_stock_product_ids:
+                raise RecommendationFailure("inventory_not_checked")
             products = self.catalog.finalize(
                 draft,
                 request,
