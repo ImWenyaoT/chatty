@@ -44,11 +44,8 @@ def segment_for_index(text: str) -> str:
     return _CJK.sub(lambda match: f" {match.group()} ", text)
 
 
-# 一个块的目标长度和相邻块的重叠长度（按汉字数估算）。
-# 目标长度取 160：太短会把一个完整论点拆散，太长又会让检索命中里混进大量无关内容。
-# 重叠 40 是为了避免关键信息正好落在两块的接缝处而被切断。
-_CHUNK_TARGET = 160
-_CHUNK_OVERLAP = 40
+_CHUNK_TARGET = 160  # 一个块的目标汉字数
+_CHUNK_OVERLAP = 40  # 相邻块的重叠字数，防关键信息落在接缝处
 
 # 中文句子的结束标记。切分优先在这些位置下刀，保证块内是完整的句子。
 _SENTENCE_END = re.compile(r"(?<=[。！？；])")
@@ -60,18 +57,10 @@ def split_into_chunks(
     target: int = _CHUNK_TARGET,
     overlap: int = _CHUNK_OVERLAP,
 ) -> list[str]:
-    """把长文档切成若干块，用于建立检索索引。
+    """把长文档按句子边界切成若干块，用于建立检索索引。
 
-    采用**结构感知切分**（教材 3.2 说这是生产系统最常用的默认选择）：
-    先按句号、问号这类自然边界把文本拆成句子，再把句子依次装进块里，
-    装到接近目标长度就换下一块。这样每个块内部都是完整的句子，
-    不会出现"入耳式更便"这种被拦腰截断的碎片。
-
-    相邻块之间保留一段重叠，防止关键信息正好落在接缝处：
-    比如"主动降噪对低频有效。"和"开放式办公室以人声为主。"如果被切开，
-    查"降噪 办公室"就可能两块都排不上去。
-
-    短文档（比如只有一两句话的商品说明）会原样返回单个块，不做切分。
+    切在句号、问号这类自然边界上，块内始终是完整句子。
+    短文档原样返回单个块。详见 docs/code-walkthrough.md。
     """
     text = text.strip()
     if not text:
@@ -365,13 +354,8 @@ def seed_database(connection: sqlite3.Connection, data_dir: Path) -> None:
                 for item in knowledge
             ],
         )
-        # FTS 表里存的是**按字切分后**的可检索文本，不是展示用的原文。
-        # 原因：FTS5 的 unicode61 分词器会把一整段无空格中文当作单个 token，
-        # 导致 `MATCH "价格"` 检索不到"…价格敏感用户…"。按字加空格后每个汉字
-        # 成为独立 token，短语查询 "价 格" 就能匹配连续的两个字。
-        #
-        # 同时长文档会先切块：一篇 400 字的选购指南会变成 3 个块分别入库，
-        # 检索时命中哪个块就返回哪个块，模型拿到的是精准段落而不是整篇文章。
+        # FTS 表存按字切分后的文本（unicode61 会把整段中文当单个 token），
+        # 长文档先切块入库，检索命中哪块返回哪块
         chunk_rows = []
         rowid = 0
         for item in knowledge:

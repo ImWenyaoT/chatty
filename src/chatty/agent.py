@@ -33,8 +33,7 @@ from chatty.tools import (
 
 logger = logging.getLogger(__name__)
 
-# Prompt 按“目标、执行、输出、约束”组织，让模型在每轮都能快速定位规则。
-# Harness 仍会独立校验这些规则，不能把 prompt 当作业务事实的安全边界。
+# Prompt 里写的规则 Harness 都会再独立校验一遍，不能当安全边界。
 AGENT_INSTRUCTIONS = """你是 Chatty，一个电商推荐与营销 Agent。
 
 目标
@@ -82,11 +81,7 @@ def parse_recommendation_draft(raw_output: object) -> RecommendationDraft:
     if match := _JSON_CODE_BLOCK.search(raw_output):
         candidates.append(match.group(1))
 
-    # 候选二：从第一个 { 到最后一个 } 之间的部分。
-    # 这是为了兜住"模型先写一段说明文字，再给 JSON"的情况：
-    # 输出可能长成「对 P012（绿联氮化镓）来说…… + 换行 + JSON 对象」这样。
-    # 提示词里已经写明"只返回一个 JSON 对象"，但模型并不总是遵守，
-    # 所以 Harness 必须能从掺了自然语言的输出里把结构化部分捞出来。
+    # 候选二：掐头去尾取 {...}，兜住模型先写一段说明再给 JSON 的情况。
     start = raw_output.find("{")
     end = raw_output.rfind("}")
     if start != -1 and end > start:
@@ -104,9 +99,6 @@ def parse_recommendation_draft(raw_output: object) -> RecommendationDraft:
     return RecommendationDraft.model_validate_json(raw_output)
 
 
-# 重试有没有意义，是调用方最需要知道的一件事。
-# 配置缺失属于环境问题，补上密钥后同样的请求就能成功；
-# 其余错误都是这一轮 Agent 逻辑上没走通，原样重试大概率还是同样结果。
 class RecommendationError(RuntimeError):
     """带错误码的业务异常。
 
@@ -187,14 +179,12 @@ class Recommender:
         debug_hooks = AgentDebugHooks(self._model_id) if config.agent_debug_enabled() else None
         try:
             model = self._ensure_model()
-            # context 是这一次运行的"证据本"：五个工具会依次往里写自己的结果，
-            # 跑完之后 Harness 靠它来判断模型是否真的走完了流程。
+            # context 是这次运行的证据本，五个工具往里写结果
             context = RecommendationContext(
                 request=request,
                 catalog=self.catalog,
             )
-            # DeepSeek V4 Pro 不接受 SDK 的 json_schema response_format，
-            # 因此让 Chat Completions 返回纯文本，再在本地提取并校验 JSON。
+            # DeepSeek 不吃 json_schema，所以返回纯文本、本地提取 JSON。
             agent = Agent[RecommendationContext](
                 name="Chatty",
                 instructions=AGENT_INSTRUCTIONS,
@@ -202,8 +192,7 @@ class Recommender:
                 model_settings=ModelSettings(extra_body={"thinking": {"type": "disabled"}}),
                 tools=build_tools(),
             )
-            # Runner 执行 agent loop，并把每次 tool result 追加到下一轮模型输入。
-            # max_turns 是失控保护，不是正常流程的重试策略。
+            # max_turns 是失控保护，不是重试策略。
             result = await Runner.run(
                 agent,
                 request.model_dump_json(),
@@ -215,11 +204,9 @@ class Recommender:
                     tracing_disabled=True,
                 ),
             )
-            # ↓↓↓ 以下是 Harness 校验段：模型说它做完了不算数，要用证据证明 ↓↓↓
-            # Model 决定如何调用 Tool；Harness 用可观察状态验证它是否真的完成了流程。
+            # ↓↓↓ Harness 校验段：模型说它做完了不算数，要用证据证明 ↓↓↓
 
-            # ① 五个工具都要调过，且有数据依赖的三步保持先后。
-            #    允许重复调用（重搜、补充检索都是合理行为），详见 validate_tool_sequence。
+            # ① 五个工具都调过，且依赖顺序正确（允许重复调用）
             if reason := validate_tool_sequence(context.used_tools):
                 raise RecommendationError(
                     "required_tools_not_used",
@@ -233,21 +220,12 @@ class Recommender:
                 )
             # 解析模型输出的 JSON 草稿（只含商品 ID、推荐理由、营销文案）。
             draft = parse_recommendation_draft(result.final_output)
-            # ③ 用户画像必须成功加载，否则后面没法校验价格区间。
-            #
-            # 说明：走到这一步 ① 已经确认 get_user_profile 调用过了，所以 profile
-            # 理论上不会是 None——这行的实际作用是**类型收窄**（让类型检查器知道
-            # 下面传给 finalize 的不是 None），顺带做一层防御。
-            # 真正会触发"画像未加载"的地方在 tools.py：模型如果先调 search_products，
-            # 那个工具会自己抛错。
+            # ③ 画像必须已加载。① 已保证工具调过，这里主要是类型收窄兼防御
             if context.profile is None:
                 raise RecommendationError("profile_not_loaded")
 
-            # ④⑤⑥ 模型草稿只有文本建议权，商品范围必须由 Tool 留下的证据集合证明。
-            # 三条检查形状相同，所以放进一张表里循环——避免三段几乎一样的 if-raise，
-            # 也保证任何一条失败时都能给出同样详细的诊断信息。
-            # `<=` 用在两个 set 之间是"子集判断"（不是小于等于）：
-            # 推荐的商品必须全部出现在工具返回过的集合里。
+            # ④⑤⑥ 三条形状相同的证据检查，放进表里循环。
+            # 两个 set 之间的 `<=` 是子集判断，不是小于等于。
             recommended_ids = {item.product_id for item in draft.recommendations}
             evidence_checks = (
                 # 错误码, 证据集合, 这份证据是哪个工具留下的

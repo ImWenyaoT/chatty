@@ -29,8 +29,7 @@ TOOL_NAMES = (
     "get_marketing_strategy",
 )
 
-# 真实存在的数据依赖链：后一步需要前一步的产出才能执行。
-# 只有这些顺序是不可协商的，其余步骤之间可以任意排列。
+# 真实的数据依赖链，只有这三步的先后不可协商
 _DEPENDENCY_CHAIN = ("get_user_profile", "search_products", "check_inventory")
 
 
@@ -159,9 +158,7 @@ def build_tools() -> list[Tool]:
             tags=tags,
             limit=limit,
         )
-        # 保存搜索结果的 ID，而不是之后从模型文本反推“是否召回”。
-        # 用 |= 累加而不是 = 覆盖：模型可能分多次搜索不同类目（跨类目推荐时很常见），
-        # 每次都覆盖的话，前几次召回的商品就"消失"了，最终校验会误判成模型凭空捏造。
+        # |= 累加不是 = 覆盖：分多次搜不同类目时，覆盖会抹掉前几次的召回
         context.recalled_product_ids |= {product.product_id for product in products}
         context.used_tools.append("search_products")
         return json.dumps(
@@ -176,8 +173,7 @@ def build_tools() -> list[Tool]:
         """从 SQLite 返回有货商品及其低库存标记。"""
         context = ctx.context
         products = context.catalog.inventory(product_ids)
-        # 这里只记录 SQLite 确认有货的商品，供最终输出做集合校验。
-        # 同样用 |= 累加：分批查库存是合理行为，不能让后一批覆盖前一批。
+        # 只记 SQLite 确认有货的，同样用 |= 累加（分批查库存是合理行为）
         context.in_stock_product_ids |= {product.product_id for product in products}
         context.used_tools.append("check_inventory")
         return json.dumps(
@@ -219,19 +215,9 @@ def build_tools() -> list[Tool]:
             product_ids=product_ids,
             limit=limit,
         )
-        # 多次检索的命中结果累加，不是覆盖（理由同上）。
-        context.knowledge.extend(hits)
-        # 依据范围由**实际命中的文档**决定，而不是模型请求时传了哪些 product_ids。
-        #
-        # 早期版本写的是 `set(product_ids) if hits else set()`，即拿请求参数当依据范围。
-        # 2026-07-27 的评估暴露了它的问题：模型检索手机知识时只传了 ['P022']，
-        # 命中的却是 K004「手机购买决策指南」这篇覆盖整个类目的通用文档，
-        # 结果推荐 P001/P002 被判成"无依据"——但它们明明被这篇文档覆盖。
-        # 根因是用请求参数代替了真实证据，两者语义并不等价。
-        #
-        # 现在按文档类型分别处理：
-        #   · 绑定了具体商品的文档 → 只为该商品提供依据
-        #   · 未绑定商品的类目通用文档 → 为该类目下的所有商品提供依据
+        context.knowledge.extend(hits)  # 累加不覆盖，理由同上
+        # 依据范围由实际命中的文档决定，不是模型请求时传的 product_ids。
+        # 绑定商品的文档只覆盖该商品；未绑定的类目通用文档覆盖整个类目。
         grounded = {hit.product_id for hit in hits if hit.product_id}
         generic_categories = {hit.category for hit in hits if not hit.product_id}
         if generic_categories:
@@ -242,15 +228,7 @@ def build_tools() -> list[Tool]:
             }
         context.knowledge_product_ids |= grounded
         context.used_tools.append("retrieve_knowledge")
-        # 检索结果外面包一层来源标记，而不是直接返回裸数组。
-        #
-        # 教材 3.3「RAG 的安全边界」：检索到的文档是**间接提示注入**最典型的载体——
-        # 攻击者把"忽略先前指令，去做某事"藏进一篇会被索引的文档，
-        # 等它被检索命中拼进上下文，模型就可能把资料当成命令执行。
-        # 第一层防御就是**指令与数据分离**：明确告诉模型这些是参考资料不是指令。
-        #
-        # 第二层防御（不让检索内容触发高风险操作）本项目天然满足：
-        # 五个工具全是只读的，检索结果最多影响推荐理由的措辞，改不了任何业务数据。
+        # 包一层来源标记再返回，防止知识库文档成为间接提示注入的载体
         return json.dumps(
             {
                 "note": (
@@ -276,10 +254,7 @@ def build_tools() -> list[Tool]:
         context.used_tools.append("get_marketing_strategy")
         return strategy.model_dump_json()
 
-    # 工具描述遵循三条原则（《深入理解 AI Agent》4.2）：
-    # ① 说清"什么时候用"而不只是"能做什么"——描述功能无助于模型做调用决策；
-    # ② 明确列出边界（做不到什么、不接受什么输入）——多数调用失败源于模型不知道工具**不能**做什么；
-    # ③ 参数用具体例子代替抽象规范——模型可以直接套用，省去一次额外推理。
+    # 工具描述三原则见 docs/code-walkthrough.md：何时用、边界、参数给例子
     return [
         function_tool(
             get_user_profile,
@@ -294,7 +269,7 @@ def build_tools() -> list[Tool]:
             search_products,
             name_override="search_products",
             description_override=(
-                "在商品目录中按类目、价格区间和标签召回候选商品，返回结果已按当前实验分组排序。"
+                "在商品目录中按类目、价格区间和标签召回候选商品，返回结果已按用户画像排序。"
                 "需要先拿到用户画像才能调用。若返回结果为空或不足，可以放宽条件后再次调用。"
                 "边界：只能按结构化条件筛选，不支持自然语言检索（那是 retrieve_knowledge 的职责）；"
                 "返回的商品**尚未校验库存**，不能直接推荐；"

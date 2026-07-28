@@ -63,17 +63,14 @@ class CommerceRepository:
 
     def profiles(self) -> dict[str, UserProfile]:
         """读出全部用户画像，返回 {user_id: 画像} 的字典。"""
-        # database.lock 是一把跨线程的锁：SQLite 连接被多处共用，
-        # 所有读写都要在这把锁里进行，避免并发访问同一个连接。
-        with self.database.lock:
+        with self.database.lock:  # 连接被多处共用，读写都要在锁里
             rows = self.database.connection.execute(
                 "SELECT * FROM user_profiles ORDER BY user_id"
             ).fetchall()
         return {
             row["user_id"]: UserProfile(
                 user_id=row["user_id"],
-                # cast 只是告诉类型检查器"这个字符串一定是五个分群之一"，
-                # 运行时什么也不做。真正的校验发生在 Pydantic 构造 UserProfile 时。
+                # cast 只给类型检查器看，真正的校验在 Pydantic 构造时
                 segment=cast(UserSegment, row["segment"]),
                 preferred_categories=json.loads(row["preferred_categories_json"]),
                 min_price_cents=row["min_price_cents"],
@@ -155,17 +152,9 @@ class KnowledgeRetriever:
         self.synonyms = _load_synonyms(data_dir or config.DATA_DIR)
 
     def rewrite_query(self, query: str) -> str:
-        """查询改写：把用户的说法补上知识库里的对应词。
+        """查询改写：补上知识库用词。例："保护视力" -> "保护视力 护眼"。
 
-        BM25 是纯字面匹配，查"保护视力"命中不了写着"护眼"的文档——
-        这是稀疏检索的固有短板（教材 3.2 说稠密检索正是为解决它而生）。
-        在没有嵌入模型的情况下，同义词扩展是成本最低的缓解手段：
-        把用户的说法映射回知识库用词，两边就对得上了。
-
-        注意是**扩展**不是**替换**：原词保留，同义词追加在后面，
-        这样即使映射不准也只是多召回几条，不会丢掉本来能命中的结果。
-
-        例："保护视力 不伤眼" -> "保护视力 不伤眼 护眼"
+        是扩展不是替换——原词保留，映射不准也只多召回几条。
         """
         if not self.synonyms:
             return query
@@ -180,21 +169,12 @@ class KnowledgeRetriever:
 
     @staticmethod
     def _match_expression(query: str) -> str:
-        """把自由文本查询转成安全的 FTS5 MATCH 表达式。
+        """把自由文本转成安全的 FTS5 MATCH 表达式。
 
-        例："降噪 耳机" -> '" 降  噪 " OR " 耳  机 "'
-
-        汉字之间插空格是为了和索引侧对齐（见 database.segment_for_index）：
-        两侧都按字切分后，加引号的短语查询才能匹配文档里连续的汉字。
+        例："降噪 耳机" -> '" 降  噪 " OR " 耳  机 "'，按字切分与索引侧对齐。
         """
-        # 限制词数并逐词加引号，避免把用户输入直接拼成 FTS5 语法。
-        # 不加引号的话，输入里的 AND / OR / NEAR / * 会被 FTS5 当成运算符执行，
-        # 性质等同于 SQL 注入；截断到 8 个词则是防止超长查询拖慢检索。
-        #
-        # 注意：截断属于"静默输入转换"——模型传了 10 个词，实际只用了 8 个。
-        # 教材 4.2 强调"模型感知到的世界与工具操作的世界之间不能有系统性偏差"，
-        # 所以这条限制必须写进工具描述告诉模型（见 tools.py 里 retrieve_knowledge 的描述），
-        # 否则模型会以为长查询更精确，实际上多写的部分根本没生效。
+        # 逐词加引号，否则输入里的 AND / OR / NEAR / * 会被当成 FTS5 运算符
+        # 截断到 8 个词的限制已写进 retrieve_knowledge 的工具描述告知模型
         tokens = _TOKEN_PATTERN.findall(query.casefold())[:8]
         return " OR ".join(f'"{segment_for_index(token).strip()}"' for token in tokens)
 
@@ -211,8 +191,7 @@ class KnowledgeRetriever:
         if not expression:
             return []  # 查询里一个有效词都没有，直接返回空
 
-        # 下面逐段拼 SQL 的 WHERE 条件。注意范围过滤是写进 SQL 的，
-        # 不是"先全量检索再在 Python 里过滤"——先缩小范围，BM25 才算得准也算得快。
+        # 范围过滤写进 SQL 而不是检索完再过滤：先缩范围，BM25 才算得准
         filters: list[str] = []
         parameters: list[str | int] = [expression]
         if categories:
@@ -221,8 +200,7 @@ class KnowledgeRetriever:
             parameters.extend(categories)
         if product_ids:
             placeholders = ", ".join("?" for _ in product_ids)
-            # IS NULL 这一支是为了保留"通用知识"——不绑定具体商品的文档
-            # （比如品类导购、营销规范）也应该能被检索到。
+            # IS NULL 这一支保留不绑定商品的类目通用文档
             filters.append(
                 f"(knowledge_documents_fts.product_id IN ({placeholders}) "
                 "OR knowledge_documents_fts.product_id IS NULL)"
@@ -267,8 +245,7 @@ class KnowledgeRetriever:
                 category=row["category"],
                 product_id=row["product_id"],
                 source=row["source"],
-                # SQLite bm25 越小越相关；转换成便于接口展示的 0 到 1 分数。
-                # 取绝对值再做 1/(1+x)：原始分越接近 0（越相关），结果越接近 1。
+                # bm25 越小越相关，转成 0 到 1 的分数便于展示
                 relevance_score=round(1 / (1 + abs(row["rank"])), 4),
             )
             for row in rows

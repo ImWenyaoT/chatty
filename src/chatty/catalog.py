@@ -100,8 +100,7 @@ class Catalog:
             raise CatalogError("invalid_product_search_price_range")
         if not 1 <= limit <= 20:
             raise CatalogError("invalid_product_search_limit")
-        # 传了类目但全是空白字符串 → 过滤器会变成空集，下面的条件就退化成"不按类目过滤"，
-        # 模型以为筛选了实际没筛，属于静默的语义偏差。宁可明确报错。
+        # 传了类目但全是空白 → 会退化成不过滤，模型以为筛了实际没筛，宁可报错
         if categories and not category_filter:
             raise CatalogError("invalid_product_search_categories")
         tag_filter = {value.casefold() for value in tags if value.strip()}
@@ -170,8 +169,7 @@ class Catalog:
         request: RecommendationRequest,
         profile: UserProfile,
     ) -> list[RecommendedProduct]:
-        # 最终响应重新读取 SQLite；模型输出和启动缓存都不能充当库存真值。
-        # 为什么要重查：模型可能记错价格，而且从工具查库存到现在，库存也可能已经变了。
+        # 重查 SQLite：模型可能记错价格，且从查库存到现在库存也可能变了
         current_products = {
             product.product_id: product for product in self.repository.list_products()
         }
@@ -185,8 +183,7 @@ class Catalog:
             if product is None:
                 raise CatalogError("unknown_recommended_product")
             seen.add(item.product_id)
-            # 售罄或价格超出用户预算 → 这是**正常的业务变化**，跳过这一条继续看下一条。
-            # 注意上面用 raise、这里用 continue，区别就在"是模型错了"还是"是数据变了"。
+            # 售罄或超预算是正常的业务变化，跳过即可（上面 raise 是模型错了）
             if (
                 product.stock <= 0
                 or product.price_cents < profile.min_price_cents
