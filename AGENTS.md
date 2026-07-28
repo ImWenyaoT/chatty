@@ -39,4 +39,4 @@ Issues/PRD 存于本仓库 GitHub Issues，用 `gh` CLI 读写。See `docs/agent
 
 ### Domain docs
 
-单上下文：根 `CONTEXT.md` + `docs/adr/`。See `docs/agents/domain.md`.
+单上下文：根 `CONTEXT.md` 是唯一的领域词汇入口。See `docs/agents/domain.md`.

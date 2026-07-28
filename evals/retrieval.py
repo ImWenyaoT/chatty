@@ -1,21 +1,21 @@
 """检索质量评估。
 
-对应《深入理解 AI Agent》第 3.2 节"如何度量检索质量"，实现表 3-3 里的两个核心指标。
+度量检索质量的两个核心指标。
 
 为什么要单独测检索：端到端评估只能告诉你"这次推荐失败了"，
 但失败可能来自检索没召回、模型没用好检索结果、或者 Harness 校验拦下了。
 把检索单独拎出来度量，才能定位到底是哪一层的问题——
 `knowledge_not_retrieved` 正是端到端评估里出现过的失败之一。
 
-**指标口径必须写清楚**（教材脚注特别强调过这点）：
+**指标口径必须写清楚**：
 
-- `recall@k` —— 本模块采用教材口径，即**命中率**（hit rate / success@k）：
+- `recall@k` —— 本模块采用**命中率**口径（hit rate / success@k）：
   前 k 个结果里只要有一篇标注为相关的文档就算命中，统计的是**查询的比例**。
   学术上标准的 recall@k 是"召回的相关文档数 ÷ 该查询全部相关文档数"，两者在
   一个查询有多篇相关文档时并不相等。跨来源比较数字时务必先对齐定义。
 - `MRR` —— 每个查询取第一篇相关文档排名的倒数（排第 1 得 1，排第 10 得 0.1），再对所有查询平均。
 
-教材表 3-3 还给了第三个指标 nDCG，这里**没有实现**：它需要为每篇文档人工标注
+还有第三个常用指标 nDCG，这里**没有实现**：它需要为每篇文档人工标注
 分级相关性（"高度相关"还是"沾边"），标注成本明显高于前两个指标，
 而 recall@k 加 MRR 已经能回答"该找的找到没有"和"找到得够不够靠前"这两个核心问题。
 """
@@ -141,7 +141,7 @@ class RetrievalMetrics:
 
     k: int
     cases: int
-    recall_at_k: float  # 教材口径：命中率
+    recall_at_k: float  # 命中率口径
     mrr: float
     misses: list[str] = field(default_factory=list)  # 完全没召回的用例
 
@@ -178,7 +178,7 @@ def evaluate_retrieval(
                 if doc_id in case.relevant_docs
             ]
             if relevant_positions:
-                # recall@k（教材口径）：只要有一篇相关就算这条查询命中
+                # recall@k（命中率口径）：只要有一篇相关就算这条查询命中
                 hits += 1
                 # MRR：第一篇相关文档排名的倒数（rank 从 0 开始，所以 +1）
                 reciprocal_ranks.append(1 / (relevant_positions[0] + 1))

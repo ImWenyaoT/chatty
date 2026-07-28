@@ -224,7 +224,7 @@ def test_blank_categories_are_rejected_not_ignored() -> None:
     """传了类目但全是空白时必须报错，不能退化成"不按类目过滤"。
 
     静默退化的后果：模型以为按"耳机"筛过了，实际拿到的是全品类商品，
-    而它无从察觉——这正是教材 4.2 说的"模型感知的世界与工具操作的世界产生偏差"。
+    而它无从察觉——这就是"模型感知的世界与工具操作的世界产生偏差"。
     """
     from chatty.catalog import CatalogError
 
@@ -265,7 +265,7 @@ def test_blank_tags_are_rejected_not_ignored() -> None:
 
 @pytest.mark.asyncio
 async def test_retrieved_documents_are_marked_as_data_not_instructions() -> None:
-    """检索结果必须带来源标记（教材 3.3「RAG 的安全边界」）。
+    """检索结果必须带来源标记，防止间接提示注入。
 
     知识库文档是间接提示注入的典型载体：攻击者把"忽略先前指令"之类的话
     藏进一篇会被索引的文档，检索命中后就可能被模型当成命令执行。

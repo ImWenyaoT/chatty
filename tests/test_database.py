@@ -119,7 +119,7 @@ def test_chunks_preserve_original_text_for_display() -> None:
 def test_query_rewrite_bridges_synonym_gap() -> None:
     """查询改写把用户说法补上知识库用词，解决 BM25 只认字面的问题。
 
-    这是稀疏检索的固有短板（教材 3.2 说稠密检索正是为解决它而生）。
+    这是稀疏检索的固有短板（稠密检索正是为解决它而生）。
     在不引入嵌入模型的前提下，同义词扩展是成本最低的缓解手段。
     """
     catalog = Catalog()

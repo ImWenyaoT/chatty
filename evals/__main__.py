@@ -7,7 +7,7 @@
     uv run python -m evals --ablation   # 消融实验：拿掉工具与 Harness 的对照组
     uv run python -m evals --json       # 输出机器可读的指标
 
-对应《深入理解 AI Agent》第 6 章。注意评估跑的是**真实模型 + 完整 Harness**，
+注意评估跑的是**真实模型 + 完整 Harness**，
 所以会产生 API 调用费用；先用 --level L1 跑几条确认链路通，再全量。
 """
 

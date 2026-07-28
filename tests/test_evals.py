@@ -206,7 +206,7 @@ def test_summary_reports_pass_rate_by_level() -> None:
 def test_reliability_separates_stable_from_flaky() -> None:
     """Pass^k 和 Pass@k 必须能区分"稳定通过"和"时好时坏"。
 
-    教材 6.4 表 6-3：回归测试要看 Pass^k，用 Pass@k 会掩盖不稳定性。
+    回归测试要看 Pass^k，用 Pass@k 会掩盖不稳定性。
     """
     stable = _task("L1-earphone-active")
     flaky = _task("L1-accessory-budget")

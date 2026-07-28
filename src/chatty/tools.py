@@ -95,7 +95,7 @@ _MAX_IDENTICAL_CALLS = 3
 def guard_repeated_call(context: RecommendationContext, tool_name: str, signature: str) -> None:
     """拦截"用完全相同的参数反复调用同一个工具"。
 
-    教材第 1 章讲自主 Agent 时强调：自主性不等于无限制，
+    自主性不等于无限制，
     必须有明确的停止条件，否则容易陷入死循环。
     `max_turns=10` 是最后的兜底，但它只会笼统地报"轮次耗尽"；
     这里做的是更早、更有针对性的拦截。

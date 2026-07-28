@@ -104,7 +104,7 @@ uv run python -m evals --retrieval   # recall@5 与 MRR，不调模型、零成�
 
 ## 评估体系
 
-按《深入理解 AI Agent》第 6 章搭建，**评估对象是模型与 Harness 的组合体**，
+**评估对象是模型与 Harness 的组合体**，
 跑完整的 `Recommender.recommend()`，不绕开任何一层校验。
 
 | 组成 | 内容 |
