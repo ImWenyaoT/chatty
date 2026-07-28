@@ -19,7 +19,6 @@ from openai.types.responses import (
 
 from chatty.agent import AGENT_INSTRUCTIONS, Recommender, parse_recommendation_draft
 from chatty.catalog import Catalog
-from chatty.experiments import ExperimentMetrics
 from chatty.models import RecommendationRequest
 from chatty.tools import TOOL_NAMES
 
@@ -174,7 +173,6 @@ async def test_single_agent_runs_all_five_tools_and_returns_canonical_product(
     )
     service = Recommender(
         Catalog(),
-        ExperimentMetrics(),
         model=model,
         model_id="scripted-model",
     )

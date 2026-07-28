@@ -11,7 +11,6 @@ from pydantic import Field
 
 from chatty.catalog import Catalog
 from chatty.models import (
-    ExperimentGroup,
     KnowledgeHit,
     RecommendationRequest,
     UserProfile,
@@ -79,7 +78,6 @@ class RecommendationContext:
 
     request: RecommendationRequest          # 本次请求的原始参数
     catalog: Catalog                        # 数据访问入口（商品、库存、知识、营销模板）
-    experiment_group: ExperimentGroup       # A/B 分组，影响搜索排序策略
 
     # ↓ 以下字段由五个工具在执行过程中依次填充，构成"证据链"
     profile: UserProfile | None = None                          # ① 用户画像
@@ -155,7 +153,6 @@ def build_tools() -> list[Tool]:
         profile = context.profile
         products = context.catalog.search(
             profile=profile,
-            group=context.experiment_group,
             categories=categories,
             min_price_cents=min_price_cents,
             max_price_cents=max_price_cents,

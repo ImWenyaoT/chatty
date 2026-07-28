@@ -50,7 +50,6 @@ sequenceDiagram
 | Chatty Agent | 选择 Tool 并生成理由与文案 | Tool 返回结果 |
 | Catalog | 搜索、排序和最终业务校验 | SQLite |
 | KnowledgeRetriever | 检索商品知识 | SQLite FTS5 |
-| ExperimentMetrics | 稳定分桶和进程内统计 | 内存 |
 
 ## 3. Agent Loop
 
@@ -133,20 +132,7 @@ flowchart LR
     RULES --> RESPONSE["可信响应"]
 ```
 
-## 7. A/B 测试
-
-`ranking_strategy` 使用 SHA-256 对 `user_id + experiment_id` 分桶：
-
-| 分组 | 比例 | 排序策略 |
-|---|---:|---|
-| `control` | 50% | 商品热度优先 |
-| `treatment_personalized` | 50% | 用户类目、价格和行为优先 |
-
-同一个用户稳定进入同一组。请求量、成功率和延迟只保存在当前进程内。
-
-当前实现不计算实验提升或统计显著性。
-
-## 8. 失败处理
+## 7. 失败处理
 
 Chatty 是库不是服务，失败以 `RecommendationError` 抛出，
 `retriable` 表示原样重试是否有意义（对外若包 HTTP，可据此映射 503 / 502）。

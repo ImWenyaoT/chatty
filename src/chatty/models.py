@@ -11,7 +11,6 @@ UserSegment = Literal[
     "price_sensitive",
     "churn_risk",
 ]
-ExperimentGroup = Literal["control", "treatment_personalized"]
 
 
 class StrictModel(BaseModel):
@@ -124,7 +123,6 @@ class RecommendedProduct(StrictModel):
 class RecommendationResponse(StrictModel):
     request_id: str
     user_id: str
-    experiment_group: ExperimentGroup
     products: list[RecommendedProduct]
     total_latency_ms: float = Field(ge=0)
 

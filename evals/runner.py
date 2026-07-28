@@ -30,7 +30,6 @@ from agents import Model
 
 from chatty.agent import RecommendationError, Recommender
 from chatty.catalog import Catalog
-from chatty.experiments import ExperimentMetrics
 from evals.dataset import ALL_TASKS, EvalTask
 from evals.rubric import TaskVerdict, grade
 
@@ -61,7 +60,7 @@ async def run_task(
     """
     with tempfile.TemporaryDirectory(prefix="chatty-eval-") as tmp:
         catalog = Catalog(data_dir, database_path=Path(tmp) / "eval.db")
-        recommender = Recommender(catalog, ExperimentMetrics(), model=model)
+        recommender = Recommender(catalog, model=model)
         try:
             response = None
             error_code = None

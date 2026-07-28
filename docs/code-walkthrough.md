@@ -177,13 +177,7 @@ flowchart LR
 
 调试 hooks 记录 `llm_input → llm_output → tool_call → tool_result → agent_output → response/failure`。Tool 调用与结果通过 `call_id` 对齐；日志不记录模型隐藏思维过程。
 
-## 9. `experiments.py`：稳定分桶
-
-系统对 `user_id + experiment_id` 计算 SHA-256，再按奇偶分成两个 50% 组。服务端重新计算分组，客户端不能伪造实验组。
-
-`control` 只使用商品热度；`treatment_personalized` 组合热度、偏好类目、近期行为和价格范围。
-
-## 10. 失败语义：没有 HTTP 层，但保留了可重试性
+## 9. 失败语义：没有 HTTP 层，但保留了可重试性
 
 Chatty 是库不是服务，失败以 `RecommendationError` 抛出。
 异常自带 `retriable` 字段表示“原样重试是否有意义”：
@@ -193,9 +187,9 @@ Chatty 是库不是服务，失败以 `RecommendationError` 抛出。
 这个判断放在领域层而不是传输层，将来对外包 HTTP、gRPC 或消息队列都能直接映射
 （HTTP 下 `True` → 503、`False` → 502）。
 
-## 11. 测试与评估
+## 10. 测试与评估
 
-**测试**（67 项，`tests/`）验证的是 Harness 契约，全部跑在脚本模型上，不联网不花钱：
+**测试**（65 项，`tests/`）验证的是 Harness 契约，全部跑在脚本模型上，不联网不花钱：
 
 - 数据测试：类目覆盖度、每个类目都有知识文档、种子修复
 - Tool 测试：五个工具各自的证据记录与前置校验

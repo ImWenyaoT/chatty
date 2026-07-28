@@ -20,7 +20,6 @@ from pydantic import ValidationError
 from chatty import config
 from chatty.catalog import Catalog, CatalogError
 from chatty.debug import AgentDebugHooks
-from chatty.experiments import ExperimentMetrics
 from chatty.models import (
     RecommendationDraft,
     RecommendationRequest,
@@ -156,13 +155,11 @@ class Recommender:
     def __init__(
         self,
         catalog: Catalog,
-        metrics: ExperimentMetrics,
         *,
         model: Model | None = None,
         model_id: str | None = None,
     ) -> None:
         self.catalog = catalog
-        self.metrics = metrics
         self._model = model
         self._model_id = model_id or (
             "injected-model" if model is not None else config.configured_model_id()
@@ -194,8 +191,6 @@ class Recommender:
     async def recommend(self, request: RecommendationRequest) -> RecommendationResponse:
         """一次完整的推荐：跑 Agent Loop → 校验证据 → 重查数据库 → 返回响应。"""
         started = time.perf_counter()  # 用于统计端到端延迟
-        # A/B 分组：同一个 user_id 永远落在同一组（哈希决定，不随机）。
-        group = self.metrics.assign(request.user_id)
         # 调试钩子只在开关打开时创建，用来记录每一轮模型输入输出，便于离线复盘。
         debug_hooks = AgentDebugHooks(self._model_id) if config.agent_debug_enabled() else None
         try:
@@ -205,7 +200,6 @@ class Recommender:
             context = RecommendationContext(
                 request=request,
                 catalog=self.catalog,
-                experiment_group=group,
             )
             # DeepSeek V4 Pro 不接受 SDK 的 json_schema response_format，
             # 因此让 Chat Completions 返回纯文本，再在本地提取并校验 JSON。
@@ -288,25 +282,20 @@ class Recommender:
                 draft,
                 request,
                 context.profile,
-                group,
             )
             elapsed_ms = (time.perf_counter() - started) * 1000
             response = RecommendationResponse(
                 request_id=f"request_{uuid4().hex}",
                 user_id=request.user_id,
-                experiment_group=group,
                 products=products,
                 total_latency_ms=elapsed_ms,
             )
-            self.metrics.record_request(group, success=True, latency_ms=elapsed_ms)
             if debug_hooks is not None:
                 debug_hooks.record_response(response)
             return response
         # ↓↓↓ 三段异常处理，从"已知业务失败"到"完全没预料到"，逐层兜底 ↓↓↓
         # 第一段：上面主动抛出的业务错误，已经带了明确错误码，原样往上抛。
         except RecommendationError as error:
-            elapsed_ms = (time.perf_counter() - started) * 1000
-            self.metrics.record_request(group, success=False, latency_ms=elapsed_ms)
             if debug_hooks is not None:
                 debug_hooks.record_failure(error.code)
             logger.warning(
@@ -316,8 +305,6 @@ class Recommender:
         # 第二段：数据层错误和 Pydantic 校验错误，内部分得细（比如商品不存在、
         # 过滤后无可用商品），但对外统一收敛成一个码，避免把内部细节暴露给调用方。
         except (CatalogError, ValidationError) as error:
-            elapsed_ms = (time.perf_counter() - started) * 1000
-            self.metrics.record_request(group, success=False, latency_ms=elapsed_ms)
             if debug_hooks is not None:
                 debug_hooks.record_failure("invalid_recommendation")
             logger.warning("Invalid recommendation output", exc_info=True)
@@ -325,8 +312,6 @@ class Recommender:
         # 第三段：兜底。任何没预料到的异常都转成带码的失败，
         # 绝不静默降级、也绝不把半成品当成功返回。
         except Exception as error:
-            elapsed_ms = (time.perf_counter() - started) * 1000
-            self.metrics.record_request(group, success=False, latency_ms=elapsed_ms)
             if debug_hooks is not None:
                 debug_hooks.record_failure("recommendation_failed")
             logger.exception("Unexpected recommendation failure")

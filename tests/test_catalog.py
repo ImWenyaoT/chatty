@@ -62,20 +62,18 @@ def test_profile_context_overrides_demo_profile(catalog: Catalog) -> None:
     assert profile.max_price_cents == 70_000
 
 
-def test_personalized_group_changes_ranking(catalog: Catalog) -> None:
+def test_ranking_follows_user_profile(catalog: Catalog) -> None:
+    """价格敏感用户的搜索结果应当由画像驱动，排在最前的是低价配件。"""
     profile = catalog.user_profile("user_budget", UserContext())
-    common = {
-        "profile": profile,
-        "categories": [],
-        "min_price_cents": 0,
-        "max_price_cents": 1_000_000,
-        "tags": [],
-        "limit": 5,
-    }
-    control = catalog.search(group="control", **common)
-    personalized = catalog.search(group="treatment_personalized", **common)
-    assert control[0].product_id == "P001"
-    assert personalized[0].category == "配件"
+    ranked = catalog.search(
+        profile=profile,
+        categories=[],
+        min_price_cents=0,
+        max_price_cents=1_000_000,
+        tags=[],
+        limit=5,
+    )
+    assert ranked[0].category == "配件"
 
 
 def test_inventory_and_final_output_are_canonical(catalog: Catalog) -> None:
@@ -92,7 +90,7 @@ def test_inventory_and_final_output_are_canonical(catalog: Catalog) -> None:
             )
         ]
     )
-    result = catalog.finalize(draft, request, profile, "treatment_personalized")
+    result = catalog.finalize(draft, request, profile)
     assert result[0].price_cents == next(
         product.price_cents for product in catalog.products if product.product_id == "P003"
     )
@@ -115,7 +113,7 @@ def test_unknown_recommended_product_is_rejected(catalog: Catalog) -> None:
         ]
     )
     with pytest.raises(CatalogError, match="unknown_recommended_product"):
-        catalog.finalize(draft, request, profile, "control")
+        catalog.finalize(draft, request, profile)
 
 
 def test_finalize_reads_current_inventory(tmp_path) -> None:
@@ -138,7 +136,7 @@ def test_finalize_reads_current_inventory(tmp_path) -> None:
         catalog.database.connection.commit()
 
         with pytest.raises(CatalogError, match="no_available_recommendations"):
-            catalog.finalize(draft, request, profile, "control")
+            catalog.finalize(draft, request, profile)
     finally:
         catalog.close()
 
@@ -161,7 +159,7 @@ def test_finalize_enforces_profile_price_range(catalog: Catalog) -> None:
     )
 
     with pytest.raises(CatalogError, match="no_available_recommendations"):
-        catalog.finalize(draft, request, profile, "control")
+        catalog.finalize(draft, request, profile)
 
 
 def test_invalid_tool_inputs_are_rejected_instead_of_corrected(catalog: Catalog) -> None:
@@ -169,7 +167,6 @@ def test_invalid_tool_inputs_are_rejected_instead_of_corrected(catalog: Catalog)
     with pytest.raises(CatalogError, match="invalid_product_search_price_range"):
         catalog.search(
             profile=profile,
-            group="control",
             categories=[],
             min_price_cents=100,
             max_price_cents=10,
@@ -179,7 +176,6 @@ def test_invalid_tool_inputs_are_rejected_instead_of_corrected(catalog: Catalog)
     with pytest.raises(CatalogError, match="invalid_product_search_limit"):
         catalog.search(
             profile=profile,
-            group="control",
             categories=[],
             min_price_cents=0,
             max_price_cents=100,

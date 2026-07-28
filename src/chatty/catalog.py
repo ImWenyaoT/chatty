@@ -5,7 +5,6 @@ from pathlib import Path
 from chatty import config
 from chatty.database import Database
 from chatty.models import (
-    ExperimentGroup,
     KnowledgeHit,
     MarketingStrategy,
     Product,
@@ -90,7 +89,6 @@ class Catalog:
         self,
         *,
         profile: UserProfile,
-        group: ExperimentGroup,
         categories: list[str],
         min_price_cents: int,
         max_price_cents: int,
@@ -119,19 +117,12 @@ class Catalog:
         ]
         return sorted(
             candidates,
-            key=lambda product: self.score(product, profile, group),
+            key=lambda product: self.score(product, profile),
             reverse=True,
         )[:limit]
 
-    def score(
-        self,
-        product: Product,
-        profile: UserProfile,
-        group: ExperimentGroup,
-    ) -> float:
-        # 对照组只用热度，实验组才加入画像与近期行为信号。
-        if group == "control":
-            return round(product.popularity_score, 4)
+    def score(self, product: Product, profile: UserProfile) -> float:
+        """给商品打分：热度打底，再叠加画像匹配、近期行为和价格区间三个信号。"""
         preferred = {value.casefold() for value in profile.preferred_categories}
         signals = {value.casefold() for value in profile.recent_views + profile.recent_purchases}
         searchable = {
@@ -178,7 +169,6 @@ class Catalog:
         draft: RecommendationDraft,
         request: RecommendationRequest,
         profile: UserProfile,
-        group: ExperimentGroup,
     ) -> list[RecommendedProduct]:
         # 最终响应重新读取 SQLite；模型输出和启动缓存都不能充当库存真值。
         # 为什么要重查：模型可能记错价格，而且从工具查库存到现在，库存也可能已经变了。
@@ -213,7 +203,7 @@ class Catalog:
                     brand=product.brand,
                     stock=product.stock,
                     tags=product.tags,
-                    score=self.score(product, profile, group),
+                    score=self.score(product, profile),
                     low_stock=product.stock <= 100,
                     # 只有这两项来自模型，而且要先过一遍禁词替换。
                     reason=self.sanitize(item.reason),

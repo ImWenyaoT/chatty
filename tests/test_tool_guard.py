@@ -10,7 +10,6 @@ from __future__ import annotations
 import pytest
 
 from chatty.catalog import Catalog
-from chatty.experiments import ExperimentMetrics
 from chatty.models import RecommendationRequest
 from chatty.tools import (
     TOOL_NAMES,
@@ -25,7 +24,6 @@ def _context() -> RecommendationContext:
     return RecommendationContext(
         request=RecommendationRequest(user_id="user_active"),
         catalog=catalog,
-        experiment_group=ExperimentMetrics().assign("user_active"),
     )
 
 
@@ -205,7 +203,6 @@ async def test_multiple_searches_accumulate_evidence() -> None:
 
     service = Recommender(
         Catalog(),
-        ExperimentMetrics(),
         model=ScriptedModel(script),
         model_id="scripted-model",
     )
@@ -237,7 +234,6 @@ def test_blank_categories_are_rejected_not_ignored() -> None:
         with pytest.raises(CatalogError, match="invalid_product_search_categories"):
             context.catalog.search(
                 profile=profile,
-                group=context.experiment_group,
                 categories=["  ", ""],
                 min_price_cents=0,
                 max_price_cents=1_000_000,
@@ -257,7 +253,6 @@ def test_blank_tags_are_rejected_not_ignored() -> None:
         with pytest.raises(CatalogError, match="invalid_product_search_tags"):
             context.catalog.search(
                 profile=profile,
-                group=context.experiment_group,
                 categories=["耳机"],
                 min_price_cents=0,
                 max_price_cents=1_000_000,
@@ -283,7 +278,7 @@ async def test_retrieved_documents_are_marked_as_data_not_instructions() -> None
     from tests.test_agent import ScriptedModel, successful_script
 
     model = ScriptedModel(successful_script())
-    service = Recommender(Catalog(), ExperimentMetrics(), model=model, model_id="scripted-model")
+    service = Recommender(Catalog(), model=model, model_id="scripted-model")
     try:
         await service.recommend(RecommendationRequest(user_id="user_active"))
     finally:

@@ -139,11 +139,10 @@ uv run python -c "
 import asyncio
 from chatty.agent import Recommender
 from chatty.catalog import Catalog
-from chatty.experiments import ExperimentMetrics
 from chatty.models import RecommendationRequest, UserContext
 
 async def main():
-    service = Recommender(Catalog(), ExperimentMetrics())
+    service = Recommender(Catalog())
     try:
         response = await service.recommend(RecommendationRequest(
             user_id='user_active',
@@ -184,7 +183,7 @@ uv run python -m evals --ablation     # 消融对比
 
 ## 测试
 
-67 项，全部跑在脚本化模型上，**不联网、不花钱、毫秒级**。
+65 项，全部跑在脚本化模型上，**不联网、不花钱、毫秒级**。
 
 ```bash
 uv run ruff check .
@@ -201,18 +200,17 @@ uv run pytest -q
 ```text
 chatty/
 ├── data/                     # JSON、JSONL 可读种子（商品、知识、画像、同义词）
-├── src/chatty/               # 9 个模块，按"数据 → 业务 → Agent"三层排列
+├── src/chatty/               # 8 个模块，按"数据 → 业务 → Agent"三层排列
 │   ├── models.py             # 数据契约：所有 Pydantic 模型
 │   ├── database.py           # 中文分词、分块、建表、种子导入、连接管理
 │   ├── repositories.py       # 结构化查询 + FTS5 全文检索
 │   ├── catalog.py            # 搜索排序、finalize 重查与禁词过滤
 │   ├── tools.py              # 五个 Function Tool、序列校验、循环检测
 │   ├── agent.py              # Agent Loop 编排与 Harness 证据校验
-│   ├── experiments.py        # A/B 稳定分桶与进程内指标
 │   ├── debug.py              # Agent 运行轨迹
 │   └── config.py             # 模型与调试配置
 ├── evals/                    # 评估：任务集、Rubric、检索指标、消融实验
-├── tests/                    # 67 项，覆盖 Harness 契约与评估框架自身
+├── tests/                    # 65 项，覆盖 Harness 契约与评估框架自身
 └── docs/                     # 架构与代码走读
 ```
 

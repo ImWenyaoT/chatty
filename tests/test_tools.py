@@ -15,7 +15,6 @@ async def test_tools_use_run_context_and_catalog() -> None:
     context = RecommendationContext(
         request=RecommendationRequest(user_id="user_active"),
         catalog=Catalog(),
-        experiment_group="treatment_personalized",
     )
     tools = {tool.name: tool for tool in build_tools()}
 

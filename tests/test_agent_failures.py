@@ -8,7 +8,6 @@ import chatty.agent
 from chatty import config
 from chatty.agent import RecommendationError, Recommender
 from chatty.catalog import Catalog
-from chatty.experiments import ExperimentMetrics
 from chatty.models import RecommendationRequest
 from tests.test_agent import ScriptedModel, ToolStep, successful_script
 
@@ -19,7 +18,6 @@ async def test_unexpected_failure_is_not_retriable(caplog) -> None:
     caplog.set_level(logging.ERROR, logger="chatty.agent")
     service = Recommender(
         Catalog(),
-        ExperimentMetrics(),
         model=ScriptedModel([]),
         model_id="failing-scripted-model",
     )
@@ -39,7 +37,7 @@ async def test_missing_model_key_is_retriable(monkeypatch) -> None:
     """缺配置属于环境问题：补上密钥后同样的请求就能成功，因此标记为可重试。"""
     monkeypatch.setattr(config, "load_root_env", lambda: None)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    service = Recommender(Catalog(), ExperimentMetrics())
+    service = Recommender(Catalog())
     try:
         with pytest.raises(RecommendationError) as error:
             await service.recommend(RecommendationRequest(user_id="user_active"))
@@ -65,7 +63,6 @@ async def test_empty_rag_evidence_is_rejected() -> None:
     )
     service = Recommender(
         Catalog(),
-        ExperimentMetrics(),
         model=ScriptedModel(script),
         model_id="scripted-model",
     )
@@ -83,7 +80,6 @@ async def test_missing_required_tool_is_rejected() -> None:
     del script[0]
     service = Recommender(
         Catalog(),
-        ExperimentMetrics(),
         model=ScriptedModel(script),
         model_id="scripted-model",
     )
@@ -101,7 +97,6 @@ async def test_tools_must_run_in_order() -> None:
     script[0], script[1] = script[1], script[0]
     service = Recommender(
         Catalog(),
-        ExperimentMetrics(),
         model=ScriptedModel(script),
         model_id="scripted-model",
     )
@@ -123,7 +118,6 @@ async def test_marketing_strategy_must_match_profile() -> None:
     )
     service = Recommender(
         Catalog(),
-        ExperimentMetrics(),
         model=ScriptedModel(script),
         model_id="scripted-model",
     )
@@ -136,11 +130,9 @@ async def test_marketing_strategy_must_match_profile() -> None:
 
 
 @pytest.mark.asyncio
-async def test_response_construction_failure_is_not_counted_as_success(monkeypatch) -> None:
-    metrics = ExperimentMetrics()
+async def test_response_construction_failure_raises_instead_of_succeeding(monkeypatch) -> None:
     service = Recommender(
         Catalog(),
-        metrics,
         model=ScriptedModel(successful_script()),
         model_id="scripted-model",
     )
@@ -154,10 +146,6 @@ async def test_response_construction_failure_is_not_counted_as_success(monkeypat
             await service.recommend(RecommendationRequest(user_id="user_active"))
     finally:
         await service.close()
-
-    snapshot = metrics.metrics_snapshot()
-    assert snapshot["successes"] == 0
-    assert snapshot["failures"] == 1
 
 
 @pytest.mark.asyncio
@@ -213,7 +201,6 @@ async def test_recommendation_requires_product_evidence(
     script[script_index] = replacement
     service = Recommender(
         Catalog(),
-        ExperimentMetrics(),
         model=ScriptedModel(script),
         model_id="scripted-model",
     )

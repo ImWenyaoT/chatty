@@ -9,7 +9,6 @@ from __future__ import annotations
 import pytest
 
 from chatty.models import (
-    ExperimentGroup,
     RecommendationResponse,
     RecommendedProduct,
 )
@@ -44,11 +43,9 @@ def _product(
 
 
 def _response(*products: RecommendedProduct) -> RecommendationResponse:
-    group: ExperimentGroup = "control"
     return RecommendationResponse(
         request_id="request_test",
         user_id="user_active",
-        experiment_group=group,
         products=list(products),
         total_latency_ms=12.0,
     )
