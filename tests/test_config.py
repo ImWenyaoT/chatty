@@ -1,0 +1,63 @@
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+
+from chatty import config
+from chatty.debug import AgentDebugHooks
+
+
+def test_default_model_is_current_deepseek_v4_pro() -> None:
+    assert config.DEFAULT_MODEL_ID == "deepseek-v4-pro"
+
+
+def test_env_supports_dotenv_syntax(tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / ".env").write_text(
+        'MODEL_PREFIX="deepseek"\nMODEL_ID=${MODEL_PREFIX}-v4-pro\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(config, "ROOT", tmp_path)
+    monkeypatch.delenv("MODEL_PREFIX", raising=False)
+    monkeypatch.delenv("MODEL_ID", raising=False)
+
+    assert config.configured_model_id() == "deepseek-v4-pro"
+
+
+def test_process_environment_takes_precedence(tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / ".env").write_text("MODEL_ID=from-file\n", encoding="utf-8")
+    monkeypatch.setattr(config, "ROOT", tmp_path)
+    monkeypatch.setenv("MODEL_ID", "from-process")
+
+    assert config.configured_model_id() == "from-process"
+
+
+def test_agent_debug_is_explicitly_enabled(monkeypatch) -> None:
+    monkeypatch.delenv("CHATTY_AGENT_DEBUG", raising=False)
+    assert config.agent_debug_enabled() is False
+
+    for value in ("1", "true", "YES", "on"):
+        monkeypatch.setenv("CHATTY_AGENT_DEBUG", value)
+        assert config.agent_debug_enabled() is True
+
+    monkeypatch.setenv("CHATTY_AGENT_DEBUG", "invalid")
+    assert config.agent_debug_enabled() is False
+
+
+def test_debug_hooks_emit_without_external_logging_setup(capsys) -> None:
+    logger = logging.getLogger("chatty.agent")
+    previous_level = logger.level
+    previous_handlers = logger.handlers[:]
+    previous_propagate = logger.propagate
+    try:
+        logger.handlers.clear()
+        logger.setLevel(logging.NOTSET)
+        hooks = AgentDebugHooks("scripted-model")
+        hooks.record_failure("test_failure")
+
+        assert '"event": "failure"' in capsys.readouterr().err
+    finally:
+        for handler in logger.handlers:
+            handler.close()
+        logger.handlers[:] = previous_handlers
+        logger.setLevel(previous_level)
+        logger.propagate = previous_propagate
