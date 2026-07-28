@@ -213,7 +213,7 @@ chatty/
 └── docs/                     # 架构与代码走读
 ```
 
-进一步材料：[系统架构](docs/architecture.md) · [代码讲解](docs/code-walkthrough.md) · [评估说明](evals/README.md)
+进一步材料：[系统架构](docs/architecture.md) · [设计决策与踩过的坑](docs/code-walkthrough.md) · [评估说明](evals/README.md)
 
 ## License
 
