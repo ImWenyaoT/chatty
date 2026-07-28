@@ -26,3 +26,17 @@ uv run ruff check .
 uv run ty check
 uv run pytest -q
 ```
+
+## Agent skills
+
+### Issue tracker
+
+Issues/PRD 存于本仓库 GitHub Issues，用 `gh` CLI 读写。See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+沿用默认五标签（`needs-triage` / `needs-info` / `ready-for-agent` / `ready-for-human` / `wontfix`）。See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+单上下文：根 `CONTEXT.md` 是唯一的领域词汇入口。See `docs/agents/domain.md`.
