@@ -107,18 +107,11 @@ def parse_recommendation_draft(raw_output: object) -> RecommendationDraft:
 # 重试有没有意义，是调用方最需要知道的一件事。
 # 配置缺失属于环境问题，补上密钥后同样的请求就能成功；
 # 其余错误都是这一轮 Agent 逻辑上没走通，原样重试大概率还是同样结果。
-_RETRIABLE_CODES = frozenset({"llm_not_configured"})
-
-
 class RecommendationError(RuntimeError):
     """带错误码的业务异常。
 
     code 是一个稳定的字符串（如 "product_not_recalled"），
     调用方靠它判断失败原因，测试也靠它断言。
-
-    retriable 表示"原样重试是否有意义"。这个语义属于领域层而不是传输层——
-    将来无论对外是 HTTP、gRPC 还是消息队列，都可以据此映射
-    （例如 HTTP 下 retriable=True 对应 503、False 对应 502）。
 
     diagnostics 是可选的结构化上下文，只用于日志和离线评估定位根因，
     不应该暴露给外部调用方——对外只给稳定的 code。
@@ -127,7 +120,6 @@ class RecommendationError(RuntimeError):
     def __init__(self, code: str, diagnostics: dict[str, object] | None = None) -> None:
         super().__init__(code)
         self.code = code
-        self.retriable = code in _RETRIABLE_CODES
         self.diagnostics = diagnostics or {}
 
 

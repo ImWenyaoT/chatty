@@ -13,8 +13,8 @@ from tests.test_agent import ScriptedModel, ToolStep, successful_script
 
 
 @pytest.mark.asyncio
-async def test_unexpected_failure_is_not_retriable(caplog) -> None:
-    """未预期的故障要暴露成不可重试的失败，且留下可定位的日志。"""
+async def test_unexpected_failure_is_exposed_with_code(caplog) -> None:
+    """未预期的故障要暴露成带错误码的失败，且留下可定位的日志——绝不静默降级。"""
     caplog.set_level(logging.ERROR, logger="chatty.agent")
     service = Recommender(
         Catalog(),
@@ -28,13 +28,12 @@ async def test_unexpected_failure_is_not_retriable(caplog) -> None:
         await service.close()
 
     assert error.value.code == "recommendation_failed"
-    assert error.value.retriable is False  # 原样重试没有意义
     assert "Unexpected recommendation failure" in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_missing_model_key_is_retriable(monkeypatch) -> None:
-    """缺配置属于环境问题：补上密钥后同样的请求就能成功，因此标记为可重试。"""
+async def test_missing_model_key_maps_to_its_own_code(monkeypatch) -> None:
+    """缺配置要有自己的错误码，不能和 Agent 逻辑失败混成一个码。"""
     monkeypatch.setattr(config, "load_root_env", lambda: None)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     service = Recommender(Catalog())
@@ -45,7 +44,6 @@ async def test_missing_model_key_is_retriable(monkeypatch) -> None:
         await service.close()
 
     assert error.value.code == "llm_not_configured"
-    assert error.value.retriable is True
 
 
 @pytest.mark.asyncio

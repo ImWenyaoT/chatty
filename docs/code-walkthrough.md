@@ -177,15 +177,14 @@ flowchart LR
 
 调试 hooks 记录 `llm_input → llm_output → tool_call → tool_result → agent_output → response/failure`。Tool 调用与结果通过 `call_id` 对齐；日志不记录模型隐藏思维过程。
 
-## 9. 失败语义：没有 HTTP 层，但保留了可重试性
+## 9. 失败语义：明确失败，绝不静默降级
 
-Chatty 是库不是服务，失败以 `RecommendationError` 抛出。
-异常自带 `retriable` 字段表示“原样重试是否有意义”：
-`llm_not_configured` 是环境问题（补上密钥就能成功）故为 `True`，
-其余都是这一轮 Agent 逻辑没走通故为 `False`。
+Chatty 是库不是服务，失败以 `RecommendationError` 抛出，带一个稳定的错误码
+（如 `product_not_recalled`）。调用方靠它判断失败原因，测试也靠它断言。
 
-这个判断放在领域层而不是传输层，将来对外包 HTTP、gRPC 或消息队列都能直接映射
-（HTTP 下 `True` → 503、`False` → 502）。
+异常还带一个 `diagnostics` 字典，装的是定位根因需要的结构化上下文
+（比如模型推荐了哪些商品、其中哪些没有证据支撑）。它只进日志和离线评估，
+不对外暴露——对外只给稳定的 code。
 
 ## 10. 测试与评估
 

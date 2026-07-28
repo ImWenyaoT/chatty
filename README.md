@@ -172,8 +172,7 @@ uv run python -m evals --ablation     # 消融对比
 
 **没有 HTTP 层。** 入口是 `Recommender.recommend()`，没有 FastAPI、没有前端，也没有面向业务的 CLI（`python -m evals` 只是评估入口）。
 这个项目要验证的是 Agent Loop 与 Harness 校验，不是怎么把它包成 Web 服务。
-不过失败语义保留了"是否值得重试"这一维（`RecommendationError.retriable`），
-放在领域层而非传输层，将来对外暴露任何协议都能据此映射。
+失败以带错误码的 `RecommendationError` 抛出，错误码本身就是给调用方的稳定契约。
 
 **没有向量库。** 理由见「检索层」。什么时候该换：知识库上万篇、
 用户表达高度自由、同义词表维护不过来的时候。

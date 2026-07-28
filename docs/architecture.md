@@ -134,18 +134,17 @@ flowchart LR
 
 ## 7. 失败处理
 
-Chatty 是库不是服务，失败以 `RecommendationError` 抛出，
-`retriable` 表示原样重试是否有意义（对外若包 HTTP，可据此映射 503 / 502）。
+Chatty 是库不是服务，失败以带错误码的 `RecommendationError` 抛出。
 
-| 场景 | 错误码 | `retriable` |
-|---|---|:---:|
-| 未配置模型密钥 | `llm_not_configured` | ✅ |
-| 工具缺失或依赖顺序错误 | `required_tools_not_used` | ❌ |
-| 检索无命中 | `knowledge_not_retrieved` | ❌ |
-| 用户画像未加载 | `profile_not_loaded` | ❌ |
-| 商品未经召回 / 库存 / 知识证明 | `product_not_*`、`inventory_not_checked` | ❌ |
-| 输出无法通过校验 | `invalid_recommendation` | ❌ |
-| 模型或 Agent Loop 失败 | `recommendation_failed` | ❌ |
-| 请求字段不合法 | Pydantic `ValidationError` | — |
+| 场景 | 错误码 |
+|---|---|
+| 未配置模型密钥 | `llm_not_configured` |
+| 工具缺失或依赖顺序错误 | `required_tools_not_used` |
+| 检索无命中 | `knowledge_not_retrieved` |
+| 用户画像未加载 | `profile_not_loaded` |
+| 商品未经召回、库存或知识证明 | `product_not_*`、`inventory_not_checked` |
+| 输出无法通过校验 | `invalid_recommendation` |
+| 模型或 Agent Loop 失败 | `recommendation_failed` |
+| 请求字段不合法 | Pydantic `ValidationError` |
 
 错误会写入日志，不返回静默降级结果。
