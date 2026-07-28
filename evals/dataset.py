@@ -86,7 +86,7 @@ _L1: tuple[EvalTask, ...] = (
     EvalTask(
         task_id="L1-earphone-active",
         level=Level.L1,
-        intent="活跃用户找降噪耳机——类目内有两款在售且都有知识文档，最标准的成功路径",
+        intent="活跃用户找降噪耳机——耳机类目 5 款里 P003、P004 有知识文档，最标准的成功路径",
         user_id="user_active",
         expect=Expect.SUCCEED,
         categories=["耳机"],
@@ -96,7 +96,7 @@ _L1: tuple[EvalTask, ...] = (
     EvalTask(
         task_id="L1-accessory-budget",
         level=Level.L1,
-        intent="价格敏感用户找配件——三款配件都远低于预算上限，考察低价场景",
+        intent="价格敏感用户找配件——五款配件都远低于预算上限，考察低价场景",
         user_id="user_budget",
         expect=Expect.SUCCEED,
         categories=["配件"],
@@ -192,7 +192,7 @@ _L2: tuple[EvalTask, ...] = (
     EvalTask(
         task_id="L2-vip2-high-floor",
         level=Level.L2,
-        intent="画像价格下限 50 万——电脑/平板里只有三款够格，其余全部低于下限",
+        intent="画像价格下限 50 万——电脑、平板里只有三款够格，其余全部低于下限",
         user_id="user_vip_2",
         expect=Expect.SUCCEED,
         categories=["电脑", "平板"],

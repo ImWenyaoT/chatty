@@ -12,7 +12,6 @@
 class RecommendationRequest(StrictModel):
     # 字段约束在请求进入 Agent loop 前生效。
     user_id: str = Field(min_length=1, max_length=64)
-    scene: Scene = "homepage"
     num_items: int = Field(default=5, ge=1, le=10)
     # 每个请求创建独立 context，避免共享可变默认值。
     context: UserContext = Field(default_factory=UserContext)
@@ -37,11 +36,19 @@ def load_root_env() -> None:
 1. **中文分词** —— `segment_for_index` 把汉字逐个用空格隔开。
    必须有这一步：FTS5 的 `unicode61` 分词器把一整段无空格中文当作**单个 token**，
    不做处理的话 `MATCH "价格"` 检索不到「…价格敏感用户…」。索引和查询两侧都要用。
-2. **表结构** —— 业务表 + FTS5 虚拟表 + 种子元数据表。
-3. **种子导入** —— 先算 `data/` 目录的 SHA-256 指纹，与库里记录的比对：
+2. **分块** —— `split_into_chunks` 把长知识文档切成约 160 字一块、相邻块重叠 40 字，
+   且只在句号、感叹号、问号、分号这些句子边界处切，不切断句子。
+   为什么要切：整篇入库的话，检索命中一篇 800 字的文档会把 800 字全塞回模型，
+   其中大半和当前查询无关；切成块之后命中哪块返回哪块。
+   重叠 40 字是为了防止一个完整意思刚好被切口劈成两半，两边都读不通。
+   52 篇文档切完是 85 个块，**索引单位是块不是文档**。
+3. **表结构** —— 业务表 + FTS5 虚拟表 + 种子元数据表。
+   FTS5 表里存两列内容：`content` 是分好词的（给检索用），
+   `raw_content` 是原文（给返回用）——不能把带空格的分词结果直接给模型看。
+4. **种子导入** —— 先算 `data/` 目录的 SHA-256 指纹，与库里记录的比对：
    一致就跳过导入，不一致才在一个事务里重建。既避免每次启动重复灌数据，
    也避免“数据库存在但只导入了一半”的静默失败。
-4. **连接管理** —— `Database` 类，对外只暴露 `connection` 和 `lock`。
+5. **连接管理** —— `Database` 类，对外只暴露 `connection` 和 `lock`。
 
 ## 4. `repositories.py`：两条读取路径
 
@@ -53,9 +60,10 @@ def load_root_env() -> None:
 
 两者都只把数据库的行转成 Pydantic 模型，不做任何推荐决策。Agent 不直接执行 SQL。
 
-**面试怎么说**：知识检索是稀疏检索——FTS5 倒排索引 + BM25 排序 + Top-K。
-没有向量库，因为知识库只有几十篇短文档、领域词汇固定，
-关键词匹配够用；代价是不理解同义词，这条边界写在工具描述里告诉了模型。
+**面试怎么说**：知识检索是稀疏检索——FTS5 倒排索引 + BM25 排序 + Top-K 块。
+没有向量库，因为 52 篇文档、85 个块的规模下，嵌入模型带来的语义泛化
+用同义词表就覆盖了大半（`rewrite_query` 会把"保护视力"补成"保护视力 护眼"）。
+剩下的边界是词表穷举不了的说法，这条写在工具描述里告诉了模型。
 
 ## 5. `catalog.py`：搜索与业务校验
 
@@ -90,6 +98,8 @@ return [
     function_tool(
         get_user_profile,
         name_override="get_user_profile",
+        # 描述按三原则写：何时用、边界、参数示例（见下文）
+        description_override="获取当前用户的画像：所属分群、偏好类目、可接受的价格区间…",
     )
 ]
 ```
@@ -120,6 +130,8 @@ agent = Agent[RecommendationContext](
     name="Chatty",
     instructions=AGENT_INSTRUCTIONS,
     model=model,
+    # DeepSeek 需要显式关掉思考模式，这是供应商适配的一部分
+    model_settings=ModelSettings(extra_body={"thinking": {"type": "disabled"}}),
     tools=build_tools(),
 )
 
@@ -183,7 +195,7 @@ Chatty 是库不是服务，失败以 `RecommendationError` 抛出。
 
 ## 11. 测试与评估
 
-**测试**（44 个，`tests/`）验证的是 Harness 契约，全部跑在脚本模型上，不联网不花钱：
+**测试**（67 项，`tests/`）验证的是 Harness 契约，全部跑在脚本模型上，不联网不花钱：
 
 - 数据测试：类目覆盖度、每个类目都有知识文档、种子修复
 - Tool 测试：五个工具各自的证据记录与前置校验

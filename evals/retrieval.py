@@ -47,7 +47,8 @@ class RetrievalCase:
 # ============================================================================
 # 标注集。覆盖三类查询，正好对应稀疏检索的强项与弱项：
 #   A. 词面直接命中 —— BM25 的强项
-#   B. 同义/近义表达 —— BM25 的弱项，教材 3.2 说这正是稠密检索的价值所在
+#   B. 同义/近义表达 —— BM25 的天然弱项。这几条靠同义词表兜住了，
+#      但词表是穷举的：没收录的说法照样漏，这才是真正的边界
 #   C. 跨类目通用查询 —— 检验过滤条件是否正确收窄范围
 # ============================================================================
 
@@ -90,14 +91,14 @@ RETRIEVAL_CASES: tuple[RetrievalCase, ...] = (
         product_ids=["P040", "P016"],
         relevant_docs=frozenset({"K027", "K007"}),
     ),
-    # ── B. 同义表达（BM25 的已知弱项，预期会失败）──
+    # ── B. 同义表达（BM25 认字面不认语义，靠 query_synonyms.json 桥接）──
     RetrievalCase(
         case_id="R06-synonym-quiet",
         query="安静 静音 耳机",
         categories=["耳机"],
         product_ids=["P003", "P004"],
         relevant_docs=frozenset({"K001", "K002", "K003"}),
-        note="'静音'与文档里的'降噪'是同义表达，但 BM25 只认字面——预期召回失败",
+        note="'静音'与文档里的'降噪'是同义表达，BM25 只认字面，靠同义词表桥接",
     ),
     RetrievalCase(
         case_id="R07-synonym-eyecare",
@@ -105,7 +106,7 @@ RETRIEVAL_CASES: tuple[RetrievalCase, ...] = (
         categories=["家电"],
         product_ids=["P019"],
         relevant_docs=frozenset({"K031"}),
-        note="文档里写的是'护眼'，查询用'保护视力'——同样的字面不匹配问题",
+        note="文档写'护眼'，查询用'保护视力'——同义词表把两者对上",
     ),
     RetrievalCase(
         case_id="R08-synonym-battery",
@@ -113,7 +114,7 @@ RETRIEVAL_CASES: tuple[RetrievalCase, ...] = (
         categories=["穿戴"],
         product_ids=["P031", "P032"],
         relevant_docs=frozenset({"K015", "K024"}),
-        note="文档写'长续航'，查询用'电池耐用'",
+        note="文档写'长续航'，查询用'电池耐用'——同上，靠词表桥接",
     ),
     # ── C. 过滤条件是否正确收窄 ──
     RetrievalCase(

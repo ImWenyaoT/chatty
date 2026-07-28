@@ -18,7 +18,7 @@ sequenceDiagram
     participant DB as SQLite
     CALLER->>H: RecommendationRequest
     H->>R: Runner.run
-    loop 五个 Tool 严格依序执行
+    loop 工具调用（允许重复，仅依赖链有序）
         R->>M: instructions + history
         M->>R: tool call
         R->>T: 校验参数并执行
@@ -39,7 +39,7 @@ sequenceDiagram
     H->>C: 校验调用顺序与证据集合
     H->>CAT: finalize
     CAT->>DB: 重查最终商品
-    H-->>API: RecommendationResponse
+    H-->>CALLER: RecommendationResponse
 ```
 
 ## 2. 组件职责
@@ -54,7 +54,7 @@ sequenceDiagram
 
 ## 3. Agent Loop
 
-Agent 必须完成五步：
+Agent 需要完成五件事：
 
 1. 获取用户画像
 2. 搜索候选商品
@@ -62,7 +62,15 @@ Agent 必须完成五步：
 4. 检索相关商品知识
 5. 获取用户分群对应的营销策略
 
-服务端记录 Tool 调用顺序。缺少、重复、乱序或没有检索到知识时，本次推荐失败。
+Harness 记录实际的 Tool 调用序列，但**不要求严格依序各调一次**：
+
+- 五个工具都必须调用过，**允许重复**——搜不到换条件重搜、知识不够补充检索都是合理行为
+- 只有真实的数据依赖必须保持先后：画像 → 搜索 → 库存
+- 检索与营销策略之间没有依赖，谁先谁后都行
+
+真正会导致失败的是：漏调工具、调用未注册的工具、依赖顺序颠倒、知识检索无命中。
+另外同一工具用**完全相同的参数**调用超过三次会被拦截，防止模型原地打转耗尽轮次预算——
+这条拦截会把错误信息回给模型让它自行调整，不中断流程。
 
 ## 4. 数据流
 
@@ -79,30 +87,37 @@ JSON 和 JSONL 只负责初始化。Catalog 启动时从 SQLite 建立商品、�
 
 ## 5. 轻量 RAG
 
-Retrieval-Augmented Generation（RAG）流程包含四步：
+检索走稀疏路线（FTS5 倒排索引 + BM25），不用向量。索引单位是**块**不是整篇文档：
+入库时长文档按句子边界切成约 160 字的块、相邻块重叠 40 字，检索命中哪块就返回哪块。
+
+流程五步：
 
 1. `retrieve_knowledge` 接收查询词、类目和候选商品 ID
-2. SQLite FTS5 执行 `MATCH`
-3. BM25 对结果排序并返回 Top-K 文档
-4. Agent 根据检索内容生成推荐理由和营销文案
-
-知识检索使用 SQLite FTS5 与 BM25。
+2. **查询改写**：用同义词表把用户说法补上知识库用词（查「保护视力」补出「护眼」）
+3. SQLite FTS5 执行 `MATCH`，类目与商品范围作为 SQL 条件先缩范围
+4. BM25 排序并返回 Top-K 知识块，外面包一层来源标记（防间接提示注入）
+5. Agent 根据检索内容生成推荐理由和营销文案
 
 ```mermaid
 flowchart LR
-    INPUT["query + categories + product_ids"] --> MATCH["FTS5 MATCH"]
+    INPUT["query + categories + product_ids"] --> REWRITE["同义词查询改写"]
+    REWRITE --> MATCH["FTS5 MATCH（索引单位是块）"]
     MATCH --> FILTER["类目与商品范围过滤"]
     FILTER --> RANK["BM25 排序"]
     RANK --> TOPK["Top-K KnowledgeHit"]
-    TOPK --> MODEL["tool result 进入下一轮输入"]
+    TOPK --> MODEL["带来源标记回填进下一轮输入"]
 ```
+
+两个实现细节：查询词最多取前 8 个（已写进工具描述告知模型）；
+中文需要在索引和查询两侧都按字切分，否则 FTS5 的 `unicode61` 会把整段无空格中文
+当成单个 token，`MATCH "价格"` 检索不到「…价格敏感用户…」。
 
 ## 6. 模型输出边界
 
 模型只生成商品 ID、推荐理由和营销文案。Catalog 返回响应前会：
 
 - 拒绝不存在的商品 ID
-- 过滤库存为零的商品
+- 过滤售罄或价格超出用户画像区间的商品
 - 从 SQLite 重新填充名称、价格、库存和标签
 - 限制推荐数量
 - 替换营销禁词
@@ -141,6 +156,7 @@ Chatty 是库不是服务，失败以 `RecommendationError` 抛出，
 | 未配置模型密钥 | `llm_not_configured` | ✅ |
 | 工具缺失或依赖顺序错误 | `required_tools_not_used` | ❌ |
 | 检索无命中 | `knowledge_not_retrieved` | ❌ |
+| 用户画像未加载 | `profile_not_loaded` | ❌ |
 | 商品未经召回 / 库存 / 知识证明 | `product_not_*`、`inventory_not_checked` | ❌ |
 | 输出无法通过校验 | `invalid_recommendation` | ❌ |
 | 模型或 Agent Loop 失败 | `recommendation_failed` | ❌ |

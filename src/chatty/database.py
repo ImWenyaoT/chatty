@@ -422,7 +422,7 @@ class Database:
         self.data_dir = Path(data_dir or config.DATA_DIR)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = RLock()
-        # 连接允许 FastAPI 线程池复用，所有访问仍由同一把锁串行保护。
+        # 连接可能被多个线程复用，所有访问都由同一把锁串行保护。
         self._connection = sqlite3.connect(self.path, check_same_thread=False)
         self._connection.row_factory = sqlite3.Row
         try:

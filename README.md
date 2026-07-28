@@ -71,7 +71,7 @@ flowchart LR
 
 | Tool | 输入 | 输出 | 数据来源 |
 |---|---|---|---|
-| `get_user_profile` | 用户 ID、请求上下文 | 合并后的用户画像 | SQLite |
+| `get_user_profile` | 无参数，读当前请求 | 合并后的用户画像 | SQLite |
 | `search_products` | 类目、价格、标签、数量 | 候选商品 | SQLite |
 | `check_inventory` | 商品 ID | 有货商品与低库存标记 | SQLite |
 | `retrieve_knowledge` | 查询词、类目、商品 ID | Top-K 知识块 | SQLite FTS5 |
@@ -171,7 +171,7 @@ uv run python -m evals --ablation     # 消融对比
 
 ## 三个刻意的取舍
 
-**没有 HTTP 层。** 入口是 `Recommender.recommend()`，没有 FastAPI、没有前端、没有 CLI。
+**没有 HTTP 层。** 入口是 `Recommender.recommend()`，没有 FastAPI、没有前端，也没有面向业务的 CLI（`python -m evals` 只是评估入口）。
 这个项目要验证的是 Agent Loop 与 Harness 校验，不是怎么把它包成 Web 服务。
 不过失败语义保留了"是否值得重试"这一维（`RecommendationError.retriable`），
 放在领域层而非传输层，将来对外暴露任何协议都能据此映射。
@@ -184,7 +184,7 @@ uv run python -m evals --ablation     # 消融对比
 
 ## 测试
 
-37 → 67 项，全部跑在脚本化模型上，**不联网、不花钱、毫秒级**。
+67 项，全部跑在脚本化模型上，**不联网、不花钱、毫秒级**。
 
 ```bash
 uv run ruff check .
