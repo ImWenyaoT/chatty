@@ -263,7 +263,22 @@ class Recommender:
                     tracing_disabled=True,
                 ),
             )
-            draft = parse_agent_draft(result.final_output)
+            try:
+                draft = parse_agent_draft(result.final_output)
+            except ValidationError:
+                # 多轮场景下，模型有时会用大白话反问而不是按 JSON 格式回。
+                # 一个工具都没调，说明它是在澄清而不是在给推荐——那句话本身就是问题。
+                # 这里可以降级是因为**澄清不涉及业务事实**：没有商品，也就没有
+                # 价格库存可编造。单轮不给这条路（allow_clarify=False），
+                # 那里的输出必须是推荐，格式错就是错。
+                if allow_clarify and not context.used_tools:
+                    return ClarifyReply(
+                        request_id=f"request_{uuid4().hex}",
+                        user_id=request.user_id,
+                        question=str(result.final_output).strip()[:200],
+                        total_latency_ms=(time.perf_counter() - started) * 1000,
+                    )
+                raise
 
             # 澄清轮：这一轮没给商品，也就没有证据可校验，直接把问题回给调用方。
             # 六条校验是针对"推荐"这个动作的，反问不涉及业务事实。
