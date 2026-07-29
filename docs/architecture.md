@@ -8,38 +8,27 @@ Chatty 使用一个 Agent 完成一次电商推荐请求。用户画像、商品
 
 ```mermaid
 sequenceDiagram
-    participant CALLER as 调用方
+    autonumber
+    participant U as 调用方
+    participant H as Harness
     participant M as Model
-    participant R as Runner
-    participant T as Function tools
-    participant C as Run context
-    participant H as Chatty Harness
-    participant CAT as Catalog
+    participant T as 五个 Tool
     participant DB as SQLite
-    CALLER->>H: RecommendationRequest
-    H->>R: Runner.run
-    loop 工具调用（允许重复，仅依赖链有序）
-        R->>M: instructions + history
-        M->>R: tool call
-        R->>T: 校验参数并执行
-        T->>CAT: 受限业务读取
-        alt 库存或知识检索
-            CAT->>DB: 查询当前数据或 FTS5
-            DB-->>CAT: 可信结果
-        else 画像、搜索或营销策略
-            CAT->>CAT: 读取启动投影
-        end
-        CAT-->>T: 结构化结果
-        T->>C: 写入状态与证据
-        T-->>R: tool result
+
+    U->>H: RecommendationRequest
+    loop Agent Loop · 允许重复调用，仅依赖链有序
+        H->>M: instructions + 历史
+        M-->>H: tool call
+        H->>T: 校验参数后执行
+        T->>DB: 受限读取
+        DB-->>T: 当前数据
+        T-->>H: tool result + 写入证据本
     end
-    R->>M: 包含全部 tool results 的输入
-    M-->>R: final output
-    R-->>H: final output + run context
-    H->>C: 校验调用顺序与证据集合
-    H->>CAT: finalize
-    CAT->>DB: 重查最终商品
-    H-->>CALLER: RecommendationResponse
+    M-->>H: JSON 草稿
+    H->>H: 六条证据校验
+    H->>DB: finalize 重查
+    DB-->>H: 真实价格与库存
+    H-->>U: RecommendationResponse
 ```
 
 ## 2. 组件职责
@@ -75,10 +64,9 @@ Harness 记录实际的 Tool 调用序列，但**不要求严格依序各调一�
 
 ```mermaid
 flowchart LR
-    SEED["data/*.json(l)"] -->|"首次启动或指纹变化"| TX["事务初始化"]
-    TX --> DB[(".local/chatty.db")]
-    DB --> B["商品、画像、库存、营销规则"]
-    DB --> K["知识文档与 FTS5 索引"]
+    SEED["data/*.json(l)<br/>六份可读种子"] -->|"启动时在单个事务内导入"| DB[(".local/chatty.db")]
+    DB --> B["商品、画像<br/>营销模板、禁词"]
+    DB --> K["知识文档切块<br/>+ FTS5 倒排索引"]
 ```
 
 JSON 和 JSONL 只负责初始化。Catalog 启动时从 SQLite 建立商品、画像和营销规则投影；
@@ -99,12 +87,10 @@ JSON 和 JSONL 只负责初始化。Catalog 启动时从 SQLite 建立商品、�
 
 ```mermaid
 flowchart LR
-    INPUT["query + categories + product_ids"] --> REWRITE["同义词查询改写"]
-    REWRITE --> MATCH["FTS5 MATCH（索引单位是块）"]
-    MATCH --> FILTER["类目与商品范围过滤"]
-    FILTER --> RANK["BM25 排序"]
-    RANK --> TOPK["Top-K KnowledgeHit"]
-    TOPK --> MODEL["带来源标记回填进下一轮输入"]
+    Q["查询词 + 类目<br/>+ 商品 ID"] --> R["同义词改写<br/>扩展不替换"]
+    R --> M["FTS5 MATCH<br/>索引单位是块"]
+    M --> F["范围过滤<br/>+ BM25 排序"]
+    F --> T["Top-K 结果<br/>带来源标记回填"]
 ```
 
 两个实现细节：查询词最多取前 8 个（已写进工具描述告知模型）；
@@ -125,11 +111,10 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    DRAFT["模型草稿"] --> EVIDENCE{"召回、库存、检索请求范围"}
-    EVIDENCE -->|"不满足"| FAIL["明确失败"]
-    EVIDENCE -->|"满足"| DB["SQLite 重查"]
-    DB --> RULES["价格、库存、数量、禁词"]
-    RULES --> RESPONSE["可信响应"]
+    D["模型草稿"] --> E{"六条证据校验<br/>推荐集 ⊆ 召回 ∩ 库存 ∩ 知识"}
+    E -->|"任一不过"| F["明确失败<br/>带稳定错误码"]
+    E -->|"全过"| DB[("SQLite 重查")]
+    DB --> R["可信响应<br/>价格、库存、禁词已覆盖"]
 ```
 
 ## 7. 失败处理

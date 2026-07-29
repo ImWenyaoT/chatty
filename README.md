@@ -31,18 +31,21 @@ uv run python -m evals --ablation   # 自己跑一遍
 ## 核心设计：Agent = Model + Harness
 
 ```mermaid
-flowchart LR
-    U["推荐请求"] --> A["Agent + Runner"]
-    A --> T1["1. 获取画像"]
-    T1 --> T2["2. 搜索商品"]
-    T2 --> T3["3. 检查库存"]
-    T3 --> T4["4. 检索知识"]
-    T4 --> T5["5. 获取营销策略"]
-    T5 --> D["模型生成草稿"]
-    T1 & T2 & T3 & T4 & T5 --> C["Run context"]
-    C --> H["Harness 证据校验"]
-    D --> H
-    H --> DB[("SQLite 重查")]
+flowchart TB
+    U["推荐请求"] --> A["Agent Loop"]
+    A --> TOOLS
+
+    subgraph TOOLS["五个 Function Tool · 结果写入证据本"]
+        direction LR
+        T1["画像"] --> T2["搜索"] --> T3["库存"]
+        T4["知识检索"]
+        T5["营销策略"]
+    end
+
+    TOOLS --> D["模型草稿<br/>只含 ID、理由、文案"]
+    D --> H{"Harness 六条校验"}
+    H -->|"任一不过"| F["明确失败<br/>带错误码"]
+    H -->|"全过"| DB[("SQLite 重查")]
     DB --> R["可信响应"]
 ```
 
@@ -191,7 +194,13 @@ uv run pytest -q
 
 ```text
 chatty/
-├── data/                     # JSON、JSONL 可读种子（商品、知识、画像、同义词）
+├── data/                     # 六份可读种子，启动时导入 SQLite
+│   ├── products.jsonl        # 43 件商品：价格、库存、类目、标签
+│   ├── user_profiles.jsonl   # 10 个用户画像：分群、偏好类目、价格区间
+│   ├── knowledge_documents.jsonl  # 52 篇商品与选购知识，入库时切成 85 个块
+│   ├── marketing_templates.json   # 各分群的文案语气与规则
+│   ├── forbidden_words.json  # 营销禁词，响应前强制替换
+│   └── query_synonyms.json   # 检索同义词表，不入库、运行时读
 ├── src/chatty/               # 8 个模块，按"数据 → 业务 → Agent"三层排列
 │   ├── models.py             # 数据契约：所有 Pydantic 模型
 │   ├── database.py           # 中文分词、分块、建表、种子导入、连接管理
