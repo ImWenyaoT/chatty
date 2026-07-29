@@ -102,8 +102,35 @@ class RecommendationDraftItem(StrictModel):
     marketing_copy: str = Field(min_length=1, max_length=500)
 
 
-class RecommendationDraft(StrictModel):
-    recommendations: list[RecommendationDraftItem] = Field(min_length=1, max_length=10)
+class AgentDraft(StrictModel):
+    """模型每一轮的输出：要么反问澄清，要么给推荐。
+
+    多轮场景下用户不会一次把需求说全（"想买个耳机"没说预算和场景），
+    Agent 得先问清楚再推荐。单轮场景下模型直接给 recommend，字段完全兼容。
+    """
+
+    action: Literal["clarify", "recommend"] = "recommend"
+    # action=clarify 时用：要反问的那句话
+    question: str | None = Field(default=None, max_length=200)
+    # action=recommend 时用：推荐的商品
+    recommendations: list[RecommendationDraftItem] = Field(default_factory=list, max_length=10)
+
+    @model_validator(mode="after")
+    def payload_matches_action(self) -> AgentDraft:
+        if self.action == "clarify" and not self.question:
+            raise ValueError("clarify 必须给出 question")
+        if self.action == "recommend" and not self.recommendations:
+            raise ValueError("recommend 必须给出 recommendations")
+        return self
+
+
+class ClarifyReply(StrictModel):
+    """Agent 这一轮没给推荐，而是反问了一句。"""
+
+    request_id: str
+    user_id: str
+    question: str
+    total_latency_ms: float = Field(ge=0)
 
 
 class RecommendedProduct(StrictModel):

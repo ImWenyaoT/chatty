@@ -15,13 +15,15 @@ from agents import (
     RunConfig,
     Runner,
 )
+from agents.items import TResponseInputItem
 from pydantic import ValidationError
 
 from chatty import config
 from chatty.catalog import Catalog, CatalogError
 from chatty.debug import AgentDebugHooks
 from chatty.models import (
-    RecommendationDraft,
+    AgentDraft,
+    ClarifyReply,
     RecommendationRequest,
     RecommendationResponse,
 )
@@ -50,7 +52,9 @@ AGENT_INSTRUCTIONS = """你是 Chatty，一个电商推荐与营销 Agent。
 输出
 五个 tool 调用完成后，不要再调用任何 tool——没有用来提交答案的 tool，
 直接把下面这个 JSON 对象作为回复正文返回：
-{"recommendations":[{"product_id":"商品ID","reason":"推荐理由","marketing_copy":"营销文案"}]}
+{"action":"recommend","recommendations":[{"product_id":"商品ID","reason":"推荐理由","marketing_copy":"营销文案"}]}
+
+请求里没写类目时，用 get_user_profile 拿到的偏好类目去搜，不要反问。
 
 约束
 - 只推荐 tool results 中经过搜索、库存检查和知识检索的商品。
@@ -58,22 +62,41 @@ AGENT_INSTRUCTIONS = """你是 Chatty，一个电商推荐与营销 Agent。
 - 不得编造商品、价格、库存、促销或折扣。
 - 不要调用未提供的 tool。"""
 
+# 多轮版：允许先反问再推荐。单轮场景不用这套——那里需求一次给全，
+# 反问只会让本该成功的请求失败（实测会把通过率从 100% 打到 44%）。
+MULTI_TURN_INSTRUCTIONS = (
+    AGENT_INSTRUCTIONS.replace(
+        "请求里没写类目时，用 get_user_profile 拿到的偏好类目去搜，不要反问。",
+        "",
+    ).rstrip()
+    + """
+
+多轮补充
+这是多轮对话，用户可能一次只说一半。**类目必须清楚**，否则没法搜：
+请求里没有类目、历史里也没问出来时，先反问一句把它问出来，
+这一轮不要调用任何 tool，回复正文仍然是 JSON：
+{"action":"clarify","question":"你想看哪一类商品？"}
+
+已经问过一次的东西不要重复问。类目一旦清楚，就按上面的五步走完给推荐。"""
+)
+
+
 # 匹配 ```json ... ``` 这种 Markdown 代码块，用来从模型的自然语言回复里抠出 JSON。
 _JSON_CODE_BLOCK = re.compile(r"```(?:json)?\s*(\{.*\})\s*```", re.DOTALL | re.IGNORECASE)
 
 
-def parse_recommendation_draft(raw_output: object) -> RecommendationDraft:
+def parse_agent_draft(raw_output: object) -> AgentDraft:
     """把模型的输出解析成结构化草稿。
 
     因为没用 SDK 的 json_schema（见 recommend 里的说明），模型返回的是纯文本，
     它可能直接给 JSON，也可能包在 Markdown 代码块里，所以这里要逐个候选去试。
     """
     # 情况一：已经是结构化对象，直接用。
-    if isinstance(raw_output, RecommendationDraft):
+    if isinstance(raw_output, AgentDraft):
         return raw_output
     # 情况二：是 dict 之类的非字符串，交给 Pydantic 校验。
     if not isinstance(raw_output, str):
-        return RecommendationDraft.model_validate(raw_output)
+        return AgentDraft.model_validate(raw_output)
 
     # 情况三：是字符串。按"最可能正确"的顺序准备几个候选，逐个尝试解析。
     candidates = []
@@ -93,11 +116,11 @@ def parse_recommendation_draft(raw_output: object) -> RecommendationDraft:
 
     for candidate in candidates:
         try:
-            return RecommendationDraft.model_validate_json(candidate)
+            return AgentDraft.model_validate_json(candidate)
         except ValidationError:
             continue  # 这个候选解析不了，试下一个
     # 都失败了就再解析一次原文，让 Pydantic 抛出带细节的异常，便于定位。
-    return RecommendationDraft.model_validate_json(raw_output)
+    return AgentDraft.model_validate_json(raw_output)
 
 
 class RecommendationError(RuntimeError):
@@ -174,7 +197,34 @@ class Recommender:
         self.catalog.close()
 
     async def recommend(self, request: RecommendationRequest) -> RecommendationResponse:
-        """一次完整的推荐：跑 Agent Loop → 校验证据 → 重查数据库 → 返回响应。"""
+        """单轮推荐：需求一次给全，模型不该反问。
+
+        反问了就是它没按约定走，按失败处理——单轮场景没有"下一轮"来接这个问题。
+        """
+        reply = await self._run_turn(request, history=[])
+        if isinstance(reply, ClarifyReply):
+            raise RecommendationError("clarification_needed", {"question": reply.question})
+        return reply
+
+    async def respond(
+        self,
+        request: RecommendationRequest,
+        history: list[TResponseInputItem] | None = None,
+    ) -> RecommendationResponse | ClarifyReply:
+        """多轮：把之前的对话一起喂进去，模型可以先反问再推荐。
+
+        history 是 [{"role": "user"/"assistant", "content": "..."}] 的消息列表。
+        """
+        return await self._run_turn(request, history=history or [], allow_clarify=True)
+
+    async def _run_turn(
+        self,
+        request: RecommendationRequest,
+        *,
+        history: list[TResponseInputItem],
+        allow_clarify: bool = False,
+    ) -> RecommendationResponse | ClarifyReply:
+        """跑一轮：Agent Loop → 判断是澄清还是推荐 → 推荐才校验证据。"""
         started = time.perf_counter()  # 用于统计端到端延迟
         # 调试钩子只在开关打开时创建，用来记录每一轮模型输入输出，便于离线复盘。
         debug_hooks = AgentDebugHooks(self._model_id) if config.agent_debug_enabled() else None
@@ -188,15 +238,22 @@ class Recommender:
             # DeepSeek 不吃 json_schema，所以返回纯文本、本地提取 JSON。
             agent = Agent[RecommendationContext](
                 name="Chatty",
-                instructions=AGENT_INSTRUCTIONS,
+                instructions=MULTI_TURN_INSTRUCTIONS if allow_clarify else AGENT_INSTRUCTIONS,
                 model=model,
                 model_settings=ModelSettings(extra_body={"thinking": {"type": "disabled"}}),
                 tools=build_tools(),
             )
             # max_turns 是失控保护，不是重试策略。
+            # 有历史就把历史接在前面，让模型看得到之前问过什么、用户答了什么
+            turn_input: str | list[TResponseInputItem] = request.model_dump_json()
+            if history:
+                turn_input = [
+                    *history,
+                    {"role": "user", "content": request.model_dump_json()},
+                ]
             result = await Runner.run(
                 agent,
-                request.model_dump_json(),
+                turn_input,
                 context=context,
                 max_turns=10,
                 hooks=debug_hooks,
@@ -205,6 +262,18 @@ class Recommender:
                     tracing_disabled=True,
                 ),
             )
+            draft = parse_agent_draft(result.final_output)
+
+            # 澄清轮：这一轮没给商品，也就没有证据可校验，直接把问题回给调用方。
+            # 六条校验是针对"推荐"这个动作的，反问不涉及业务事实。
+            if draft.action == "clarify":
+                return ClarifyReply(
+                    request_id=f"request_{uuid4().hex}",
+                    user_id=request.user_id,
+                    question=draft.question or "",
+                    total_latency_ms=(time.perf_counter() - started) * 1000,
+                )
+
             # ↓↓↓ Harness 校验段：模型说它做完了不算数，要用证据证明 ↓↓↓
 
             # ① 五个工具都调过，且依赖顺序正确（允许重复调用）
@@ -219,8 +288,6 @@ class Recommender:
                     "knowledge_not_retrieved",
                     {"tool_calls": list(context.call_log)},
                 )
-            # 解析模型输出的 JSON 草稿（只含商品 ID、推荐理由、营销文案）。
-            draft = parse_recommendation_draft(result.final_output)
             # ③ 画像必须已加载。① 已保证工具调过，这里主要是类型收窄兼防御
             if context.profile is None:
                 raise RecommendationError("profile_not_loaded")

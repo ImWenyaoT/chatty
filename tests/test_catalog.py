@@ -7,7 +7,7 @@ import pytest
 from chatty import config
 from chatty.catalog import Catalog, CatalogError
 from chatty.models import (
-    RecommendationDraft,
+    AgentDraft,
     RecommendationDraftItem,
     RecommendationRequest,
     UserContext,
@@ -81,7 +81,7 @@ def test_inventory_and_final_output_are_canonical(catalog: Catalog) -> None:
 
     request = RecommendationRequest(user_id="user_active", num_items=1)
     profile = catalog.user_profile(request.user_id, request.context)
-    draft = RecommendationDraft(
+    draft = AgentDraft(
         recommendations=[
             RecommendationDraftItem(
                 product_id="P003",
@@ -103,7 +103,7 @@ def test_inventory_and_final_output_are_canonical(catalog: Catalog) -> None:
 def test_unknown_recommended_product_is_rejected(catalog: Catalog) -> None:
     request = RecommendationRequest(user_id="user_active")
     profile = catalog.user_profile(request.user_id, request.context)
-    draft = RecommendationDraft(
+    draft = AgentDraft(
         recommendations=[
             RecommendationDraftItem(
                 product_id="UNKNOWN",
@@ -120,7 +120,7 @@ def test_finalize_reads_current_inventory(tmp_path) -> None:
     catalog = Catalog(database_path=tmp_path / "chatty.db")
     request = RecommendationRequest(user_id="user_active", num_items=1)
     profile = catalog.user_profile(request.user_id, request.context)
-    draft = RecommendationDraft(
+    draft = AgentDraft(
         recommendations=[
             RecommendationDraftItem(
                 product_id="P003",
@@ -148,7 +148,7 @@ def test_finalize_enforces_profile_price_range(catalog: Catalog) -> None:
         context=UserContext(max_price_cents=100_000),
     )
     profile = catalog.user_profile(request.user_id, request.context)
-    draft = RecommendationDraft(
+    draft = AgentDraft(
         recommendations=[
             RecommendationDraftItem(
                 product_id="P003",

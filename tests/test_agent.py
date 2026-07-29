@@ -17,7 +17,7 @@ from openai.types.responses import (
     ResponseOutputText,
 )
 
-from chatty.agent import AGENT_INSTRUCTIONS, Recommender, parse_recommendation_draft
+from chatty.agent import AGENT_INSTRUCTIONS, Recommender, parse_agent_draft
 from chatty.catalog import Catalog
 from chatty.models import RecommendationRequest
 from chatty.tools import TOOL_NAMES
@@ -143,7 +143,7 @@ def successful_script() -> list[ToolStep | MessageStep]:
 
 
 def test_parses_json_from_markdown_code_block() -> None:
-    draft = parse_recommendation_draft(
+    draft = parse_agent_draft(
         "推荐如下：\n"
         "```json\n"
         '{"recommendations":[{"product_id":"P003","reason":"适合通勤",'
@@ -156,7 +156,7 @@ def test_parses_json_from_markdown_code_block() -> None:
 
 def test_rejects_prose_without_json() -> None:
     with pytest.raises(ValueError):
-        parse_recommendation_draft("推荐 P003")
+        parse_agent_draft("推荐 P003")
 
 
 @pytest.mark.asyncio
@@ -225,7 +225,7 @@ def test_parses_json_with_leading_prose() -> None:
         '{"recommendations":[{"product_id":"P012","reason":"体积小功率足",'
         '"marketing_copy":"出差随身，一充多用"}]}'
     )
-    draft = parse_recommendation_draft(raw)
+    draft = parse_agent_draft(raw)
     assert [item.product_id for item in draft.recommendations] == ["P012"]
 
 
@@ -239,5 +239,5 @@ def test_parses_json_wrapped_in_code_fence_with_prose() -> None:
         "```\n"
         "希望对你有帮助。"
     )
-    draft = parse_recommendation_draft(raw)
+    draft = parse_agent_draft(raw)
     assert [item.product_id for item in draft.recommendations] == ["P003"]

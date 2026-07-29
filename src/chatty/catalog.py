@@ -5,10 +5,10 @@ from pathlib import Path
 from chatty import config
 from chatty.database import Database
 from chatty.models import (
+    AgentDraft,
     KnowledgeHit,
     MarketingStrategy,
     Product,
-    RecommendationDraft,
     RecommendationRequest,
     RecommendedProduct,
     UserContext,
@@ -165,7 +165,7 @@ class Catalog:
 
     def finalize(
         self,
-        draft: RecommendationDraft,
+        draft: AgentDraft,
         request: RecommendationRequest,
         profile: UserProfile,
     ) -> list[RecommendedProduct]:

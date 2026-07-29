@@ -31,7 +31,7 @@ from pathlib import Path
 
 from agents import Agent, Model, ModelSettings, RunConfig, Runner
 
-from chatty.agent import build_model, parse_recommendation_draft
+from chatty.agent import build_model, parse_agent_draft
 from chatty.catalog import Catalog
 from evals.dataset import ALL_TASKS, EvalTask, Expect
 
@@ -98,7 +98,7 @@ async def _run_baseline_task(
             # 往 OpenAI 上报会刷一屏 401 噪音
             run_config=RunConfig(workflow_name="Chatty ablation", tracing_disabled=True),
         )
-        draft = parse_recommendation_draft(result.final_output)
+        draft = parse_agent_draft(result.final_output)
     except Exception:  # noqa: BLE001 — 裸模型崩了也是一种结果，记为"没产出"
         return []
     return [
