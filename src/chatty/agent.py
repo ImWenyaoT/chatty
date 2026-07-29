@@ -64,6 +64,12 @@ AGENT_INSTRUCTIONS = """你是 Chatty，一个电商推荐与营销 Agent。
 
 # 多轮版：允许先反问再推荐。单轮场景不用这套——那里需求一次给全，
 # 反问只会让本该成功的请求失败（实测会把通过率从 100% 打到 44%）。
+#
+# 结构上必须写成两个**互斥**的阶段。早先的写法是在单轮提示词后面追加一段
+# 「多轮补充」，结果模型在「按顺序调五个 tool」和「澄清时不要调 tool」之间
+# 摇摆：调一次 get_user_profile、又想澄清、又去调 get_user_profile……
+# 实测三次运行只调出 4 次 get_user_profile，一次 search_products 都没有，
+# 最后撞满轮次上限。互斥的措辞消除了这个歧义。
 MULTI_TURN_INSTRUCTIONS = (
     AGENT_INSTRUCTIONS.replace(
         "请求里没写类目时，用 get_user_profile 拿到的偏好类目去搜，不要反问。",
@@ -71,13 +77,25 @@ MULTI_TURN_INSTRUCTIONS = (
     ).rstrip()
     + """
 
-多轮补充
-这是多轮对话，用户可能一次只说一半。**类目必须清楚**，否则没法搜：
-请求里没有类目、历史里也没问出来时，先反问一句把它问出来，
-这一轮不要调用任何 tool，回复正文仍然是 JSON：
-{"action":"clarify","question":"你想看哪一类商品？"}
+多轮补充（这段覆盖上面的「执行」一节）
+这是多轮对话，用户可能一次只说一半。每一轮**二选一**，不要混着来：
 
-已经问过一次的东西不要重复问。类目一旦清楚，就按上面的五步走完给推荐。"""
+情况 A —— 请求里没有类目，历史里也没问出来，画像里也没有偏好类目：
+    这一轮**一个 tool 都不要调**，直接返回：
+    {"action":"clarify","question":"你想看哪一类商品？我们有：<把下面的类目列出来>"}
+    返回后这一轮就结束了，等用户回答。
+
+    **反问时必须把可选类目列给用户**，不要问目录里没有的东西
+    （目录只到「家电」这一级，没有「冰箱」「空调」这种子类）。
+    可选类目只有这些：{categories}
+
+情况 B —— 类目已经清楚（请求里有，或历史里用户答过）：
+    **不要再反问**，按上面「执行」一节的五步依次调用 tool，然后返回 recommend。
+    一旦开始调 tool 就走完五步，中途不要改回 clarify。
+    **每一轮都要重新把五个 tool 走一遍**，哪怕历史里调过。
+    上一轮的工具结果不能拿来当这一轮的依据——库存和价格随时会变。
+
+判断只做一次，在这一轮的最开头。已经问过的东西不要重复问。"""
 )
 
 
@@ -190,6 +208,14 @@ class Recommender:
         self._model_id = os.environ.get("MODEL_ID") or config.DEFAULT_MODEL_ID
         return self._model
 
+    def _instructions(self, allow_clarify: bool) -> str:
+        """多轮版要把真实类目填进去，否则模型会反问目录里不存在的子类目。"""
+        if not allow_clarify:
+            return AGENT_INSTRUCTIONS
+        categories = sorted({product.category for product in self.catalog.products})
+        # 用 replace 不用 format：提示词里有 JSON 大括号，format 会把它们当占位符
+        return MULTI_TURN_INSTRUCTIONS.replace("{categories}", "、".join(categories))
+
     async def close(self) -> None:
         if self._client is not None:
             await self._client.close()
@@ -230,7 +256,11 @@ class Recommender:
         debug_hooks = AgentDebugHooks(self._model_id) if config.agent_debug_enabled() else None
         try:
             model = self._ensure_model()
-            # context 是这次运行的证据本，五个工具往里写结果
+            # context 是这次运行的证据本，五个工具往里写结果。
+            # 多轮时每轮新建，证据**不跨轮累积**——这是个刻意的取舍：
+            # 累积的话轮次越多约束越松（第 10 轮时几乎所有商品都「有过证据」），
+            # 六条校验会形同虚设；不累积的代价是每轮都要重跑五个工具。
+            # 正确性优先于开销，所以选了不累积。
             context = RecommendationContext(
                 request=request,
                 catalog=self.catalog,
@@ -238,7 +268,7 @@ class Recommender:
             # DeepSeek 不吃 json_schema，所以返回纯文本、本地提取 JSON。
             agent = Agent[RecommendationContext](
                 name="Chatty",
-                instructions=MULTI_TURN_INSTRUCTIONS if allow_clarify else AGENT_INSTRUCTIONS,
+                instructions=self._instructions(allow_clarify),
                 model=model,
                 model_settings=ModelSettings(extra_body={"thinking": {"type": "disabled"}}),
                 tools=build_tools(),
@@ -256,7 +286,7 @@ class Recommender:
                 turn_input,
                 context=context,
                 # 多轮要先判断信息够不够，比单轮多花一两轮，上限相应放宽
-                max_turns=14 if allow_clarify else 10,
+                max_turns=18 if allow_clarify else 10,
                 hooks=debug_hooks,
                 run_config=RunConfig(
                     workflow_name="Chatty recommendation",

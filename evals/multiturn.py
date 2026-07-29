@@ -67,15 +67,17 @@ class MultiTurnTask:
 
 
 ALL_MULTITURN_TASKS: tuple[MultiTurnTask, ...] = (
+    # 设计这几条时先撞了一次墙：十个画像**全都有偏好类目**，所以只要用户不说，
+    # Agent 就能拿画像兜底直接推荐——那是合理行为，不是缺陷。
+    # 所以「开场什么都不说」根本测不出澄清能力，得换成画像也帮不上忙的情况：
+    # 用户说了目录里没有的东西，或者说法太含糊导致映射不过去。
     MultiTurnTask(
         task_id="M1",
-        intent="开场只说「想买点东西」，类目都没有——不问清楚就没法搜",
-        user_id="user_active",
-        opening="想买点东西",
-        facts={"类目": "想看耳机", "预算": "2000 元以内"},
-        expect_category="耳机",
-        # 不设价格上限：Agent 只被要求问清类目，没被要求问预算，
-        # 用预算判它就是拿没提过的要求打分——成功条件必须是可达成的
+        intent="用户要的「空调」目录里没有，只有「家电」这一级——该问清楚而不是硬塞",
+        user_id="user_new",
+        opening="想买个空调",
+        facts={"类目": "那看家电吧", "预算": "1000 元以内"},
+        expect_category="家电",
         must_ask_about=frozenset({"类目"}),
     ),
     MultiTurnTask(
@@ -90,12 +92,11 @@ ALL_MULTITURN_TASKS: tuple[MultiTurnTask, ...] = (
     ),
     MultiTurnTask(
         task_id="M3",
-        intent="类目说得含糊（「听歌的」而不是「耳机」），考察能否问到具体类目",
-        user_id="user_vip",
+        intent="说法含糊（「听歌的」不是类目名），但画像里有耳机偏好——用画像兜底直接推也算对",
+        user_id="user_active",
         opening="想找个听歌用的",
-        facts={"类目": "耳机", "预算": "不限，要好的"},
+        facts={"类目": "耳机", "预算": "不限"},
         expect_category="耳机",
-        must_ask_about=frozenset({"类目"}),
     ),
 )
 
