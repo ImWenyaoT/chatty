@@ -19,6 +19,7 @@ import asyncio
 from chatty import config
 from evals.ablation import render_ablation_report, result_to_json, run_ablation
 from evals.dataset import Level, tasks_by_level
+from evals.multiturn import multiturn_to_json, render_multiturn_report, run_multiturn_suite
 from evals.report import render_text, summarize
 from evals.retrieval import evaluate_retrieval, render_retrieval_report
 from evals.runner import run_suite
@@ -45,6 +46,11 @@ def main() -> None:
         help="只评估检索质量（recall@k / MRR）。不调模型，零成本、完全确定",
     )
     parser.add_argument(
+        "--multiturn",
+        action="store_true",
+        help="多轮评估：用户模拟器按剧本渐进透露信息，测 Agent 会不会把缺的问出来",
+    )
+    parser.add_argument(
         "--ablation",
         action="store_true",
         help="消融实验：拿掉工具与 Harness，量化裸模型的输出坏成什么样（可配 --level 只跑一档）",
@@ -54,6 +60,11 @@ def main() -> None:
     # 检索评估不需要模型，单独走一条路径，方便快速验证改动有没有影响召回
     if args.retrieval:
         print(render_retrieval_report(evaluate_retrieval()))
+        return
+
+    if args.multiturn:
+        verdicts = asyncio.run(run_multiturn_suite())
+        print(multiturn_to_json(verdicts) if args.json else render_multiturn_report(verdicts))
         return
 
     if args.ablation:

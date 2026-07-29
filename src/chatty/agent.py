@@ -255,7 +255,8 @@ class Recommender:
                 agent,
                 turn_input,
                 context=context,
-                max_turns=10,
+                # 多轮要先判断信息够不够，比单轮多花一两轮，上限相应放宽
+                max_turns=14 if allow_clarify else 10,
                 hooks=debug_hooks,
                 run_config=RunConfig(
                     workflow_name="Chatty recommendation",
