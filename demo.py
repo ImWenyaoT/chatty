@@ -1,11 +1,14 @@
-"""跑一次推荐，把结果打出来看。
+"""跑推荐看结果。
 
-    uv run python demo.py              # 默认给活跃用户推荐耳机
-    uv run python demo.py 家电          # 换个类目
-    uv run python demo.py 手机 user_vip # 换类目和用户
+    uv run python demo.py                   # 活跃用户 + 耳机
+    uv run python demo.py 家电 user_budget   # 换类目和用户
+    uv run python demo.py -i                # 交互模式，可以连着换条件试
 
 用户 ID 可选 user_active、user_budget、user_vip、user_new、user_churn，
 类目见 data/products.jsonl。需要先在 .env 里配好 OPENAI_API_KEY。
+
+每次推荐都是一次独立的请求，Chatty 不做多轮对话——它是推荐系统不是客服，
+用户意图在一次请求里给全。交互模式只是省去反复敲命令，不是会话。
 """
 
 import asyncio
@@ -15,13 +18,11 @@ from chatty.agent import RecommendationError, Recommender
 from chatty.catalog import Catalog
 from chatty.models import RecommendationRequest, UserContext
 
+USERS = ("user_active", "user_budget", "user_vip", "user_new", "user_churn")
 
-async def main() -> None:
-    # 命令行参数：第一个是类目，第二个是用户 ID，都有默认值
-    category = sys.argv[1] if len(sys.argv) > 1 else "耳机"
-    user_id = sys.argv[2] if len(sys.argv) > 2 else "user_active"
 
-    service = Recommender(Catalog())
+async def recommend_once(service: Recommender, category: str, user_id: str) -> None:
+    """跑一次推荐并打印。失败就说一句人话，不往外抛。"""
     try:
         response = await service.recommend(
             RecommendationRequest(
@@ -31,15 +32,11 @@ async def main() -> None:
             )
         )
     except RecommendationError as error:
-        # Harness 校验没过或模型行为异常时，这里给一句人话，不要甩一屏 traceback
         print(f"\n这次没跑通：{error.code}")
         if error.code == "recommendation_failed":
             print("多半是模型这轮的行为不符合约定（比如去调了一个不存在的 tool）。")
-            print("这是概率性的，直接重跑一次通常就好。")
+            print("这是概率性的，再跑一次通常就好。")
         return
-    finally:
-        # 无论成功失败都要关掉模型连接和数据库
-        await service.close()
 
     print(f"\n用户 {user_id} · 类目 {category} · 耗时 {response.total_latency_ms / 1000:.1f}s\n")
     for item in response.products:
@@ -47,10 +44,37 @@ async def main() -> None:
         print(f"  {item.product_id}  {item.name}  {item.price_cents / 100:.2f} 元  [{stock}]")
         print(f"    理由：{item.reason}")
         print(f"    文案：{item.marketing_copy}\n")
+    # 上面的 ID、价格、库存、名称全部来自 SQLite 重查，模型只写了理由和文案。
+    print("以上商品均已通过 Harness 的六条证据校验。\n")
 
-    # 这几行是这个项目的重点：上面的价格、库存、名称全部来自 SQLite 重查，
-    # 模型只负责写理由和文案。任何一条证据不齐都会抛错而不是降级返回。
-    print("以上商品的 ID、价格、库存均已通过 Harness 的六条证据校验。")
+
+async def interactive(service: Recommender) -> None:
+    """连着换条件试。共用一个 Recommender，数据库和模型连接只建一次。"""
+    print(f"\n交互模式。直接回车用默认值，Ctrl-C 退出。\n可选用户：{'、'.join(USERS)}\n")
+    while True:
+        try:
+            category = input("类目（回车=耳机）: ").strip() or "耳机"
+            user_id = input("用户（回车=user_active）: ").strip() or "user_active"
+        except (EOFError, KeyboardInterrupt):
+            print("\n再见。")
+            return
+        await recommend_once(service, category, user_id)
+
+
+async def main() -> None:
+    args = sys.argv[1:]
+    service = Recommender(Catalog())
+    try:
+        if args and args[0] in ("-i", "--interactive"):
+            await interactive(service)
+        else:
+            # 第一个参数是类目，第二个是用户 ID，都有默认值
+            category = args[0] if args else "耳机"
+            user_id = args[1] if len(args) > 1 else "user_active"
+            await recommend_once(service, category, user_id)
+    finally:
+        # 无论怎么退出都要关掉模型连接和数据库
+        await service.close()
 
 
 if __name__ == "__main__":

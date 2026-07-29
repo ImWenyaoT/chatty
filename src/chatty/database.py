@@ -13,7 +13,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import sqlite3
@@ -127,11 +126,6 @@ CREATE TABLE IF NOT EXISTS forbidden_words (
     word TEXT PRIMARY KEY
 );
 
-CREATE TABLE IF NOT EXISTS seed_metadata (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS knowledge_documents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     doc_id TEXT NOT NULL UNIQUE,
@@ -174,14 +168,6 @@ _SEGMENTS = {
     "price_sensitive",
     "churn_risk",
 }
-_SEED_FILES = (
-    "products.jsonl",
-    "user_profiles.jsonl",
-    "marketing_templates.json",
-    "forbidden_words.json",
-    "knowledge_documents.jsonl",
-)
-
 
 class SeedDataError(RuntimeError):
     pass
@@ -205,34 +191,6 @@ def _model_lines[ModelT: BaseModel](path: Path, model: type[ModelT]) -> list[Mod
     return results
 
 
-def _fingerprint(data_dir: Path) -> str:
-    """给整个 data/ 目录算一个指纹（SHA-256）。
-
-    用途：启动时比对指纹，一样就说明种子数据没变、不用重新导入；
-    不一样才重建。这样既避免每次启动都重复灌数据，
-    又能在你改了 JSON 之后自动生效。
-    """
-    digest = hashlib.sha256()
-    for name in _SEED_FILES:
-        # 文件名也计入指纹，防止两个文件内容互换后指纹不变
-        digest.update(name.encode())
-        digest.update((data_dir / name).read_bytes())
-    return digest.hexdigest()
-
-
-def _is_current(
-    connection: sqlite3.Connection,
-    fingerprint: str,
-    expected_counts: dict[str, int],
-) -> bool:
-    row = connection.execute("SELECT value FROM seed_metadata WHERE key = 'fingerprint'").fetchone()
-    if row is None or row[0] != fingerprint:
-        return False
-    return all(
-        connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == count
-        for table, count in expected_counts.items()
-    )
-
 
 def seed_database(connection: sqlite3.Connection, data_dir: Path) -> None:
     """把可读种子事务性投影到运行时唯一数据源 SQLite。"""
@@ -254,19 +212,6 @@ def seed_database(connection: sqlite3.Connection, data_dir: Path) -> None:
     if len(forbidden_words) != len(set(forbidden_words)):
         raise SeedDataError("duplicate_forbidden_word")
 
-    fingerprint = _fingerprint(data_dir)
-    expected_counts = {
-        "products": len(products),
-        "user_profiles": len(profiles),
-        "marketing_templates": len(templates),
-        "forbidden_words": len(forbidden_words),
-        "knowledge_documents": len(knowledge),
-        # FTS 表存的是块，数量多于文档数
-        "knowledge_documents_fts": sum(len(split_into_chunks(item.content)) for item in knowledge),
-    }
-    if _is_current(connection, fingerprint, expected_counts):
-        return
-
     # 单个事务内重建投影。任何一步失败都会回滚，避免半初始化数据库。
     with connection:
         for table in (
@@ -276,7 +221,6 @@ def seed_database(connection: sqlite3.Connection, data_dir: Path) -> None:
             "marketing_templates",
             "user_profiles",
             "products",
-            "seed_metadata",
         ):
             connection.execute(f"DELETE FROM {table}")
 
@@ -381,10 +325,6 @@ def seed_database(connection: sqlite3.Connection, data_dir: Path) -> None:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             chunk_rows,
-        )
-        connection.execute(
-            "INSERT INTO seed_metadata (key, value) VALUES ('fingerprint', ?)",
-            (fingerprint,),
         )
 
 

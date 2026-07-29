@@ -38,7 +38,6 @@ def test_sqlite_is_seeded_with_business_and_knowledge_data(tmp_path: Path) -> No
         "marketing_templates",
         "knowledge_documents",
         "knowledge_documents_fts",
-        "seed_metadata",
     } <= tables
     catalog.close()
 
