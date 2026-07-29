@@ -17,14 +17,17 @@ import json
 import sys
 import time
 
+from agents.items import TResponseInputItem
+
 from chatty import config
 from chatty.agent import RecommendationError, Recommender, build_model
 from chatty.catalog import Catalog
-from chatty.models import RecommendationRequest, UserContext
+from chatty.models import ClarifyReply, RecommendationRequest, UserContext
 
 USERS = ("user_active", "user_budget", "user_vip", "user_new", "user_churn")
 STEPS = "画像 → 搜索 → 库存 → 知识检索 → 营销策略 → 生成文案"
 RULE = "─" * 68
+MAX_CLARIFY = 2  # 最多让它追问两次，免得绕不出来
 
 # ANSI 暗色，让提示不抢正文的注意力；不是终端就留空串
 DIM, RESET = ("\033[2m", "\033[0m") if sys.stdout.isatty() else ("", "")
@@ -96,13 +99,31 @@ async def _ticker() -> None:
         print(f"\r  {STEPS}  {DIM}{elapsed:4.1f}s · Ctrl-C 中断{RESET}", end="", flush=True)
 
 
-async def recommend_once(service: Recommender, context: UserContext, user_id: str) -> None:
-    """跑一次推荐并打印。失败就说一句人话，不往外抛。"""
+async def run_turn(
+    service: Recommender,
+    context: UserContext,
+    user_id: str,
+    history: list[TResponseInputItem],
+) -> str | None:
+    """跑一轮。给出推荐就打印并返回 None；反问就打印问题并把它返回给上层。"""
+    request = RecommendationRequest(user_id=user_id, num_items=3, context=context)
     ticker = asyncio.create_task(_ticker())
     try:
-        response = await service.recommend(
-            RecommendationRequest(user_id=user_id, num_items=3, context=context)
-        )
+        reply = await service.respond(request, history=history)
+        if isinstance(reply, ClarifyReply):
+            print(f"\r  Chatty 想知道：{reply.question}{' ' * 20}")
+            # 把这一问一答记进历史，下一轮模型才知道自己问过什么
+            history.append({"role": "user", "content": request.model_dump_json()})
+            history.append(
+                {
+                    "role": "assistant",
+                    "content": json.dumps(
+                        {"action": "clarify", "question": reply.question}, ensure_ascii=False
+                    ),
+                }
+            )
+            return reply.question
+        response = reply
     except RecommendationError as error:
         print(f"\r  没跑通：{error.code}{' ' * 40}")
         if error.code == "recommendation_failed":
@@ -110,7 +131,7 @@ async def recommend_once(service: Recommender, context: UserContext, user_id: st
             print(f"  {DIM}{hint}{RESET}")
         elif error.code == "invalid_recommendation":
             print(f"  {DIM}条件太紧，目录里没有同时满足类目和价格的商品{RESET}")
-        return
+        return None
     finally:
         ticker.cancel()
 
@@ -124,6 +145,7 @@ async def recommend_once(service: Recommender, context: UserContext, user_id: st
         print(f"      {DIM}文案{RESET}  {item.marketing_copy}\n")
     # 上面的 ID、价格、库存、名称全部来自 SQLite 重查，模型只写了理由和文案。
     print(f"  {DIM}以上字段均来自 SQLite 重查，并通过 Harness 六条证据校验{RESET}\n")
+    return None
 
 
 async def interactive(service: Recommender) -> None:
@@ -156,9 +178,22 @@ async def interactive(service: Recommender) -> None:
             except (EOFError, KeyboardInterrupt):
                 break
 
-            context = await parse_need(client, model_id, text, categories)
-            print(f"\n  {user_id} · {DIM}理解为{RESET} {describe(context)}")
-            await recommend_once(service, context, user_id)
+            # 用户说过的话累积起来一起解析，否则第二轮只说「2000 以内」会丢掉类目
+            said = [text]
+            history: list[TResponseInputItem] = []
+            for _ in range(MAX_CLARIFY + 1):
+                context = await parse_need(client, model_id, " ".join(said), categories)
+                print(f"\n  {user_id} · {DIM}理解为{RESET} {describe(context)}")
+                question = await run_turn(service, context, user_id, history)
+                if question is None:
+                    break  # 已经给出推荐
+                try:
+                    answer = input("  你 > ").strip()
+                except (EOFError, KeyboardInterrupt):
+                    break
+                if not answer or answer in ("q", "quit", "exit"):
+                    break
+                said.append(answer)
     finally:
         await client.close()
     print("\n  再见。\n")
@@ -172,7 +207,7 @@ async def main() -> None:
             # 带参数就跑一次：第一个是类目，第二个是用户 ID
             user_id = args[1] if len(args) > 1 else "user_active"
             print(f"\n  {user_id} · {args[0]}")
-            await recommend_once(service, UserContext(preferred_categories=[args[0]]), user_id)
+            await run_turn(service, UserContext(preferred_categories=[args[0]]), user_id, [])
         else:
             await interactive(service)
     finally:
