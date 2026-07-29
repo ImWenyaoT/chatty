@@ -23,6 +23,7 @@ from chatty import config
 from chatty.agent import RecommendationError, Recommender, build_model
 from chatty.catalog import Catalog
 from chatty.models import ClarifyReply, RecommendationRequest, UserContext
+from evals.harvest import record_failure
 
 USERS = ("user_active", "user_budget", "user_vip", "user_new", "user_churn")
 STEPS = "画像 → 搜索 → 库存 → 知识检索 → 营销策略 → 生成文案"
@@ -125,6 +126,8 @@ async def run_turn(
             return reply.question
         response = reply
     except RecommendationError as error:
+        # 记下来，之后用 --harvest 收成回归用例
+        record_failure(request.model_dump(mode="json"), error.code, error.diagnostics)
         print(f"\r  没跑通：{error.code}{' ' * 40}")
         if error.code == "recommendation_failed":
             hint = "多半是模型这轮没按约定走（比如调了个不存在的 tool），重跑一次通常就好"

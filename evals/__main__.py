@@ -19,6 +19,7 @@ import asyncio
 from chatty import config
 from evals.ablation import render_ablation_report, result_to_json, run_ablation
 from evals.dataset import Level, tasks_by_level
+from evals.harvest import harvest, render_harvest_report
 from evals.multiturn import multiturn_to_json, render_multiturn_report, run_multiturn_suite
 from evals.report import render_text, summarize
 from evals.retrieval import evaluate_retrieval, render_retrieval_report
@@ -46,6 +47,11 @@ def main() -> None:
         help="只评估检索质量（recall@k / MRR）。不调模型，零成本、完全确定",
     )
     parser.add_argument(
+        "--harvest",
+        action="store_true",
+        help="把跑出来的失败收成回归用例：读 .local/failures.jsonl，去重后生成 EvalTask 代码",
+    )
+    parser.add_argument(
         "--multiturn",
         action="store_true",
         help="多轮评估：用户模拟器按剧本渐进透露信息，测 Agent 会不会把缺的问出来",
@@ -60,6 +66,10 @@ def main() -> None:
     # 检索评估不需要模型，单独走一条路径，方便快速验证改动有没有影响召回
     if args.retrieval:
         print(render_retrieval_report(evaluate_retrieval()))
+        return
+
+    if args.harvest:
+        print(render_harvest_report(harvest()))
         return
 
     if args.multiturn:
