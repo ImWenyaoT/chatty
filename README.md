@@ -135,28 +135,12 @@ uv sync
 跑一次推荐：
 
 ```bash
-uv run python -c "
-import asyncio
-from chatty.agent import Recommender
-from chatty.catalog import Catalog
-from chatty.models import RecommendationRequest, UserContext
-
-async def main():
-    service = Recommender(Catalog())
-    try:
-        response = await service.recommend(RecommendationRequest(
-            user_id='user_active',
-            num_items=3,
-            context=UserContext(preferred_categories=['耳机']),
-        ))
-        for item in response.products:
-            print(f'{item.product_id} {item.name} {item.price_cents/100:.2f} 元 — {item.reason}')
-    finally:
-        await service.close()
-
-asyncio.run(main())
-"
+uv run python demo.py                  # 活跃用户 + 耳机
+uv run python demo.py 家电 user_budget  # 换类目和用户
 ```
+
+会打印商品、价格、库存标记，以及模型写的推荐理由与营销文案——
+其中 ID、价格、库存、名称全部来自 SQLite 重查，模型只负责文字部分。
 
 跑评估：
 
@@ -170,7 +154,7 @@ uv run python -m evals --ablation     # 消融对比
 
 ## 三个刻意的取舍
 
-**没有 HTTP 层。** 入口是 `Recommender.recommend()`，没有 FastAPI、没有前端，也没有面向业务的 CLI（`python -m evals` 只是评估入口）。
+**没有 HTTP 层。** 入口是 `Recommender.recommend()`，没有 FastAPI、没有前端（`demo.py` 只是调用示例，`python -m evals` 只是评估入口）。
 这个项目要验证的是 Agent Loop 与 Harness 校验，不是怎么把它包成 Web 服务。
 失败以带错误码的 `RecommendationError` 抛出，错误码本身就是给调用方的稳定契约。
 
