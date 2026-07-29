@@ -17,21 +17,17 @@ from chatty.tools import RecommendationContext
 logger = logging.getLogger("chatty.agent")
 
 
-def _jsonable(value: object) -> object:
-    if value is None or isinstance(value, str | int | float | bool):
-        return value
-    if isinstance(value, dict):
-        return {str(key): _jsonable(item) for key, item in value.items()}
-    if isinstance(value, list | tuple):
-        return [_jsonable(item) for item in value]
+def _fallback(value: object) -> object:
+    """json.dumps 遇到它不认识的类型时会调这里。"""
     if isinstance(value, BaseModel):
-        return _jsonable(value.model_dump(mode="json"))
+        return value.model_dump(mode="json")
     return str(value)
 
 
 def _structured_text(value: object) -> object:
+    """字符串里装的如果是 JSON 就解析开，日志里看着方便。"""
     if not isinstance(value, str):
-        return _jsonable(value)
+        return value
     try:
         return json.loads(value)
     except json.JSONDecodeError:
@@ -55,6 +51,7 @@ class AgentDebugHooks(RunHooksBase[RecommendationContext, Agent[RecommendationCo
             json.dumps(
                 {"sequence": self.sequence, "event": event, **payload},
                 ensure_ascii=False,
+                default=_fallback,
             ),
         )
 
@@ -72,7 +69,7 @@ class AgentDebugHooks(RunHooksBase[RecommendationContext, Agent[RecommendationCo
             if item_type == "reasoning":
                 omitted_reasoning_items += 1
                 continue
-            observable_items.append(_jsonable(item))
+            observable_items.append(item)
         self._emit(
             "llm_input",
             model_id=self.model_id,
@@ -157,7 +154,7 @@ class AgentDebugHooks(RunHooksBase[RecommendationContext, Agent[RecommendationCo
         self._emit("agent_output", output=_structured_text(output))
 
     def record_response(self, response: RecommendationResponse) -> None:
-        self._emit("response", output=_jsonable(response))
+        self._emit("response", output=response)
 
     def record_failure(self, code: str) -> None:
         self._emit("failure", code=code)

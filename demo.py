@@ -11,7 +11,7 @@
 import asyncio
 import sys
 
-from chatty.agent import Recommender
+from chatty.agent import RecommendationError, Recommender
 from chatty.catalog import Catalog
 from chatty.models import RecommendationRequest, UserContext
 
@@ -30,6 +30,13 @@ async def main() -> None:
                 context=UserContext(preferred_categories=[category]),
             )
         )
+    except RecommendationError as error:
+        # Harness 校验没过或模型行为异常时，这里给一句人话，不要甩一屏 traceback
+        print(f"\n这次没跑通：{error.code}")
+        if error.code == "recommendation_failed":
+            print("多半是模型这轮的行为不符合约定（比如去调了一个不存在的 tool）。")
+            print("这是概率性的，直接重跑一次通常就好。")
+        return
     finally:
         # 无论成功失败都要关掉模型连接和数据库
         await service.close()

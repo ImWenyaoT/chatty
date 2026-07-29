@@ -48,7 +48,8 @@ AGENT_INSTRUCTIONS = """你是 Chatty，一个电商推荐与营销 Agent。
 5. get_marketing_strategy：获取用户分群的营销策略
 
 输出
-只返回一个 JSON 对象：
+五个 tool 调用完成后，不要再调用任何 tool——没有用来提交答案的 tool，
+直接把下面这个 JSON 对象作为回复正文返回：
 {"recommendations":[{"product_id":"商品ID","reason":"推荐理由","marketing_copy":"营销文案"}]}
 
 约束
