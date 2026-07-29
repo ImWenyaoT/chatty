@@ -47,7 +47,7 @@ def main() -> None:
     parser.add_argument(
         "--ablation",
         action="store_true",
-        help="消融实验：拿掉工具与 Harness，量化裸模型的输出坏成什么样",
+        help="消融实验：拿掉工具与 Harness，量化裸模型的输出坏成什么样（可配 --level 只跑一档）",
     )
     args = parser.parse_args()
 
@@ -57,7 +57,9 @@ def main() -> None:
         return
 
     if args.ablation:
-        result = asyncio.run(run_ablation())
+        # 消融也尊重 --level：只想快速看对比时跑 L1 就够（5 条约 1 分钟）
+        picked = tasks_by_level(Level(args.level) if args.level else None)
+        result = asyncio.run(run_ablation(picked))
         print(result_to_json(result) if args.json else render_ablation_report(result))
         return
 

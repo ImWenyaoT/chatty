@@ -156,7 +156,7 @@ uv run python -m evals --level L1     # 基础任务，确认链路通
 uv run python -m evals                # 全量 18 条
 uv run python -m evals --repeat 3     # 跑 3 次得到 Pass^k
 uv run python -m evals --retrieval    # 只评检索，零成本
-uv run python -m evals --ablation     # 消融对比
+uv run python -m evals --ablation --level L1   # 消融对比，5 条约 18 秒
 ```
 
 ## 三个刻意的取舍

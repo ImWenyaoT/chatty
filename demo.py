@@ -50,7 +50,12 @@ async def recommend_once(service: Recommender, category: str, user_id: str) -> N
 
 async def interactive(service: Recommender) -> None:
     """连着换条件试。共用一个 Recommender，数据库和模型连接只建一次。"""
-    print(f"\n交互模式。直接回车用默认值，Ctrl-C 退出。\n可选用户：{'、'.join(USERS)}\n")
+    # 把目录里真实有的类目列出来，省得猜
+    categories = sorted({product.category for product in service.catalog.products})
+    print("\n交互模式。直接回车用默认值，Ctrl-C 退出。")
+    print(f"  可选类目：{'、'.join(categories)}")
+    print(f"  可选用户：{'、'.join(USERS)}")
+    print("  换着用户问同一个类目，能看出画像对结果的影响。\n")
     while True:
         try:
             category = input("类目（回车=耳机）: ").strip() or "耳机"
