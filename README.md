@@ -135,9 +135,8 @@ uv sync
 跑一次推荐：
 
 ```bash
-uv run python demo.py                  # 活跃用户 + 耳机
-uv run python demo.py 家电 user_budget  # 换类目和用户
-uv run python demo.py -i               # 交互模式，连着换条件试
+uv run python demo.py                  # 交互模式，连着换条件试
+uv run python demo.py 家电 user_budget  # 只跑一次
 ```
 
 会打印商品、价格、库存标记，以及模型写的推荐理由与营销文案——

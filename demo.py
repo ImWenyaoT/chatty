@@ -1,9 +1,10 @@
 """跑推荐看结果。
 
-    uv run python demo.py                   # 活跃用户 + 耳机
-    uv run python demo.py 家电 user_budget   # 换类目和用户
-    uv run python demo.py -i                # 交互模式，可以连着换条件试
+    uv run python demo.py                   # 交互模式，连着换条件试
+    uv run python demo.py 家电               # 只跑一次
+    uv run python demo.py 家电 user_budget   # 只跑一次，指定用户
 
+不带参数就进交互模式，带了参数就跑一次然后退出。
 需要先在 .env 里配好 OPENAI_API_KEY。
 
 每次推荐都是一次独立的请求，Chatty 不做多轮对话——它是推荐系统不是客服，
@@ -112,13 +113,11 @@ async def main() -> None:
     args = sys.argv[1:]
     service = Recommender(Catalog())
     try:
-        if args and args[0] in ("-i", "--interactive"):
-            await interactive(service)
+        if args:
+            # 带参数就跑一次：第一个是类目，第二个是用户 ID
+            await recommend_once(service, args[0], args[1] if len(args) > 1 else "user_active")
         else:
-            # 第一个参数是类目，第二个是用户 ID，都有默认值
-            category = args[0] if args else "耳机"
-            user_id = args[1] if len(args) > 1 else "user_active"
-            await recommend_once(service, category, user_id)
+            await interactive(service)
     finally:
         # 无论怎么退出都要关掉模型连接和数据库
         await service.close()
