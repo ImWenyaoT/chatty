@@ -8,8 +8,11 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "data"
 DATABASE_PATH = ROOT / ".local" / "chatty.db"
+# 和 DATABASE_PATH 一样必须是绝对路径：写它的是 demo（在任意 cwd 下跑），
+# 读它的是 `python -m evals --harvest`。相对路径会让这两端各写各读，闭环静默断掉。
+FAILURE_LOG_PATH = ROOT / ".local" / "failures.jsonl"
 DEFAULT_BASE_URL = "https://api.deepseek.com"
-DEFAULT_MODEL_ID = "deepseek-v4-pro"
+DEFAULT_MODEL_ID = "deepseek-v4-flash"
 
 
 def load_root_env() -> None:

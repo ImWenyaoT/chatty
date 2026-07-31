@@ -19,6 +19,7 @@ from openai.types.responses import (
 
 from chatty.agent import AGENT_INSTRUCTIONS, Recommender, parse_agent_draft
 from chatty.catalog import Catalog
+from chatty.model_provider import StaticModelProvider
 from chatty.models import RecommendationRequest
 from chatty.tools import TOOL_NAMES
 
@@ -161,6 +162,7 @@ def test_rejects_prose_without_json() -> None:
 
 @pytest.mark.asyncio
 async def test_single_agent_runs_all_five_tools_and_returns_canonical_product(
+    catalog: Catalog,
     monkeypatch,
     capsys,
 ) -> None:
@@ -172,11 +174,13 @@ async def test_single_agent_runs_all_five_tools_and_returns_canonical_product(
         context={"preferred_categories": ["耳机"]},
     )
     service = Recommender(
-        Catalog(),
-        model=model,
-        model_id="scripted-model",
+        catalog,
+        provider=StaticModelProvider(model, model_id="scripted-model"),
     )
-    response = await service.recommend(request)
+    try:
+        response = await service.recommend(request)
+    finally:
+        await service.close()
     assert response.products[0].product_id == "P003"
     assert response.products[0].price_cents == 189900
     assert "100%" not in response.products[0].marketing_copy

@@ -1,16 +1,16 @@
-"""评估执行器。
+"""单轮评估执行器。
 
 评估环境的五个要素在这里的落点：
 
     数据集          →  evals/dataset.py 的 ALL_TASKS
-    环境状态        →  每条任务一个独立的临时 SQLite（可重置、互不污染）
+    环境状态        →  evals/session.py，每条任务一个独立的临时 SQLite
     工具接口        →  复用 chatty 生产代码里的五个原子工具，不另造一套
     评分标准        →  evals/rubric.py
-    执行协议        →  单轮请求-响应；Chatty 不是多轮对话，因此**不需要用户模拟器**
+    执行协议        →  单轮请求-响应，需求在请求里一次性给全
 
-关于"不需要用户模拟器"：τ-bench 那类基准要模拟用户，是因为客服场景是多轮对话，
-需要渐进式透露信息。Chatty 的接口是一次调用进、一个推荐列表出，
-用户意图在请求里一次性给全，所以照搬用户模拟器只会增加不确定性、降低可复现性。
+单轮**刻意不用用户模拟器**：需求既然一次给全，多引一次模型调用只会增加不确定性、
+降低可复现性。信息渐进透露的那条路径由 evals/multiturn.py 覆盖，它有自己的
+用户模拟器和自己的裁决——两者共用 evals/session.py 的执行器，但数据集与评分不合并。
 **这是"严格对齐"和"照抄"的区别**——对齐的是方法论，不是具体组件。
 
 评估的对象不应只是模型，而应是**模型与 Harness 的组合体**。
@@ -20,16 +20,14 @@
 from __future__ import annotations
 
 import asyncio
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from agents import Model
-
-from chatty.agent import RecommendationError, Recommender
-from chatty.catalog import Catalog
+from chatty.model_provider import ModelProvider
+from chatty.models import RecommendationResponse
 from evals.dataset import ALL_TASKS, EvalTask
 from evals.rubric import TaskVerdict, grade
+from evals.session import run_session
 
 
 @dataclass
@@ -48,53 +46,31 @@ class EvalRun:
 async def run_task(
     task: EvalTask,
     *,
-    model: Model | None = None,
+    provider: ModelProvider | None = None,
     data_dir: Path | None = None,
 ) -> TaskVerdict:
-    """跑一条任务。
-
-    每次都新建一个临时数据库，保证"可重置到相同初始状态"——
-    这是评估环境的硬要求，否则上一条任务的副作用会污染下一条。
-    """
-    with tempfile.TemporaryDirectory(prefix="chatty-eval-") as tmp:
-        catalog = Catalog(data_dir, database_path=Path(tmp) / "eval.db")
-        recommender = Recommender(catalog, model=model)
-        try:
-            response = None
-            error_code = None
-            diagnostics: dict[str, object] = {}
-            try:
-                response = await recommender.recommend(task.to_request())
-                latency_ms = response.total_latency_ms
-            except RecommendationError as error:
-                error_code = error.code
-                diagnostics = error.diagnostics
-                latency_ms = 0.0
-            except Exception as error:  # noqa: BLE001
-                # Recommender 内部已经把异常兜成 RecommendationError，能漏到这里的
-                # 都是它管不到的（比如评估框架自己的 bug）。这类异常绝不能让整批评估中断——
-                # 跑了半小时因为一条任务崩掉，前面的结果就全白费了。
-                # 记成这一条任务的失败，附上异常类型便于事后定位。
-                error_code = "eval_harness_error"
-                diagnostics = {"exception": f"{type(error).__name__}: {error}"}
-                latency_ms = 0.0
-
-            return grade(
-                task,
-                response=response,
-                error_code=error_code,
-                forbidden_words=catalog.forbidden_words,
-                latency_ms=latency_ms,
-                diagnostics=diagnostics,
-            )
-        finally:
-            await recommender.close()
+    """跑一条单轮任务：会话执行交给 run_session，这里只管把结果送去裁决。"""
+    outcome = await run_session(
+        lambda recommender: recommender.recommend(task.to_request()),
+        provider=provider,
+        data_dir=data_dir,
+    )
+    # 单轮的期望就是一个推荐结果；respond 那条多轮路径不会走到这里。
+    response = outcome.reply if isinstance(outcome.reply, RecommendationResponse) else None
+    return grade(
+        task,
+        response=response,
+        error_code=outcome.error_code,
+        forbidden_words=outcome.forbidden_words,
+        latency_ms=outcome.latency_ms,
+        diagnostics=outcome.diagnostics,
+    )
 
 
 async def run_suite(
     tasks: tuple[EvalTask, ...] = ALL_TASKS,
     *,
-    model: Model | None = None,
+    provider: ModelProvider | None = None,
     model_id: str = "unknown",
     data_dir: Path | None = None,
     concurrency: int = 2,
@@ -113,7 +89,7 @@ async def run_suite(
 
     async def guarded(task: EvalTask) -> TaskVerdict:
         async with semaphore:
-            return await run_task(task, model=model, data_dir=data_dir)
+            return await run_task(task, provider=provider, data_dir=data_dir)
 
     # 同一条任务重复 repeat 次，结果平铺进一个列表；
     # 统计时按 task_id 分组，就能知道每条任务各跑了几次、过了几次。

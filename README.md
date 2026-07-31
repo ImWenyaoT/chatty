@@ -59,7 +59,7 @@ flowchart LR
 ## 能力边界
 
 - Chatty 是单 Agent 推荐系统；用户画像、商品搜索、库存检查、知识检索和营销策略都是 Tool。
-- 入口是 `Recommender.recommend()`，没有 HTTP 服务或前端；每次推荐独立运行，不是客服式长期会话。
+- 入口是 `Recommender.recommend()`（单轮）与 `chatty.conversation.Conversation`（信息不足时先澄清）；没有 HTTP 服务或前端。会话之间互不记忆，不是客服式长期对话。
 - 不使用向量库或 LLM-as-a-Judge：前者在当前规模下没有必要，后者无法替代可由 SQL 验证的业务事实。
 - SQLite 适合本地 demo、测试隔离和读多写少场景，不适合高并发、多进程写入或海量数仓分析。
 
@@ -73,7 +73,7 @@ Harness 校验工具调用和商品证据，并在响应前从数据库回填价
 ## 技术栈
 
 - Python 3.13+、uv、Pydantic
-- OpenAI Agents SDK、OpenAI-compatible Chat Completions API
+- OpenAI Agents SDK、OpenAI-compatible Responses API
 - SQLite、SQLite FTS5、BM25
 - Ruff、ty、pytest
 
@@ -108,7 +108,7 @@ uv run python demo.py 家电 user_budget  # 单次推荐
 |---|---|---|
 | `OPENAI_API_KEY` | 空 | 真实模型调用必填 |
 | `OPENAI_BASE_URL` | `https://api.deepseek.com` | OpenAI-compatible Endpoint |
-| `MODEL_ID` | `deepseek-v4-pro` | 调用模型 |
+| `MODEL_ID` | `deepseek-v4-flash` | 调用模型 |
 | `CHATTY_AGENT_DEBUG` | 关闭 | 设为 `1` 时记录 Agent 运行轨迹 |
 
 ## 评测与质量门禁
@@ -125,7 +125,7 @@ uv run ty check
 uv run pytest -q
 ```
 
-65 项测试使用脚本化模型，不联网、不产生费用，验证 Harness 契约；真实模型评测衡量的是
+116 项测试使用脚本化模型，不联网、不产生费用，验证 Harness 契约；真实模型评测衡量的是
 概率性行为，两者不能互相替代。
 
 ## 目录

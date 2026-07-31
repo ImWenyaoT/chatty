@@ -14,11 +14,6 @@ from chatty.models import (
 )
 
 
-@pytest.fixture(scope="module")
-def catalog() -> Catalog:
-    return Catalog()
-
-
 def test_demo_data_covers_every_category_and_segment(catalog: Catalog) -> None:
     # 断言覆盖度而非条数：每个在售类目都要有商品和配套知识，五个分群模板齐全。
     assert all(product.price_cents > 0 and product.stock >= 0 for product in catalog.products)

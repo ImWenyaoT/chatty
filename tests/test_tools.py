@@ -11,10 +11,10 @@ def test_five_tools_have_one_purpose_each() -> None:
     assert tuple(tool.name for tool in build_tools()) == TOOL_NAMES
 
 
-async def test_tools_use_run_context_and_catalog() -> None:
+async def test_tools_use_run_context_and_catalog(catalog: Catalog) -> None:
     context = RecommendationContext(
         request=RecommendationRequest(user_id="user_active"),
-        catalog=Catalog(),
+        catalog=catalog,
     )
     tools = {tool.name: tool for tool in build_tools()}
 

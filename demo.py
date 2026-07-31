@@ -8,8 +8,8 @@
 需要先在 .env 里配好 OPENAI_API_KEY。
 
 交互模式里可以直接说「想买个降噪耳机，2000 以内」，会先把它解析成结构化
-条件（类目、价格区间）再跑推荐。但每次仍是一次独立请求——Chatty 不做多轮
-对话，它是推荐系统不是客服，上一句说过的东西不会带到下一句。
+条件（类目、价格区间）再跑推荐。信息不够时 Chatty 会先反问，答完再继续——
+这一整段由 chatty.conversation 的会话 module 管，评估跑的是同一份代码。
 
 `/` 开头是命令，`/help` 看全部。`/1`…`/4` 直接跑预设需求，演示时不用现场
 打字；其中两条刻意会失败或触发反问——只演成功用例看不出 Harness 在做什么。
@@ -21,13 +21,17 @@ import logging
 import sys
 import time
 
-from agents.items import TResponseInputItem
-
-from chatty import config
-from chatty.agent import RecommendationError, Recommender, build_model
+from chatty import failure_log
+from chatty.agent import RecommendationError, Recommender
 from chatty.catalog import Catalog
-from chatty.models import ClarifyReply, RecommendationRequest, UserContext
-from evals.harvest import record_failure
+from chatty.conversation import Conversation, Resolve
+from chatty.model_provider import EnvModelProvider, ModelProvider
+from chatty.models import (
+    ClarifyReply,
+    RecommendationRequest,
+    RecommendationResponse,
+    UserContext,
+)
 
 USERS = ("user_active", "user_budget", "user_vip", "user_new", "user_churn")
 STEPS = "画像 → 搜索 → 库存 → 知识检索 → 营销策略 → 生成文案"
@@ -74,21 +78,20 @@ def _to_cents(yuan: object) -> int | None:
     return int(yuan * 100) if isinstance(yuan, int | float) else None
 
 
-async def parse_need(client, model_id: str, text: str, categories: list[str]) -> UserContext:
+async def parse_need(
+    provider: ModelProvider, text: str, categories: list[str]
+) -> UserContext:
     """把一句大白话转成结构化的检索条件。
 
     这是 demo 的输入适配，不属于 Agent 本身——真正的五个工具跑在这之后，
     拿到的仍然是结构化请求。
     """
-    completion = await client.chat.completions.create(
-        model=model_id,
-        messages=[
-            {"role": "system", "content": PARSE_PROMPT.format(categories="、".join(categories))},
-            {"role": "user", "content": text},
-        ],
-        extra_body={"thinking": {"type": "disabled"}},
+    raw = (
+        await provider.complete(
+            text, system=PARSE_PROMPT.format(categories="、".join(categories))
+        )
+        or "{}"
     )
-    raw = completion.choices[0].message.content or "{}"
     # 模型可能把 JSON 包在代码块里，抠出大括号那段。
     # 抠出来的也可能不是合法 JSON —— 这一步本来就是「模型说了不算」的地方，
     # 解析不了就当没给条件，按原话去搜，绝不让 demo 在这里崩掉。
@@ -117,8 +120,8 @@ def describe(context: UserContext) -> str:
     return " · ".join(bits)
 
 
-async def _ticker() -> None:
-    """跑的时候在同一行刷秒数和中断键。
+async def _tick() -> None:
+    """在同一行刷秒数和中断键。
 
     \\r 只在真终端里能盖掉上一行；输出被重定向到文件或管道时会刷屏，
     所以那种情况直接不打。
@@ -132,44 +135,27 @@ async def _ticker() -> None:
         print(f"\r  {STEPS}  {DIM}{elapsed:4.1f}s · Ctrl-C 中断{RESET}", end="", flush=True)
 
 
-async def run_turn(
-    service: Recommender,
-    context: UserContext,
-    user_id: str,
-    history: list[TResponseInputItem],
-) -> str | None:
-    """跑一轮。给出推荐就打印并返回 None；反问就打印问题并把它返回给上层。"""
-    request = RecommendationRequest(user_id=user_id, num_items=3, context=context)
-    ticker = asyncio.create_task(_ticker())
-    try:
-        reply = await service.respond(request, history=history)
-        if isinstance(reply, ClarifyReply):
-            print(f"\r  Chatty 想知道：{reply.question}{' ' * 20}")
-            # 把这一问一答记进历史，下一轮模型才知道自己问过什么
-            history.append({"role": "user", "content": request.model_dump_json()})
-            history.append(
-                {
-                    "role": "assistant",
-                    "content": json.dumps(
-                        {"action": "clarify", "question": reply.question}, ensure_ascii=False
-                    ),
-                }
-            )
-            return reply.question
-        response = reply
-    except RecommendationError as error:
-        # 记下来，之后用 --harvest 收成回归用例
-        record_failure(request.model_dump(mode="json"), error.code, error.diagnostics)
-        print(f"\r  没跑通：{error.code}{' ' * 40}")
-        if error.code == "recommendation_failed":
-            hint = "多半是模型这轮没按约定走（比如调了个不存在的 tool），重跑一次通常就好"
-            print(f"  {DIM}{hint}{RESET}")
-        elif error.code == "invalid_recommendation":
-            print(f"  {DIM}条件太紧，目录里没有同时满足类目和价格的商品{RESET}")
-        return None
-    finally:
-        ticker.cancel()
+class _Ticker:
+    """可以停下来的计时行。
 
+    Agent 反问时轮到用户打字，计时行必须停——否则它会一直往同一行刷，
+    把 `你 >` 提示符盖掉。
+    """
+
+    def __init__(self) -> None:
+        self._task: asyncio.Task[None] | None = None
+
+    def start(self) -> None:
+        if self._task is None:
+            self._task = asyncio.create_task(_tick())
+
+    def stop(self) -> None:
+        if self._task is not None:
+            self._task.cancel()
+            self._task = None
+
+
+def _print_response(response: RecommendationResponse) -> None:
     # \r 回到行首把计时那行盖掉，换成正式结果
     print(f"\r  五个工具调用完成，{response.total_latency_ms / 1000:.1f}s{' ' * 40}\n")
     for item in response.products:
@@ -180,7 +166,68 @@ async def run_turn(
         print(f"      {DIM}文案{RESET}  {item.marketing_copy}\n")
     # 上面的 ID、价格、库存、名称全部来自 SQLite 重查，模型只写了理由和文案。
     print(f"  {DIM}以上字段均来自 SQLite 重查，并通过 Harness 六条证据校验{RESET}\n")
-    return None
+
+
+def _print_error(error: RecommendationError) -> None:
+    print(f"\r  没跑通：{error.code}{' ' * 40}")
+    if error.code == "recommendation_failed":
+        hint = "多半是模型这轮没按约定走（比如调了个不存在的 tool），重跑一次通常就好"
+        print(f"  {DIM}{hint}{RESET}")
+    elif error.code == "invalid_recommendation":
+        print(f"  {DIM}条件太紧，目录里没有同时满足类目和价格的商品{RESET}")
+
+
+async def run_conversation(
+    service: Recommender,
+    user_id: str,
+    opening: str,
+    *,
+    resolve: Resolve,
+    max_turns: int,
+) -> None:
+    """跑一次会话并把过程打给人看。
+
+    会话循环、澄清历史的拼装和轮次上限都在 Conversation 里；这里只剩「怎么把
+    大白话变成条件」「反问时问谁」这两件 demo 特有的事，以及打印。
+    """
+    conversation = Conversation(service, user_id=user_id, num_items=3, max_turns=max_turns)
+    last_context = UserContext()
+    ticker = _Ticker()
+
+    async def tracking_resolve(said: list[str]) -> UserContext:
+        nonlocal last_context
+        ticker.stop()
+        last_context = await resolve(said)
+        # 让人看见这句话被理解成了什么
+        print(f"\n  {user_id} · {DIM}理解为{RESET} {describe(last_context)}")
+        ticker.start()
+        return last_context
+
+    async def ask(question: str) -> str | None:
+        ticker.stop()
+        print(f"\r  Chatty 想知道：{question}{' ' * 20}")
+        try:
+            answer = input("  你 > ").strip()
+        except (EOFError, KeyboardInterrupt):
+            return None
+        return None if not answer or answer in ("q", "quit", "exit") else answer
+
+    try:
+        reply = await conversation.converse(opening, resolve=tracking_resolve, ask=ask)
+    except RecommendationError as error:
+        # 记下来，之后用 --harvest 收成回归用例
+        request = RecommendationRequest(user_id=user_id, num_items=3, context=last_context)
+        failure_log.record(request, error.code, error.diagnostics)
+        _print_error(error)
+        return
+    finally:
+        ticker.stop()
+
+    if isinstance(reply, ClarifyReply):
+        # 轮次用完它还在问，或者用户中途不答了
+        print(f"\r  没能问清楚，这轮就到这里{' ' * 40}\n")
+        return
+    _print_response(reply)
 
 
 def print_commands() -> None:
@@ -199,7 +246,7 @@ def print_presets() -> None:
     print()
 
 
-def resolve_command(raw: str, user_id: str) -> tuple[str | None, str, bool]:
+def resolve_command(raw: str, user_id: str, model_id: str = "") -> tuple[str | None, str, bool]:
     """处理一条斜杠命令。
 
     返回 (要问的需求, 身份, 是否继续)。需求为 None 表示这条命令只改状态或只打印，
@@ -215,7 +262,7 @@ def resolve_command(raw: str, user_id: str) -> tuple[str | None, str, bool]:
     elif name == "presets":
         print_presets()
     elif name == "who":
-        print(f"\n  {user_id} · {config.configured_model_id()}\n")
+        print(f"\n  {user_id} · {model_id}\n")
     elif name == "clear":
         print("\033[2J\033[H", end="")
     elif name == "user":
@@ -235,11 +282,15 @@ def resolve_command(raw: str, user_id: str) -> tuple[str | None, str, bool]:
     return None, user_id, True
 
 
-async def interactive(service: Recommender) -> None:
-    """连着换需求试。共用一个 Recommender，数据库和模型连接只建一次。"""
+async def interactive(service: Recommender, provider: ModelProvider) -> None:
+    """连着换需求试。共用一个 Recommender 和一个提供方，连接只建一次。
+
+    早先这里为 parse_need 另建了一个客户端，于是一个进程两个连接、两条关闭路径，
+    而且 /who 打的 model_id 和实际推理用的模型没有代码保证一致。现在只有一个
+    提供方，两件事都不会再发生。
+    """
     categories = sorted({product.category for product in service.catalog.products})
-    _, client = build_model()
-    model_id = config.configured_model_id()
+    model_id = provider.model_id
     user_id = "user_active"
 
     print("\n  Chatty 交互演示")
@@ -263,7 +314,7 @@ async def interactive(service: Recommender) -> None:
                 continue
 
             if text.startswith("/"):
-                need, user_id, keep_going = resolve_command(text, user_id)
+                need, user_id, keep_going = resolve_command(text, user_id, model_id)
                 if not keep_going:
                     break
                 if need is None:
@@ -271,25 +322,15 @@ async def interactive(service: Recommender) -> None:
             else:
                 need = text
 
-            # 用户说过的话累积起来一起解析，否则第二轮只说「2000 以内」会丢掉类目
-            said = [need]
-            history: list[TResponseInputItem] = []
-            for _ in range(MAX_CLARIFY + 1):
-                context = await parse_need(client, model_id, " ".join(said), categories)
-                print(f"\n  {user_id} · {DIM}理解为{RESET} {describe(context)}")
-                question = await run_turn(service, context, user_id, history)
-                if question is None:
-                    break  # 已经给出推荐
-                try:
-                    answer = input("  你 > ").strip()
-                except (EOFError, KeyboardInterrupt):
-                    break
-                if not answer or answer in ("q", "quit", "exit"):
-                    break
-                said.append(answer)
+            async def resolve(said: list[str]) -> UserContext:
+                # 用户说过的话累积起来一起解析，否则第二轮只说「2000 以内」会丢掉类目
+                return await parse_need(provider, " ".join(said), categories)
+
+            await run_conversation(
+                service, user_id, need, resolve=resolve, max_turns=MAX_CLARIFY + 1
+            )
     finally:
-        await client.close()
-    print("\n  再见。\n")
+        print("\n  再见。\n")
 
 
 async def main() -> None:
@@ -299,18 +340,31 @@ async def main() -> None:
     logging.getLogger("chatty").setLevel(logging.ERROR)
 
     args = sys.argv[1:]
-    service = Recommender(Catalog())
+    catalog = Catalog()
+    # 一个进程一个提供方：Agent Loop 和 parse_need 共用它，
+    # 于是 /who 打的 model_id 就是实际推理用的那个
+    provider = EnvModelProvider()
+    service = Recommender(catalog, provider=provider)
     try:
         if args:
             # 带参数就跑一次：第一个是类目，第二个是用户 ID
             user_id = args[1] if len(args) > 1 else "user_active"
             print(f"\n  {user_id} · {args[0]}")
-            await run_turn(service, UserContext(preferred_categories=[args[0]]), user_id, [])
+            context = UserContext(preferred_categories=[args[0]])
+
+            async def fixed(_said: list[str]) -> UserContext:
+                return context
+
+            # 一次性给全条件，就一轮：反问了也没有下一轮来接
+            await run_conversation(service, user_id, args[0], resolve=fixed, max_turns=1)
         else:
-            await interactive(service)
+            await interactive(service, provider)
     finally:
-        # 无论怎么退出都要关掉模型连接和数据库
+        # provider 和 catalog 都是这里建的，就由这里关；
+        # service.close() 只释放它自己建的东西（这里一样都没有）
         await service.close()
+        await provider.close()
+        catalog.close()
 
 
 if __name__ == "__main__":

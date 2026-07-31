@@ -29,10 +29,11 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from agents import Agent, Model, ModelSettings, RunConfig, Runner
+from agents import Agent, Runner
 
-from chatty.agent import build_model, parse_agent_draft
+from chatty.agent import parse_agent_draft
 from chatty.catalog import Catalog
+from chatty.model_provider import EnvModelProvider, ModelProvider, run_config, run_settings
 from evals.dataset import ALL_TASKS, EvalTask, Expect
 
 # 裸模型的提示词：给它和完整 Agent 相同的任务描述，但不给任何工具。
@@ -72,7 +73,7 @@ class AblationResult:
 
 
 async def _run_baseline_task(
-    task: EvalTask, catalog: Catalog, model: Model
+    task: EvalTask, catalog: Catalog, provider: ModelProvider
 ) -> list[dict[str, str]]:
     """跑一条裸模型任务，返回它推荐的商品列表（解析失败就返回空）。"""
     profile = catalog.user_profile(task.user_id, task.to_request().context)
@@ -85,8 +86,10 @@ async def _run_baseline_task(
     agent = Agent(
         name="Baseline",
         instructions=BASELINE_INSTRUCTIONS,
-        model=model,
-        model_settings=ModelSettings(extra_body={"thinking": {"type": "disabled"}}),
+        model=provider.model(),
+        # 设置取自 chatty.model_provider，和实验组是同一份：各抄一份的话，
+        # 生产改了配置对照组不跟着变，比的就不再是「有没有 Harness」了
+        model_settings=run_settings(),
         tools=[],  # ← 消融的核心：不给任何工具
     )
     try:
@@ -94,9 +97,7 @@ async def _run_baseline_task(
             agent,
             need,
             max_turns=3,
-            # 和实验组一样关掉 tracing：用的是 DeepSeek 的 key，
-            # 往 OpenAI 上报会刷一屏 401 噪音
-            run_config=RunConfig(workflow_name="Chatty ablation", tracing_disabled=True),
+            run_config=run_config("Chatty ablation"),
         )
         draft = parse_agent_draft(result.final_output)
     except Exception:  # noqa: BLE001 — 裸模型崩了也是一种结果，记为"没产出"
@@ -115,6 +116,7 @@ async def run_ablation(
     tasks: tuple[EvalTask, ...] = ALL_TASKS,
     *,
     data_dir: Path | None = None,
+    provider: ModelProvider | None = None,
 ) -> AblationResult:
     """跑裸模型对照组，统计它的输出里有多少"不该出现"的商品。
 
@@ -123,7 +125,8 @@ async def run_ablation(
     """
     catalog = Catalog(data_dir)
     # 对照组必须用和实验组**同一个模型**，否则比的就不是"有没有 Harness"了
-    model, client = build_model()
+    owns_provider = provider is None
+    provider = provider or EnvModelProvider()
     try:
         products = {p.product_id: p for p in catalog.products}
         forbidden = catalog.forbidden_words
@@ -135,7 +138,7 @@ async def run_ablation(
         result.tasks = len(target)
 
         for task in target:
-            items = await _run_baseline_task(task, catalog, model)
+            items = await _run_baseline_task(task, catalog, provider)
             if not items:
                 continue
             result.responded += 1
@@ -161,7 +164,8 @@ async def run_ablation(
                         break
         return result
     finally:
-        await client.close()
+        if owns_provider:
+            await provider.close()
         catalog.close()
 
 
