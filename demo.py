@@ -10,10 +10,14 @@
 交互模式里可以直接说「想买个降噪耳机，2000 以内」，会先把它解析成结构化
 条件（类目、价格区间）再跑推荐。但每次仍是一次独立请求——Chatty 不做多轮
 对话，它是推荐系统不是客服，上一句说过的东西不会带到下一句。
+
+`/` 开头是命令，`/help` 看全部。`/1`…`/4` 直接跑预设需求，演示时不用现场
+打字；其中两条刻意会失败或触发反问——只演成功用例看不出 Harness 在做什么。
 """
 
 import asyncio
 import json
+import logging
 import sys
 import time
 
@@ -28,6 +32,27 @@ from evals.harvest import record_failure
 USERS = ("user_active", "user_budget", "user_vip", "user_new", "user_churn")
 STEPS = "画像 → 搜索 → 库存 → 知识检索 → 营销策略 → 生成文案"
 RULE = "─" * 68
+
+# 斜杠命令。顺序就是 /help 里的顺序，常用的排前面。
+COMMANDS: tuple[tuple[str, str], ...] = (
+    ("/1 … /4", "跑第 n 条预设需求，省得现场打字"),
+    ("/presets", "列出预设需求"),
+    ("/user <id>", "换个身份问；不带参数就列出所有身份"),
+    ("/who", "当前身份与模型"),
+    ("/clear", "清屏"),
+    ("/help", "这张表"),
+    ("/q", "退出"),
+)
+
+# 预设需求：需求、以谁的身份问、这条想让人看见什么。
+# 后两条是刻意留的：一条应当明确失败，一条应当触发反问 —— 光看成功用例
+# 看不出 Harness 在做什么。
+PRESETS: tuple[tuple[str, str, str], ...] = (
+    ("想买个降噪耳机，2000 以内", "user_active", "常规推荐，五个工具全跑通"),
+    ("三千以上的手机", "user_vip", "多约束：类目 + 价格下限"),
+    ("五万以上的耳机", "user_budget", "条件太紧：应当明确失败，而不是硬凑一个"),
+    ("想买个能用很久的电脑", "user_new", "需求太模糊：可能先反问再推荐"),
+)
 MAX_CLARIFY = 2  # 最多让它追问两次，免得绕不出来
 
 # ANSI 暗色，让提示不抢正文的注意力；不是终端就留空串
@@ -64,9 +89,16 @@ async def parse_need(client, model_id: str, text: str, categories: list[str]) ->
         extra_body={"thinking": {"type": "disabled"}},
     )
     raw = completion.choices[0].message.content or "{}"
-    # 模型可能把 JSON 包在代码块里，抠出大括号那段
+    # 模型可能把 JSON 包在代码块里，抠出大括号那段。
+    # 抠出来的也可能不是合法 JSON —— 这一步本来就是「模型说了不算」的地方，
+    # 解析不了就当没给条件，按原话去搜，绝不让 demo 在这里崩掉。
     start, end = raw.find("{"), raw.rfind("}")
-    parsed = json.loads(raw[start : end + 1]) if start != -1 and end > start else {}
+    try:
+        parsed = json.loads(raw[start : end + 1]) if start != -1 and end > start else {}
+    except json.JSONDecodeError:
+        parsed = {}
+    if not isinstance(parsed, dict):
+        parsed = {}
 
     return UserContext(
         preferred_categories=[parsed["category"]] if parsed.get("category") in categories else [],
@@ -151,11 +183,64 @@ async def run_turn(
     return None
 
 
+def print_commands() -> None:
+    width = max(len(name) for name, _ in COMMANDS)
+    print()
+    for name, description in COMMANDS:
+        print(f"  {name:<{width}}  {DIM}{description}{RESET}")
+    print()
+
+
+def print_presets() -> None:
+    print()
+    for index, (need, user_id, why) in enumerate(PRESETS, start=1):
+        print(f"  {DIM}/{index}{RESET}  {need}")
+        print(f"      {DIM}{user_id} · {why}{RESET}")
+    print()
+
+
+def resolve_command(raw: str, user_id: str) -> tuple[str | None, str, bool]:
+    """处理一条斜杠命令。
+
+    返回 (要问的需求, 身份, 是否继续)。需求为 None 表示这条命令只改状态或只打印，
+    不发起推荐。
+    """
+    name, _, argument = raw[1:].partition(" ")
+    argument = argument.strip()
+
+    if name in ("q", "quit", "exit"):
+        return None, user_id, False
+    if name in ("", "help", "?"):
+        print_commands()
+    elif name == "presets":
+        print_presets()
+    elif name == "who":
+        print(f"\n  {user_id} · {config.configured_model_id()}\n")
+    elif name == "clear":
+        print("\033[2J\033[H", end="")
+    elif name == "user":
+        if not argument:
+            print(f"\n  {DIM}{'、'.join(USERS)}{RESET}\n")
+        elif argument in USERS:
+            print(f"\n  已切到 {argument}\n")
+            return None, argument, True
+        else:
+            print(f"\n  没有这个身份：{argument}\n")
+    elif name.isdigit() and 1 <= int(name) <= len(PRESETS):
+        need, preset_user, _ = PRESETS[int(name) - 1]
+        print(f"  {need}")  # 回显，让人看见这一轮问的是什么
+        return need, preset_user, True
+    else:
+        print(f"\n  没有 /{name} 这条命令，/help 看全部\n")
+    return None, user_id, True
+
+
 async def interactive(service: Recommender) -> None:
     """连着换需求试。共用一个 Recommender，数据库和模型连接只建一次。"""
     categories = sorted({product.category for product in service.catalog.products})
     _, client = build_model()
     model_id = config.configured_model_id()
+    user_id = "user_active"
 
     print("\n  Chatty 交互演示")
     print(
@@ -164,25 +249,30 @@ async def interactive(service: Recommender) -> None:
     )
     print(f"  {DIM}用大白话说需求即可，比如「想买个降噪耳机，2000 以内」{RESET}")
     print(f"  {DIM}类目{RESET}  {'、'.join(categories)}")
-    print(f"  {DIM}用户{RESET}  {'、'.join(USERS)}")
-    print(f"  {DIM}换个用户问同样的需求，能看出画像对结果的影响{RESET}\n")
-    print(f"  {DIM}回车 用默认值 · q 退出{RESET}")
+    print(f"  {DIM}换个身份问同样的需求，能看出画像对结果的影响{RESET}")
+    print(f"  {DIM}/ 开头是命令，/help 看全部，/1 直接跑第一条预设{RESET}")
 
     try:
         while True:
             print(RULE)
             try:
-                text = input("  想买点什么 > ").strip() or "推荐个降噪耳机"
-                if text in ("q", "quit", "exit"):
-                    break
-                user_id = input("  以谁的身份（回车=user_active）> ").strip() or "user_active"
-                if user_id in ("q", "quit", "exit"):
-                    break
+                text = input(f"  {user_id} > ").strip()
             except (EOFError, KeyboardInterrupt):
                 break
+            if not text:
+                continue
+
+            if text.startswith("/"):
+                need, user_id, keep_going = resolve_command(text, user_id)
+                if not keep_going:
+                    break
+                if need is None:
+                    continue
+            else:
+                need = text
 
             # 用户说过的话累积起来一起解析，否则第二轮只说「2000 以内」会丢掉类目
-            said = [text]
+            said = [need]
             history: list[TResponseInputItem] = []
             for _ in range(MAX_CLARIFY + 1):
                 context = await parse_need(client, model_id, " ".join(said), categories)
@@ -203,6 +293,11 @@ async def interactive(service: Recommender) -> None:
 
 
 async def main() -> None:
+    # 条件太紧、模型没按约定走，这些都是 Harness 该拦下的失败，demo 已经用人话
+    # 讲了。库里那条 warning 带着完整堆栈，演示时刷在屏幕上像是崩了。留到 ERROR：
+    # 真的意外异常（logger.exception）仍然会连堆栈一起打出来。
+    logging.getLogger("chatty").setLevel(logging.ERROR)
+
     args = sys.argv[1:]
     service = Recommender(Catalog())
     try:
