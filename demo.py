@@ -299,7 +299,8 @@ async def main() -> None:
     logging.getLogger("chatty").setLevel(logging.ERROR)
 
     args = sys.argv[1:]
-    service = Recommender(Catalog())
+    catalog = Catalog()
+    service = Recommender(catalog)
     try:
         if args:
             # 带参数就跑一次：第一个是类目，第二个是用户 ID
@@ -309,8 +310,9 @@ async def main() -> None:
         else:
             await interactive(service)
     finally:
-        # 无论怎么退出都要关掉模型连接和数据库
+        # service.close() 只关它自己建的模型连接；Catalog 是这里建的，这里关
         await service.close()
+        catalog.close()
 
 
 if __name__ == "__main__":

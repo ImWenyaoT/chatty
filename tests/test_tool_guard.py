@@ -19,8 +19,7 @@ from chatty.tools import (
 )
 
 
-def _context() -> RecommendationContext:
-    catalog = Catalog()
+def _context(catalog: Catalog) -> RecommendationContext:
     return RecommendationContext(
         request=RecommendationRequest(user_id="user_active"),
         catalog=catalog,
@@ -102,38 +101,29 @@ def test_inventory_must_follow_search() -> None:
 # ============================================================================
 
 
-def test_same_call_is_allowed_a_few_times() -> None:
+def test_same_call_is_allowed_a_few_times(catalog: Catalog) -> None:
     """允许重试几次：网络抖动、模型犹豫都可能导致重复。"""
-    context = _context()
-    try:
-        for _ in range(3):
-            guard_repeated_call(context, "search_products", "耳机|0-300000")
-    finally:
-        context.catalog.close()
+    context = _context(catalog)
+    for _ in range(3):
+        guard_repeated_call(context, "search_products", "耳机|0-300000")
 
 
-def test_same_call_beyond_limit_is_rejected() -> None:
+def test_same_call_beyond_limit_is_rejected(catalog: Catalog) -> None:
     """但第 4 次就该拦——结果不会变化，继续只是浪费轮次预算。"""
-    context = _context()
-    try:
-        for _ in range(3):
-            guard_repeated_call(context, "search_products", "耳机|0-300000")
-        with pytest.raises(ValueError) as error:
-            guard_repeated_call(context, "search_products", "耳机|0-300000")
-        # 错误信息要告诉模型该怎么办，而不只是说"错了"
-        assert "改变参数" in str(error.value)
-    finally:
-        context.catalog.close()
+    context = _context(catalog)
+    for _ in range(3):
+        guard_repeated_call(context, "search_products", "耳机|0-300000")
+    with pytest.raises(ValueError) as error:
+        guard_repeated_call(context, "search_products", "耳机|0-300000")
+    # 错误信息要告诉模型该怎么办，而不只是说"错了"
+    assert "改变参数" in str(error.value)
 
 
-def test_different_parameters_are_not_counted_together() -> None:
+def test_different_parameters_are_not_counted_together(catalog: Catalog) -> None:
     """换了条件就是新的尝试，不该累计到重复次数里。"""
-    context = _context()
-    try:
-        for price in range(10):
-            guard_repeated_call(context, "search_products", f"耳机|0-{price}0000")
-    finally:
-        context.catalog.close()
+    context = _context(catalog)
+    for price in range(10):
+        guard_repeated_call(context, "search_products", f"耳机|0-{price}0000")
 
 
 # ============================================================================
@@ -142,7 +132,7 @@ def test_different_parameters_are_not_counted_together() -> None:
 
 
 @pytest.mark.asyncio
-async def test_multiple_searches_accumulate_evidence() -> None:
+async def test_multiple_searches_accumulate_evidence(catalog: Catalog) -> None:
     """分多次搜索不同类目时，召回证据必须累加而不是被覆盖。
 
     这是放宽"允许重复调用"之后暴露出来的真实 bug：
@@ -202,7 +192,7 @@ async def test_multiple_searches_accumulate_evidence() -> None:
     ]
 
     service = Recommender(
-        Catalog(),
+        catalog,
         model=ScriptedModel(script),
         model_id="scripted-model",
     )
@@ -220,7 +210,7 @@ async def test_multiple_searches_accumulate_evidence() -> None:
 # ============================================================================
 
 
-def test_blank_categories_are_rejected_not_ignored() -> None:
+def test_blank_categories_are_rejected_not_ignored(catalog: Catalog) -> None:
     """传了类目但全是空白时必须报错，不能退化成"不按类目过滤"。
 
     静默退化的后果：模型以为按"耳机"筛过了，实际拿到的是全品类商品，
@@ -228,43 +218,39 @@ def test_blank_categories_are_rejected_not_ignored() -> None:
     """
     from chatty.catalog import CatalogError
 
-    context = _context()
-    try:
-        profile = context.catalog.user_profile("user_active", context.request.context)
-        with pytest.raises(CatalogError, match="invalid_product_search_categories"):
-            context.catalog.search(
-                profile=profile,
-                categories=["  ", ""],
-                min_price_cents=0,
-                max_price_cents=1_000_000,
-                tags=[],
-                limit=5,
-            )
-    finally:
-        context.catalog.close()
+    context = _context(catalog)
+    profile = context.catalog.user_profile("user_active", context.request.context)
+    with pytest.raises(CatalogError, match="invalid_product_search_categories"):
+        context.catalog.search(
+            profile=profile,
+            categories=["  ", ""],
+            min_price_cents=0,
+            max_price_cents=1_000_000,
+            tags=[],
+            limit=5,
+        )
 
 
-def test_blank_tags_are_rejected_not_ignored() -> None:
+def test_blank_tags_are_rejected_not_ignored(catalog: Catalog) -> None:
     from chatty.catalog import CatalogError
 
-    context = _context()
-    try:
-        profile = context.catalog.user_profile("user_active", context.request.context)
-        with pytest.raises(CatalogError, match="invalid_product_search_tags"):
-            context.catalog.search(
-                profile=profile,
-                categories=["耳机"],
-                min_price_cents=0,
-                max_price_cents=1_000_000,
-                tags=["", " "],
-                limit=5,
-            )
-    finally:
-        context.catalog.close()
+    context = _context(catalog)
+    profile = context.catalog.user_profile("user_active", context.request.context)
+    with pytest.raises(CatalogError, match="invalid_product_search_tags"):
+        context.catalog.search(
+            profile=profile,
+            categories=["耳机"],
+            min_price_cents=0,
+            max_price_cents=1_000_000,
+            tags=["", " "],
+            limit=5,
+        )
 
 
 @pytest.mark.asyncio
-async def test_retrieved_documents_are_marked_as_data_not_instructions() -> None:
+async def test_retrieved_documents_are_marked_as_data_not_instructions(
+    catalog: Catalog,
+) -> None:
     """检索结果必须带来源标记，防止间接提示注入。
 
     知识库文档是间接提示注入的典型载体：攻击者把"忽略先前指令"之类的话
@@ -278,7 +264,7 @@ async def test_retrieved_documents_are_marked_as_data_not_instructions() -> None
     from tests.test_agent import ScriptedModel, successful_script
 
     model = ScriptedModel(successful_script())
-    service = Recommender(Catalog(), model=model, model_id="scripted-model")
+    service = Recommender(catalog, model=model, model_id="scripted-model")
     try:
         await service.recommend(RecommendationRequest(user_id="user_active"))
     finally:

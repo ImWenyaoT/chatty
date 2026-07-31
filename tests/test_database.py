@@ -99,45 +99,35 @@ def test_long_documents_are_split_into_chunks() -> None:
     assert chunks[0][-10:] in chunks[1]
 
 
-def test_chunks_preserve_original_text_for_display() -> None:
+def test_chunks_preserve_original_text_for_display(catalog: Catalog) -> None:
     """FTS 表同时存"分词版"和"原文版"：前者建索引，后者返回给模型。"""
-    catalog = Catalog()
-    try:
-        hits = catalog.retrieve_knowledge(
-            "降噪 耳机", categories=["耳机"], product_ids=[], limit=3
-        )
-        assert hits
-        for hit in hits:
-            # 返回给模型的内容不能带建索引用的分词空格
-            assert "  " not in hit.content, f"返回内容含分词空格：{hit.content[:40]}"
-            assert hit.chunk_ordinal >= 0
-    finally:
-        catalog.close()
+    hits = catalog.retrieve_knowledge("降噪 耳机", categories=["耳机"], product_ids=[], limit=3)
+    assert hits
+    for hit in hits:
+        # 返回给模型的内容不能带建索引用的分词空格
+        assert "  " not in hit.content, f"返回内容含分词空格：{hit.content[:40]}"
+        assert hit.chunk_ordinal >= 0
 
 
-def test_query_rewrite_bridges_synonym_gap() -> None:
+def test_query_rewrite_bridges_synonym_gap(catalog: Catalog) -> None:
     """查询改写把用户说法补上知识库用词，解决 BM25 只认字面的问题。
 
     这是稀疏检索的固有短板（稠密检索正是为解决它而生）。
     在不引入嵌入模型的前提下，同义词扩展是成本最低的缓解手段。
     """
-    catalog = Catalog()
-    try:
-        rewrite = catalog.retriever.rewrite_query
+    rewrite = catalog.retriever.rewrite_query
 
-        # 用户说"保护视力"，知识库写的是"护眼"
-        assert "护眼" in rewrite("保护视力 不伤眼")
-        # 原词必须保留——改写是**扩展**不是**替换**，映射不准也只是多召回几条
-        assert "保护视力" in rewrite("保护视力 不伤眼")
-        # 知识库用词已经在查询里就不重复添加
-        assert rewrite("护眼 台灯").count("护眼") == 1
-        # 没有同义词的查询原样返回
-        assert rewrite("iPhone 16") == "iPhone 16"
+    # 用户说"保护视力"，知识库写的是"护眼"
+    assert "护眼" in rewrite("保护视力 不伤眼")
+    # 原词必须保留——改写是**扩展**不是**替换**，映射不准也只是多召回几条
+    assert "保护视力" in rewrite("保护视力 不伤眼")
+    # 知识库用词已经在查询里就不重复添加
+    assert rewrite("护眼 台灯").count("护眼") == 1
+    # 没有同义词的查询原样返回
+    assert rewrite("iPhone 16") == "iPhone 16"
 
-        # 端到端验证：改写前召回不到的查询，现在能召回
-        hits = catalog.retrieve_knowledge(
-            "保护视力 不伤眼", categories=["家电"], product_ids=[], limit=5
-        )
-        assert hits, "同义词查询应当能召回到写着'护眼'的文档"
-    finally:
-        catalog.close()
+    # 端到端验证：改写前召回不到的查询，现在能召回
+    hits = catalog.retrieve_knowledge(
+        "保护视力 不伤眼", categories=["家电"], product_ids=[], limit=5
+    )
+    assert hits, "同义词查询应当能召回到写着'护眼'的文档"

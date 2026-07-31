@@ -217,10 +217,15 @@ class Recommender:
         return MULTI_TURN_INSTRUCTIONS.replace("{categories}", "、".join(categories))
 
     async def close(self) -> None:
+        """只释放自己创建的东西。
+
+        catalog 是注入进来的，由建它的人关——所有权写进接口，不做隐式约定。
+        早先这里顺手 `self.catalog.close()`，于是共享同一个 Catalog 的调用方
+        （多轮评估串行跑三条任务）在第一条跑完就被关掉了 sqlite 连接，
+        后面两条撞 ProgrammingError，被上层的 except Exception 吞成"任务未通过"。
+        """
         if self._client is not None:
             await self._client.close()
-
-        self.catalog.close()
 
     async def recommend(self, request: RecommendationRequest) -> RecommendationResponse:
         """单轮推荐：需求一次给全，模型不该反问。

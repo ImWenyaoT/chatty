@@ -13,11 +13,36 @@ from tests.test_agent import ScriptedModel, ToolStep, successful_script
 
 
 @pytest.mark.asyncio
-async def test_unexpected_failure_is_exposed_with_code(caplog) -> None:
+async def test_recommender_does_not_close_the_catalog_it_was_given(catalog: Catalog) -> None:
+    """Recommender 只释放自己建的东西，注入进来的 Catalog 归建它的人管。
+
+    多轮评估串行跑多条任务时共用一个 Catalog：第一条跑完调 close()，
+    如果它顺手关掉数据库连接，后面几条就全部撞 sqlite ProgrammingError，
+    而上层的 except Exception 会把它吞成"任务未通过"——报告上看着像模型不行。
+    """
+    first = Recommender(catalog, model=ScriptedModel(successful_script()))
+    await first.recommend(RecommendationRequest(user_id="user_active", num_items=1))
+    await first.close()
+
+    # 第一个 Recommender 关掉之后，同一个 Catalog 仍然可用
+    assert catalog.retrieve_knowledge("降噪 耳机", categories=[], product_ids=[], limit=1)
+
+    second = Recommender(catalog, model=ScriptedModel(successful_script()))
+    try:
+        response = await second.recommend(
+            RecommendationRequest(user_id="user_active", num_items=1)
+        )
+    finally:
+        await second.close()
+    assert response.products
+
+
+@pytest.mark.asyncio
+async def test_unexpected_failure_is_exposed_with_code(catalog, caplog) -> None:
     """未预期的故障要暴露成带错误码的失败，且留下可定位的日志——绝不静默降级。"""
     caplog.set_level(logging.ERROR, logger="chatty.agent")
     service = Recommender(
-        Catalog(),
+        catalog,
         model=ScriptedModel([]),
         model_id="failing-scripted-model",
     )
@@ -32,11 +57,11 @@ async def test_unexpected_failure_is_exposed_with_code(caplog) -> None:
 
 
 @pytest.mark.asyncio
-async def test_missing_model_key_maps_to_its_own_code(monkeypatch) -> None:
+async def test_missing_model_key_maps_to_its_own_code(catalog, monkeypatch) -> None:
     """缺配置要有自己的错误码，不能和 Agent 逻辑失败混成一个码。"""
     monkeypatch.setattr(config, "load_root_env", lambda: None)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    service = Recommender(Catalog())
+    service = Recommender(catalog)
     try:
         with pytest.raises(RecommendationError) as error:
             await service.recommend(RecommendationRequest(user_id="user_active"))
@@ -47,7 +72,7 @@ async def test_missing_model_key_maps_to_its_own_code(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_empty_rag_evidence_is_rejected() -> None:
+async def test_empty_rag_evidence_is_rejected(catalog) -> None:
     script = successful_script()
     script[3] = ToolStep(
         "call-4",
@@ -60,7 +85,7 @@ async def test_empty_rag_evidence_is_rejected() -> None:
         },
     )
     service = Recommender(
-        Catalog(),
+        catalog,
         model=ScriptedModel(script),
         model_id="scripted-model",
     )
@@ -73,11 +98,11 @@ async def test_empty_rag_evidence_is_rejected() -> None:
 
 
 @pytest.mark.asyncio
-async def test_missing_required_tool_is_rejected() -> None:
+async def test_missing_required_tool_is_rejected(catalog) -> None:
     script = successful_script()
     del script[0]
     service = Recommender(
-        Catalog(),
+        catalog,
         model=ScriptedModel(script),
         model_id="scripted-model",
     )
@@ -90,11 +115,11 @@ async def test_missing_required_tool_is_rejected() -> None:
 
 
 @pytest.mark.asyncio
-async def test_tools_must_run_in_order() -> None:
+async def test_tools_must_run_in_order(catalog) -> None:
     script = successful_script()
     script[0], script[1] = script[1], script[0]
     service = Recommender(
-        Catalog(),
+        catalog,
         model=ScriptedModel(script),
         model_id="scripted-model",
     )
@@ -107,7 +132,7 @@ async def test_tools_must_run_in_order() -> None:
 
 
 @pytest.mark.asyncio
-async def test_marketing_strategy_must_match_profile() -> None:
+async def test_marketing_strategy_must_match_profile(catalog) -> None:
     script = successful_script()
     script[4] = ToolStep(
         "call-5",
@@ -115,7 +140,7 @@ async def test_marketing_strategy_must_match_profile() -> None:
         {"segment": "new_user"},
     )
     service = Recommender(
-        Catalog(),
+        catalog,
         model=ScriptedModel(script),
         model_id="scripted-model",
     )
@@ -128,9 +153,11 @@ async def test_marketing_strategy_must_match_profile() -> None:
 
 
 @pytest.mark.asyncio
-async def test_response_construction_failure_raises_instead_of_succeeding(monkeypatch) -> None:
+async def test_response_construction_failure_raises_instead_of_succeeding(
+    catalog, monkeypatch
+) -> None:
     service = Recommender(
-        Catalog(),
+        catalog,
         model=ScriptedModel(successful_script()),
         model_id="scripted-model",
     )
@@ -191,6 +218,7 @@ async def test_response_construction_failure_raises_instead_of_succeeding(monkey
     ],
 )
 async def test_recommendation_requires_product_evidence(
+    catalog,
     script_index: int,
     replacement: ToolStep,
     failure: str,
@@ -198,7 +226,7 @@ async def test_recommendation_requires_product_evidence(
     script = successful_script()
     script[script_index] = replacement
     service = Recommender(
-        Catalog(),
+        catalog,
         model=ScriptedModel(script),
         model_id="scripted-model",
     )

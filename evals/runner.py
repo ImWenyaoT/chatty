@@ -89,6 +89,7 @@ async def run_task(
             )
         finally:
             await recommender.close()
+            catalog.close()  # 这个 Catalog 是这里建的，就由这里关
 
 
 async def run_suite(
