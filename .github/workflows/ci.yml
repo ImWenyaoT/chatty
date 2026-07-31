@@ -30,7 +30,10 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@v7
+      # working-directory 不作用于 uses: 步骤，得显式指到 web/
       - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
       - uses: actions/setup-node@v6
         with:
           node-version: 24
