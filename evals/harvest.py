@@ -6,51 +6,23 @@
 
 闭环三步：
 
-    跑的时候失败 → .local/failures.jsonl → harvest 生成 EvalTask
+    跑的时候失败 → 失败轨迹（chatty.failure_log）→ harvest 生成 EvalTask
 
 没有这个接口，评估集就是一次性构造的静态集合，只能覆盖当初想得到的情况；
 有了它，评估集随着实际使用不断长出新用例。
 
-脱敏在写入时做（见 `record_failure`），不是在这里做——敏感字段就不该
-落到磁盘上，事后再清等于已经泄露过一次。
+日志的位置、格式和脱敏规则都归 `chatty.failure_log` 管——写它的是生产路径，
+这里只是读。所以这个文件里没有任何 json 解析和路径常量。
 """
 
 from __future__ import annotations
 
-import json
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-FAILURE_LOG = Path(".local/failures.jsonl")
-
-# 这些字段不落盘。chatty 的请求里本来没有隐私数据，
-# 但把这条规矩立在这里，加字段的人才会想到这件事。
-REDACTED_FIELDS = frozenset({"api_key", "token", "phone", "email", "address"})
-
-
-def record_failure(
-    request_payload: dict[str, object],
-    error_code: str,
-    diagnostics: dict[str, object] | None = None,
-    *,
-    log_path: Path = FAILURE_LOG,
-) -> None:
-    """记一次失败，供之后收成回归用例。
-
-    只记复现需要的东西：请求参数、错误码、诊断。不记模型的原始输出——
-    那个既大又不稳定，而且回归用例要复现的是「这个输入会不会再挂」，
-    不是「模型当时说了什么」。
-    """
-    clean = {k: v for k, v in request_payload.items() if k not in REDACTED_FIELDS}
-    entry = {
-        "request": clean,
-        "error_code": error_code,
-        "diagnostics": diagnostics or {},
-    }
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    with log_path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
+from chatty import config
+from chatty.failure_log import read
 
 
 @dataclass(frozen=True)
@@ -93,33 +65,25 @@ class HarvestedCase:
         return "\n".join(parts)
 
 
-def harvest(log_path: Path = FAILURE_LOG) -> list[HarvestedCase]:
-    """读失败日志，按「请求形状 + 错误码」去重，按出现次数排序。
+def harvest(log_path: Path | None = None) -> list[HarvestedCase]:
+    """读失败轨迹，按「请求形状 + 错误码」去重，按出现次数排序。
 
     去重的意义：同一个坑踩一百次也只需要一条回归用例，
     但踩的次数说明它有多值得补——所以次数要留着。
     """
-    if not log_path.exists():
-        return []
-
     counter: Counter[tuple] = Counter()
-    for line in log_path.read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        try:
-            entry = json.loads(line)
-        except json.JSONDecodeError:
-            continue  # 半行残留，跳过
-        request = entry.get("request", {})
-        context = request.get("context") or {}
+    for entry in read(log_path):
+        raw_context = entry.request.get("context")
+        context = raw_context if isinstance(raw_context, dict) else {}
+        categories = context.get("preferred_categories")
         counter[
             (
-                request.get("user_id", "user_active"),
-                tuple(context.get("preferred_categories") or ()),
+                entry.request.get("user_id", "user_active"),
+                tuple(categories) if isinstance(categories, list) else (),
                 context.get("min_price_cents"),
                 context.get("max_price_cents"),
-                request.get("num_items", 3),
-                entry.get("error_code", "unknown"),
+                entry.request.get("num_items", 3),
+                entry.error_code,
             )
         ] += 1
 
@@ -141,7 +105,7 @@ def render_harvest_report(cases: list[HarvestedCase]) -> str:
     if not cases:
         return (
             "还没有收到失败记录。\n"
-            f"跑 demo 或评估时如果出现失败，会写进 {FAILURE_LOG}，再回来跑这个命令。"
+            f"跑 demo 或评估时如果出现失败，会写进 {config.FAILURE_LOG_PATH}，再回来跑这个命令。"
         )
     total = sum(c.seen for c in cases)
     lines = [
@@ -156,4 +120,4 @@ def render_harvest_report(cases: list[HarvestedCase]) -> str:
     return "\n".join(lines)
 
 
-__all__ = ["FAILURE_LOG", "HarvestedCase", "harvest", "record_failure", "render_harvest_report"]
+__all__ = ["HarvestedCase", "harvest", "render_harvest_report"]

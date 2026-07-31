@@ -108,7 +108,7 @@ uv run python demo.py 家电 user_budget  # 单次推荐
 |---|---|---|
 | `OPENAI_API_KEY` | 空 | 真实模型调用必填 |
 | `OPENAI_BASE_URL` | `https://api.deepseek.com` | OpenAI-compatible Endpoint |
-| `MODEL_ID` | `deepseek-v4-pro` | 调用模型 |
+| `MODEL_ID` | `deepseek-v4-flash` | 调用模型 |
 | `CHATTY_AGENT_DEBUG` | 关闭 | 设为 `1` 时记录 Agent 运行轨迹 |
 
 ## 评测与质量门禁
@@ -125,7 +125,7 @@ uv run ty check
 uv run pytest -q
 ```
 
-65 项测试使用脚本化模型，不联网、不产生费用，验证 Harness 契约；真实模型评测衡量的是
+109 项测试使用脚本化模型，不联网、不产生费用，验证 Harness 契约；真实模型评测衡量的是
 概率性行为，两者不能互相替代。
 
 ## 目录

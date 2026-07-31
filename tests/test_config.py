@@ -7,20 +7,20 @@ from chatty import config
 from chatty.debug import AgentDebugHooks
 
 
-def test_default_model_is_current_deepseek_v4_pro() -> None:
-    assert config.DEFAULT_MODEL_ID == "deepseek-v4-pro"
+def test_default_model_is_current_deepseek_v4_flash() -> None:
+    assert config.DEFAULT_MODEL_ID == "deepseek-v4-flash"
 
 
 def test_env_supports_dotenv_syntax(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / ".env").write_text(
-        'MODEL_PREFIX="deepseek"\nMODEL_ID=${MODEL_PREFIX}-v4-pro\n',
+        'MODEL_PREFIX="deepseek"\nMODEL_ID=${MODEL_PREFIX}-v4-flash\n',
         encoding="utf-8",
     )
     monkeypatch.setattr(config, "ROOT", tmp_path)
     monkeypatch.delenv("MODEL_PREFIX", raising=False)
     monkeypatch.delenv("MODEL_ID", raising=False)
 
-    assert config.configured_model_id() == "deepseek-v4-pro"
+    assert config.configured_model_id() == "deepseek-v4-flash"
 
 
 def test_process_environment_takes_precedence(tmp_path: Path, monkeypatch) -> None:
