@@ -29,7 +29,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from chatty.agent import Recommender
-from chatty.catalog import Catalog
 from chatty.conversation import Conversation
 from chatty.model_provider import EnvModelProvider, ModelProvider
 from chatty.models import RecommendationResponse, UserContext
@@ -189,7 +188,7 @@ async def run_multiturn_task(
     async def session(recommender: Recommender):
         async def resolve(said: list[str]) -> UserContext:
             evidence.turns += 1
-            evidence.categories = _categories(recommender.catalog)
+            evidence.categories = recommender.catalog.categories
             return _context_from(said, task, evidence.categories)
 
         async def ask(question: str) -> str:
@@ -212,10 +211,6 @@ async def run_multiturn_task(
             TurnRecord("Agent", "推荐：" + "、".join(p.name for p in outcome.reply.products))
         )
     return grade_multiturn(task, outcome, evidence)
-
-
-def _categories(catalog: Catalog) -> list[str]:
-    return sorted({product.category for product in catalog.products})
 
 
 def _context_from(said: list[str], task: MultiTurnTask, categories: list[str]) -> UserContext:

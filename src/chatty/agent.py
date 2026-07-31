@@ -176,9 +176,8 @@ class Recommender:
         """多轮版要把真实类目填进去，否则模型会反问目录里不存在的子类目。"""
         if not allow_clarify:
             return AGENT_INSTRUCTIONS
-        categories = sorted({product.category for product in self.catalog.products})
         # 用 replace 不用 format：提示词里有 JSON 大括号，format 会把它们当占位符
-        return MULTI_TURN_INSTRUCTIONS.replace("{categories}", "、".join(categories))
+        return MULTI_TURN_INSTRUCTIONS.replace("{categories}", "、".join(self.catalog.categories))
 
     async def close(self) -> None:
         """只释放自己创建的东西。

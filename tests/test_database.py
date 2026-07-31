@@ -5,10 +5,12 @@ from pathlib import Path
 
 from chatty import config
 from chatty.catalog import Catalog
+from chatty.database import Database
+from chatty.repositories import KnowledgeRetriever
 
 
-def _count(catalog: Catalog, table: str) -> int:
-    row = catalog.database.connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+def _count(database: Database, table: str) -> int:
+    row = database.connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
     return int(row[0])
 
 
@@ -19,27 +21,32 @@ def _seed_line_count(filename: str) -> int:
 
 
 def test_sqlite_is_seeded_with_business_and_knowledge_data(tmp_path: Path) -> None:
+    """建表与 seed 是 Database 的职责，所以直接构造 Database，不从 Catalog 穿过去。"""
     database_path = tmp_path / "chatty.db"
-    catalog = Catalog(database_path=database_path)
+    database = Database(database_path)
 
-    assert database_path.exists()
-    # 断言结构而非具体条数：加 demo 数据不该导致测试失败。
-    assert _count(catalog, "products") == _seed_line_count("products.jsonl")
-    assert _count(catalog, "knowledge_documents") == _seed_line_count("knowledge_documents.jsonl")
-    tables = {
-        row[0]
-        for row in catalog.database.connection.execute(
-            "SELECT name FROM sqlite_master WHERE type IN ('table', 'view')"
-        ).fetchall()
-    }
-    assert {
-        "products",
-        "user_profiles",
-        "marketing_templates",
-        "knowledge_documents",
-        "knowledge_documents_fts",
-    } <= tables
-    catalog.close()
+    try:
+        assert database_path.exists()
+        # 断言结构而非具体条数：加 demo 数据不该导致测试失败。
+        assert _count(database, "products") == _seed_line_count("products.jsonl")
+        assert _count(database, "knowledge_documents") == _seed_line_count(
+            "knowledge_documents.jsonl"
+        )
+        tables = {
+            row[0]
+            for row in database.connection.execute(
+                "SELECT name FROM sqlite_master WHERE type IN ('table', 'view')"
+            ).fetchall()
+        }
+        assert {
+            "products",
+            "user_profiles",
+            "marketing_templates",
+            "knowledge_documents",
+            "knowledge_documents_fts",
+        } <= tables
+    finally:
+        database.close()
 
 
 def test_fts5_retrieves_grounding_for_candidate_products(tmp_path: Path) -> None:
@@ -61,19 +68,20 @@ def test_fts5_retrieves_grounding_for_candidate_products(tmp_path: Path) -> None
 
 def test_seed_repairs_a_partial_database(tmp_path: Path) -> None:
     database_path = tmp_path / "chatty.db"
-    first = Catalog(database_path=database_path)
-    first.close()
+    Database(database_path).close()
 
     with sqlite3.connect(database_path) as connection:
         connection.execute("DELETE FROM knowledge_documents WHERE doc_id = 'K001'")
 
-    second = Catalog(database_path=database_path)
-    knowledge_count = _seed_line_count("knowledge_documents.jsonl")
-    assert _count(second, "products") == _seed_line_count("products.jsonl")
-    assert _count(second, "knowledge_documents") == knowledge_count
-    # FTS 表索引的是**块**不是整篇文档，长文档会被切成多块，所以条数更多
-    assert _count(second, "knowledge_documents_fts") > knowledge_count
-    second.close()
+    second = Database(database_path)
+    try:
+        knowledge_count = _seed_line_count("knowledge_documents.jsonl")
+        assert _count(second, "products") == _seed_line_count("products.jsonl")
+        assert _count(second, "knowledge_documents") == knowledge_count
+        # FTS 表索引的是**块**不是整篇文档，长文档会被切成多块，所以条数更多
+        assert _count(second, "knowledge_documents_fts") > knowledge_count
+    finally:
+        second.close()
 
 
 def test_long_documents_are_split_into_chunks() -> None:
@@ -109,13 +117,15 @@ def test_chunks_preserve_original_text_for_display(catalog: Catalog) -> None:
         assert hit.chunk_ordinal >= 0
 
 
-def test_query_rewrite_bridges_synonym_gap(catalog: Catalog) -> None:
+def test_query_rewrite_bridges_synonym_gap(catalog: Catalog, tmp_path: Path) -> None:
     """查询改写把用户说法补上知识库用词，解决 BM25 只认字面的问题。
 
     这是稀疏检索的固有短板（稠密检索正是为解决它而生）。
     在不引入嵌入模型的前提下，同义词扩展是成本最低的缓解手段。
     """
-    rewrite = catalog.retriever.rewrite_query
+    # 查询改写是 KnowledgeRetriever 的职责，直接构造一个来测；
+    # 下面的端到端召回才走 Catalog。
+    rewrite = KnowledgeRetriever(Database(tmp_path / "rewrite.db")).rewrite_query
 
     # 用户说"保护视力"，知识库写的是"护眼"
     assert "护眼" in rewrite("保护视力 不伤眼")

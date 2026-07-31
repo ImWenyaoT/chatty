@@ -289,7 +289,7 @@ async def interactive(service: Recommender, provider: ModelProvider) -> None:
     而且 /who 打的 model_id 和实际推理用的模型没有代码保证一致。现在只有一个
     提供方，两件事都不会再发生。
     """
-    categories = sorted({product.category for product in service.catalog.products})
+    categories = service.catalog.categories
     model_id = provider.model_id
     user_id = "user_active"
 
