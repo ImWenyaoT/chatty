@@ -13,7 +13,8 @@
 ## Project boundaries
 
 - 不引入 Multi-Agent、Handoff、LangChain 或 LangGraph。
-- 不增加前端、外部数据库或向量数据库。
+- 不增加外部数据库或向量数据库。前端与 HTTP 层是例外，见 ADR 0001。
+- 会话状态存服务端内存，不进 SQLite——SQLite 只管演示业务数据与知识检索。
 - 商品价格和库存必须来自 SQLite，不能由模型生成。
 - JSON/JSONL 是 SQLite 的初始化种子，不是运行时业务查询接口。
 
