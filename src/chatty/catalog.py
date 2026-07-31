@@ -16,21 +16,18 @@ from chatty.models import (
 )
 from chatty.repositories import CommerceRepository, KnowledgeRetriever
 
-_SEGMENTS = {
-    "new_user",
-    "active",
-    "high_value",
-    "price_sensitive",
-    "churn_risk",
-}
-
 
 class CatalogError(RuntimeError):
     pass
 
 
 class Catalog:
-    """集中商品搜索与最终业务规则，避免 Agent 和 Tool 直接处理 SQL。"""
+    """集中商品搜索与最终业务规则，避免 Agent 和 Tool 直接处理 SQL。
+
+    数据库、仓储和检索器都是实现零件，不在接口里：调用方要的是「搜商品」「查库存」
+    「检索知识」，不是「拿到连接自己写 SQL」。想直接测某个零件就直接构造那个零件，
+    别从这里穿过去——测试和调用方走同一个 seam，这条对两边都成立。
+    """
 
     def __init__(
         self,
@@ -38,21 +35,22 @@ class Catalog:
         *,
         database_path: str | Path | None = None,
     ) -> None:
-        self.data_dir = Path(data_dir or config.DATA_DIR)
-        self.database = Database(database_path, data_dir=self.data_dir)
-        self.repository = CommerceRepository(self.database)
-        self.retriever = KnowledgeRetriever(self.database, self.data_dir)
+        self._data_dir = Path(data_dir or config.DATA_DIR)
+        self._database = Database(database_path, data_dir=self._data_dir)
+        self._repository = CommerceRepository(self._database)
+        self._retriever = KnowledgeRetriever(self._database, self._data_dir)
 
         # 画像与排序维度使用启动投影；finalize 会重读价格和库存等响应真值。
-        self.products = self.repository.list_products()
-        self.profiles = self.repository.profiles()
-        self.forbidden_words = self.repository.forbidden_words()
-        self.templates = self.repository.marketing_strategies(self.forbidden_words)
-        if set(self.templates) != _SEGMENTS:
-            raise CatalogError("invalid_marketing_segments")
+        self.products = self._repository.list_products()
+        self.profiles = self._repository.profiles()
+        self.forbidden_words = self._repository.forbidden_words()
+        self._templates = self._repository.marketing_strategies(self.forbidden_words)
+        # 分群齐全性由 seed_database 校验：它在 Database.__init__ 里先跑，
+        # 不齐就抛 SeedDataError，轮不到这里再查一遍。
+        self.categories = sorted({product.category for product in self.products})
 
     def close(self) -> None:
-        self.database.close()
+        self._database.close()
 
     def user_profile(self, user_id: str, overrides: UserContext) -> UserProfile:
         base = self.profiles.get(
@@ -116,11 +114,11 @@ class Catalog:
         ]
         return sorted(
             candidates,
-            key=lambda product: self.score(product, profile),
+            key=lambda product: self._score(product, profile),
             reverse=True,
         )[:limit]
 
-    def score(self, product: Product, profile: UserProfile) -> float:
+    def _score(self, product: Product, profile: UserProfile) -> float:
         """给商品打分：热度打底，再叠加画像匹配、近期行为和价格区间三个信号。"""
         preferred = {value.casefold() for value in profile.preferred_categories}
         signals = {value.casefold() for value in profile.recent_views + profile.recent_purchases}
@@ -139,7 +137,7 @@ class Catalog:
         return round(min(score, 1.0), 4)
 
     def inventory(self, product_ids: list[str]) -> list[Product]:
-        return self.repository.inventory(product_ids)
+        return self._repository.inventory(product_ids)
 
     def retrieve_knowledge(
         self,
@@ -151,7 +149,7 @@ class Catalog:
     ) -> list[KnowledgeHit]:
         if not 1 <= limit <= 8:
             raise CatalogError("invalid_knowledge_limit")
-        return self.retriever.retrieve(
+        return self._retriever.retrieve(
             query,
             categories=categories,
             product_ids=product_ids,
@@ -159,9 +157,9 @@ class Catalog:
         )
 
     def marketing_strategy(self, segment: str) -> MarketingStrategy:
-        if segment not in self.templates:
+        if segment not in self._templates:
             raise CatalogError("unknown_marketing_segment")
-        return self.templates[segment]
+        return self._templates[segment]
 
     def finalize(
         self,
@@ -171,7 +169,7 @@ class Catalog:
     ) -> list[RecommendedProduct]:
         # 重查 SQLite：模型可能记错价格，且从查库存到现在库存也可能变了
         current_products = {
-            product.product_id: product for product in self.repository.list_products()
+            product.product_id: product for product in self._repository.list_products()
         }
         recommendations: list[RecommendedProduct] = []
         seen: set[str] = set()  # 防止模型把同一个商品推荐两次
@@ -200,11 +198,11 @@ class Catalog:
                     brand=product.brand,
                     stock=product.stock,
                     tags=product.tags,
-                    score=self.score(product, profile),
+                    score=self._score(product, profile),
                     low_stock=product.stock <= 100,
                     # 只有这两项来自模型，而且要先过一遍禁词替换。
-                    reason=self.sanitize(item.reason),
-                    marketing_copy=self.sanitize(item.marketing_copy),
+                    reason=self._sanitize(item.reason),
+                    marketing_copy=self._sanitize(item.marketing_copy),
                 )
             )
             if len(recommendations) >= request.num_items:
@@ -214,7 +212,7 @@ class Catalog:
             raise CatalogError("no_available_recommendations")
         return recommendations
 
-    def sanitize(self, text: str) -> str:
+    def _sanitize(self, text: str) -> str:
         """把营销禁词替换成 ***（比如"打折""优惠券"这类合规敏感词）。"""
         for word in self.forbidden_words:
             text = text.replace(word, "***")
