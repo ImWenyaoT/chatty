@@ -44,7 +44,12 @@ dist/
 .idea/
 *.code-workspace
 .DS_Store
-.claude/
+# Claude Code 的本地状态默认不进仓库，**只放行 skills**：
+# clone 到新机器就能直接用，不必先去别处装一遍。settings.local.json、worktree
+# 这些是这台机器的状态，仍然挡在外面。
+# 注意 `.claude/*` 而不是 `.claude/`——后者会连同子目录一起排除，`!` 放行不回来。
+.claude/*
+!.claude/skills/
 .remember/
 
 # ============================================================
