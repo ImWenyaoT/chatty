@@ -59,3 +59,7 @@ dist/
 docs/jd.md
 docs/*实习.pdf
 *.log
+
+# 前端
+web/node_modules/
+web/dist/
