@@ -59,7 +59,7 @@ flowchart LR
 ## 能力边界
 
 - Chatty 是单 Agent 推荐系统；用户画像、商品搜索、库存检查、知识检索和营销策略都是 Tool。
-- 入口是 `Recommender.recommend()`，没有 HTTP 服务或前端；每次推荐独立运行，不是客服式长期会话。
+- 入口是 `Recommender.recommend()`（单轮）与 `chatty.conversation.Conversation`（信息不足时先澄清）；没有 HTTP 服务或前端。会话之间互不记忆，不是客服式长期对话。
 - 不使用向量库或 LLM-as-a-Judge：前者在当前规模下没有必要，后者无法替代可由 SQL 验证的业务事实。
 - SQLite 适合本地 demo、测试隔离和读多写少场景，不适合高并发、多进程写入或海量数仓分析。
 

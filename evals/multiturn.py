@@ -28,12 +28,14 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from agents.items import TResponseInputItem
+from agents import Model
 
 from chatty import config
 from chatty.agent import Recommender, build_model
 from chatty.catalog import Catalog
-from chatty.models import ClarifyReply, RecommendationRequest, UserContext
+from chatty.conversation import Conversation
+from chatty.models import RecommendationResponse, UserContext
+from evals.session import SessionOutcome, run_session
 
 # ============================================================================
 # 任务定义
@@ -163,73 +165,77 @@ class MultiTurnVerdict:
 MAX_TURNS = 4  # 超过就算它绕不出来
 
 
+@dataclass
+class MultiTurnEvidence:
+    """会话过程中攒下的证据，由 run_multiturn_task 的回调逐轮填。
+
+    Conversation 不认识「评估证据」这个概念——每次澄清恰好调用一次 ask 回调，
+    所以想记什么在回调里记，会话中途抛异常了这些记录也还在手上。
+    """
+
+    transcript: list[TurnRecord] = field(default_factory=list)
+    clarify_count: int = 0
+    turns: int = 0
+    # 目录里真实存在的类目，判分时要用（见 _check_dialogue 的「类目」一项）
+    categories: list[str] = field(default_factory=list)
+
+
 async def run_multiturn_task(
     task: MultiTurnTask,
-    catalog: Catalog,
     client,
     model_id: str,
+    *,
+    model: Model | None = None,
+    data_dir: Path | None = None,
 ) -> MultiTurnVerdict:
-    """跑一条多轮任务：模拟用户开场 → Agent 澄清 → 模拟用户按剧本答 → 直到给出推荐。"""
-    verdict = MultiTurnVerdict(task_id=task.task_id, passed=False, turns=0, clarify_count=0)
-    recommender = Recommender(catalog)
-    history: list[TResponseInputItem] = []
-    # 用户说过的话累积起来，每轮重新解析成结构化条件
-    said = [task.opening]
-    verdict.transcript.append(TurnRecord("用户", task.opening))
+    """跑一条多轮任务：模拟用户开场 → Agent 澄清 → 模拟用户按剧本答 → 直到给出推荐。
 
-    try:
-        for _ in range(MAX_TURNS):
-            verdict.turns += 1
-            context = _context_from(said, task, catalog)
-            request = RecommendationRequest(
-                user_id=task.user_id, num_items=3, context=context
-            )
-            reply = await recommender.respond(request, history=history)
+    环境隔离、模型注入和异常分码都在 run_session 里，会话循环在 Conversation 里；
+    这里只剩两件多轮特有的事：怎么把用户的话变成条件，以及怎么答 Agent 的反问。
+    """
+    evidence = MultiTurnEvidence(transcript=[TurnRecord("用户", task.opening)])
 
-            if isinstance(reply, ClarifyReply):
-                verdict.clarify_count += 1
-                verdict.transcript.append(TurnRecord("Agent", reply.question))
-                history.append({"role": "user", "content": request.model_dump_json()})
-                history.append(
-                    {
-                        "role": "assistant",
-                        "content": json.dumps(
-                            {"action": "clarify", "question": reply.question},
-                            ensure_ascii=False,
-                        ),
-                    }
-                )
-                answer = await simulate_user(client, model_id, task.facts, reply.question)
-                said.append(answer)
-                verdict.transcript.append(TurnRecord("用户", answer))
-                continue
+    async def session(recommender: Recommender):
+        async def resolve(said: list[str]) -> UserContext:
+            evidence.turns += 1
+            evidence.categories = _categories(recommender.catalog)
+            return _context_from(said, task, evidence.categories)
 
-            # 给出推荐了，开始判分
-            verdict.reasons = _check(task, reply, verdict)
-            verdict.passed = not verdict.reasons
-            verdict.transcript.append(
-                TurnRecord("Agent", "推荐：" + "、".join(p.name for p in reply.products))
-            )
-            return verdict
+        async def ask(question: str) -> str:
+            evidence.clarify_count += 1
+            evidence.transcript.append(TurnRecord("Agent", question))
+            answer = await simulate_user(client, model_id, task.facts, question)
+            evidence.transcript.append(TurnRecord("用户", answer))
+            return answer
 
-        verdict.reasons.append(f"{MAX_TURNS} 轮内没给出推荐")
-        return verdict
-    except Exception as error:  # noqa: BLE001 — 崩了也是一种结果，记下来
-        verdict.reasons.append(f"运行失败：{type(error).__name__}: {error}")
-        return verdict
-    finally:
-        await recommender.close()
+        return await Conversation(
+            recommender,
+            user_id=task.user_id,
+            num_items=3,
+            max_turns=MAX_TURNS,
+        ).converse(task.opening, resolve=resolve, ask=ask)
+
+    outcome = await run_session(session, model=model, data_dir=data_dir)
+    if isinstance(outcome.reply, RecommendationResponse):
+        evidence.transcript.append(
+            TurnRecord("Agent", "推荐：" + "、".join(p.name for p in outcome.reply.products))
+        )
+    return grade_multiturn(task, outcome, evidence)
 
 
-def _context_from(said: list[str], task: MultiTurnTask, catalog: Catalog) -> UserContext:
+def _categories(catalog: Catalog) -> list[str]:
+    return sorted({product.category for product in catalog.products})
+
+
+def _context_from(said: list[str], task: MultiTurnTask, categories: list[str]) -> UserContext:
     """把用户说过的话转成结构化条件。
 
     这里不调模型解析，而是按剧本里的事实直接匹配——评估要的是可复现，
     多引入一次模型调用就多一层不确定性。
     """
     joined = " ".join(said)
-    categories = sorted({p.category for p in catalog.products})
     hit = [c for c in categories if c in joined]
+    # 预算只有在用户真的说出来之后才生效：没问出来就该由画像兜底。
     max_cents = task.max_price_cents if _mentions_budget(joined) else None
     return UserContext(preferred_categories=hit[:1], max_price_cents=max_cents)
 
@@ -238,11 +244,44 @@ def _mentions_budget(text: str) -> bool:
     return any(w in text for w in ("元", "块", "预算", "以内", "以下"))
 
 
-def _check(task: MultiTurnTask, reply, verdict: MultiTurnVerdict) -> list[str]:
-    """双重检查：数据库状态 + 对话内容。任一不过就是 0 分。"""
-    problems: list[str] = []
+# ============================================================================
+# 判分
+# ============================================================================
 
-    # —— 数据库侧 ——
+
+def grade_multiturn(
+    task: MultiTurnTask,
+    outcome: SessionOutcome,
+    evidence: MultiTurnEvidence,
+) -> MultiTurnVerdict:
+    """纯函数：任务定义 + 会话结果 + 会话证据 → 裁决。
+
+    双重检查（τ-bench 的做法）：数据库状态 + 对话内容。任一不过就是 0 分。
+    只有真的给出推荐时才查对话——没走到推荐就没有「问得对不对」可言。
+    """
+    verdict = MultiTurnVerdict(
+        task_id=task.task_id,
+        passed=False,
+        turns=evidence.turns,
+        clarify_count=evidence.clarify_count,
+        transcript=list(evidence.transcript),
+    )
+
+    if outcome.error_code is not None:
+        verdict.reasons.append(f"运行失败：{outcome.error_code}")
+    elif not isinstance(outcome.reply, RecommendationResponse):
+        verdict.reasons.append(f"{MAX_TURNS} 轮内没给出推荐")
+    else:
+        verdict.reasons.extend(_check_products(task, outcome.reply))
+        verdict.reasons.extend(_check_dialogue(task, evidence))
+
+    verdict.passed = not verdict.reasons
+    return verdict
+
+
+def _check_products(task: MultiTurnTask, reply: RecommendationResponse) -> list[str]:
+    """数据库侧：推荐出来的商品对不对。"""
+    problems: list[str] = []
     if not reply.products:
         problems.append("没有推荐任何商品")
     for item in reply.products:
@@ -257,19 +296,30 @@ def _check(task: MultiTurnTask, reply, verdict: MultiTurnVerdict) -> list[str]:
             )
         if item.product_id in task.banned_product_ids:
             problems.append(f"{item.product_id} 在禁止列表里")
+    return problems
 
-    # —— 对话侧 ——
-    if task.max_clarify is not None and verdict.clarify_count > task.max_clarify:
+
+def _check_dialogue(task: MultiTurnTask, evidence: MultiTurnEvidence) -> list[str]:
+    """对话侧：该问的问了没有，不该问的有没有多问。"""
+    problems: list[str] = []
+    if task.max_clarify is not None and evidence.clarify_count > task.max_clarify:
         problems.append(
-            f"澄清了 {verdict.clarify_count} 次，但开场信息已经够了（上限 {task.max_clarify}）"
+            f"澄清了 {evidence.clarify_count} 次，但开场信息已经够了（上限 {task.max_clarify}）"
         )
-    asked = " ".join(r.text for r in verdict.transcript if r.speaker == "Agent")
+    asked = " ".join(r.text for r in evidence.transcript if r.speaker == "Agent")
     for point in task.must_ask_about:
-        if point == "类目" and verdict.clarify_count == 0:
-            problems.append("开场信息不足却没有澄清就直接推荐")
-        elif point not in ("类目",) and point not in asked:
+        # 「类目」是个例外：Agent 反问时不会说「类目」这两个字，它会照提示词的要求
+        # **把可选类目列出来**（见 MULTI_TURN_INSTRUCTIONS 情况 A）。所以这一项查的是
+        # 问句里有没有真实类目名。
+        #
+        # 早先这里只判 `clarify_count == 0`——只要反问过就算通过，压根不看问了什么。
+        # M1 是唯一用到 must_ask_about 的任务，走的正好是这条不检查内容的分支，
+        # 于是 Agent 反问「你预算多少」也能拿满分。
+        if point == "类目":
+            if not any(category in asked for category in evidence.categories):
+                problems.append("反问时没有把可选类目列给用户")
+        elif point not in asked:
             problems.append(f"没有问到「{point}」")
-
     return problems
 
 
@@ -282,16 +332,29 @@ async def run_multiturn_suite(
     tasks: tuple[MultiTurnTask, ...] = ALL_MULTITURN_TASKS,
     *,
     data_dir: Path | None = None,
+    model: Model | None = None,
+    client=None,
 ) -> list[MultiTurnVerdict]:
-    catalog = Catalog(data_dir)
-    _, client = build_model()
+    """跑整个多轮任务集。
+
+    model 与 client 是两个注入口，不传就按环境变量建真实的：
+    model 给 Recommender（Agent 那一侧），client 给用户模拟器。
+    两者都传替身就能完全离线跑——多轮评估此前没有这条路，因此一个测试都没有。
+    """
+    owns_client = client is None
+    if owns_client:
+        _, client = build_model()
     model_id = config.configured_model_id()
     try:
         # 串行跑：多轮对话轮次多，并发容易撞限流，而且日志会交错难读
-        return [await run_multiturn_task(t, catalog, client, model_id) for t in tasks]
+        return [
+            await run_multiturn_task(t, client, model_id, model=model, data_dir=data_dir)
+            for t in tasks
+        ]
     finally:
-        await client.close()
-        catalog.close()
+        # 只关自己建的：注入进来的 client 归调用方管
+        if owns_client:
+            await client.close()
 
 
 def render_multiturn_report(verdicts: list[MultiTurnVerdict]) -> str:
