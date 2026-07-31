@@ -8,6 +8,7 @@ import chatty.agent
 from chatty import config
 from chatty.agent import RecommendationError, Recommender
 from chatty.catalog import Catalog
+from chatty.model_provider import StaticModelProvider
 from chatty.models import RecommendationRequest
 from tests.test_agent import ScriptedModel, ToolStep, successful_script
 
@@ -20,14 +21,14 @@ async def test_recommender_does_not_close_the_catalog_it_was_given(catalog: Cata
     如果它顺手关掉数据库连接，后面几条就全部撞 sqlite ProgrammingError，
     而上层的 except Exception 会把它吞成"任务未通过"——报告上看着像模型不行。
     """
-    first = Recommender(catalog, model=ScriptedModel(successful_script()))
+    first = Recommender(catalog, provider=StaticModelProvider(ScriptedModel(successful_script())))
     await first.recommend(RecommendationRequest(user_id="user_active", num_items=1))
     await first.close()
 
     # 第一个 Recommender 关掉之后，同一个 Catalog 仍然可用
     assert catalog.retrieve_knowledge("降噪 耳机", categories=[], product_ids=[], limit=1)
 
-    second = Recommender(catalog, model=ScriptedModel(successful_script()))
+    second = Recommender(catalog, provider=StaticModelProvider(ScriptedModel(successful_script())))
     try:
         response = await second.recommend(
             RecommendationRequest(user_id="user_active", num_items=1)
@@ -43,8 +44,7 @@ async def test_unexpected_failure_is_exposed_with_code(catalog, caplog) -> None:
     caplog.set_level(logging.ERROR, logger="chatty.agent")
     service = Recommender(
         catalog,
-        model=ScriptedModel([]),
-        model_id="failing-scripted-model",
+        provider=StaticModelProvider(ScriptedModel([]), model_id="failing-scripted-model"),
     )
     try:
         with pytest.raises(RecommendationError) as error:
@@ -86,8 +86,7 @@ async def test_empty_rag_evidence_is_rejected(catalog) -> None:
     )
     service = Recommender(
         catalog,
-        model=ScriptedModel(script),
-        model_id="scripted-model",
+        provider=StaticModelProvider(ScriptedModel(script), model_id="scripted-model"),
     )
 
     try:
@@ -103,8 +102,7 @@ async def test_missing_required_tool_is_rejected(catalog) -> None:
     del script[0]
     service = Recommender(
         catalog,
-        model=ScriptedModel(script),
-        model_id="scripted-model",
+        provider=StaticModelProvider(ScriptedModel(script), model_id="scripted-model"),
     )
 
     try:
@@ -120,8 +118,7 @@ async def test_tools_must_run_in_order(catalog) -> None:
     script[0], script[1] = script[1], script[0]
     service = Recommender(
         catalog,
-        model=ScriptedModel(script),
-        model_id="scripted-model",
+        provider=StaticModelProvider(ScriptedModel(script), model_id="scripted-model"),
     )
 
     try:
@@ -141,8 +138,7 @@ async def test_marketing_strategy_must_match_profile(catalog) -> None:
     )
     service = Recommender(
         catalog,
-        model=ScriptedModel(script),
-        model_id="scripted-model",
+        provider=StaticModelProvider(ScriptedModel(script), model_id="scripted-model"),
     )
 
     try:
@@ -158,8 +154,7 @@ async def test_response_construction_failure_raises_instead_of_succeeding(
 ) -> None:
     service = Recommender(
         catalog,
-        model=ScriptedModel(successful_script()),
-        model_id="scripted-model",
+        provider=StaticModelProvider(ScriptedModel(successful_script()), model_id="scripted-model"),
     )
 
     def fail_response(**_kwargs):
@@ -227,8 +222,7 @@ async def test_recommendation_requires_product_evidence(
     script[script_index] = replacement
     service = Recommender(
         catalog,
-        model=ScriptedModel(script),
-        model_id="scripted-model",
+        provider=StaticModelProvider(ScriptedModel(script), model_id="scripted-model"),
     )
 
     try:

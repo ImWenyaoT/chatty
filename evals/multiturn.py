@@ -28,12 +28,10 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from agents import Model
-
-from chatty import config
-from chatty.agent import Recommender, build_model
+from chatty.agent import Recommender
 from chatty.catalog import Catalog
 from chatty.conversation import Conversation
+from chatty.model_provider import EnvModelProvider, ModelProvider
 from chatty.models import RecommendationResponse, UserContext
 from evals.session import SessionOutcome, run_session
 
@@ -123,20 +121,15 @@ SIMULATOR_PROMPT = """你在扮演一个网购用户，正在和客服 Agent 对
 用一句话回答他。"""
 
 
-async def simulate_user(client, model_id: str, facts: dict[str, str], question: str) -> str:
+async def simulate_user(
+    provider: ModelProvider, facts: dict[str, str], question: str
+) -> str:
     """模拟用户答一句话。按剧本渐进透露，不编造剧本外的信息。"""
     fact_lines = "\n".join(f"- {k}：{v}" for k, v in facts.items())
-    completion = await client.chat.completions.create(
-        model=model_id,
-        messages=[
-            {
-                "role": "user",
-                "content": SIMULATOR_PROMPT.format(facts=fact_lines, question=question),
-            }
-        ],
-        extra_body={"thinking": {"type": "disabled"}},
+    reply = await provider.complete(
+        SIMULATOR_PROMPT.format(facts=fact_lines, question=question)
     )
-    return (completion.choices[0].message.content or "都行").strip()
+    return reply.strip() or "都行"
 
 
 # ============================================================================
@@ -182,10 +175,8 @@ class MultiTurnEvidence:
 
 async def run_multiturn_task(
     task: MultiTurnTask,
-    client,
-    model_id: str,
+    provider: ModelProvider,
     *,
-    model: Model | None = None,
     data_dir: Path | None = None,
 ) -> MultiTurnVerdict:
     """跑一条多轮任务：模拟用户开场 → Agent 澄清 → 模拟用户按剧本答 → 直到给出推荐。
@@ -204,7 +195,7 @@ async def run_multiturn_task(
         async def ask(question: str) -> str:
             evidence.clarify_count += 1
             evidence.transcript.append(TurnRecord("Agent", question))
-            answer = await simulate_user(client, model_id, task.facts, question)
+            answer = await simulate_user(provider, task.facts, question)
             evidence.transcript.append(TurnRecord("用户", answer))
             return answer
 
@@ -215,7 +206,7 @@ async def run_multiturn_task(
             max_turns=MAX_TURNS,
         ).converse(task.opening, resolve=resolve, ask=ask)
 
-    outcome = await run_session(session, model=model, data_dir=data_dir)
+    outcome = await run_session(session, provider=provider, data_dir=data_dir)
     if isinstance(outcome.reply, RecommendationResponse):
         evidence.transcript.append(
             TurnRecord("Agent", "推荐：" + "、".join(p.name for p in outcome.reply.products))
@@ -332,29 +323,23 @@ async def run_multiturn_suite(
     tasks: tuple[MultiTurnTask, ...] = ALL_MULTITURN_TASKS,
     *,
     data_dir: Path | None = None,
-    model: Model | None = None,
-    client=None,
+    provider: ModelProvider | None = None,
 ) -> list[MultiTurnVerdict]:
     """跑整个多轮任务集。
 
-    model 与 client 是两个注入口，不传就按环境变量建真实的：
-    model 给 Recommender（Agent 那一侧），client 给用户模拟器。
-    两者都传替身就能完全离线跑——多轮评估此前没有这条路，因此一个测试都没有。
+    provider 是唯一的注入口，不传就按环境变量连真实模型。Agent 那一侧和用户
+    模拟器共用它——两者本来就该是同一个模型，此前分成两条路各自建客户端。
+    传替身就能完全离线跑：多轮评估此前没有这条路，因此一个测试都没有。
     """
-    owns_client = client is None
-    if owns_client:
-        _, client = build_model()
-    model_id = config.configured_model_id()
+    owns_provider = provider is None
+    provider = provider or EnvModelProvider()
     try:
         # 串行跑：多轮对话轮次多，并发容易撞限流，而且日志会交错难读
-        return [
-            await run_multiturn_task(t, client, model_id, model=model, data_dir=data_dir)
-            for t in tasks
-        ]
+        return [await run_multiturn_task(t, provider, data_dir=data_dir) for t in tasks]
     finally:
-        # 只关自己建的：注入进来的 client 归调用方管
-        if owns_client:
-            await client.close()
+        # 只关自己建的：注入进来的 provider 归调用方管
+        if owns_provider:
+            await provider.close()
 
 
 def render_multiturn_report(verdicts: list[MultiTurnVerdict]) -> str:

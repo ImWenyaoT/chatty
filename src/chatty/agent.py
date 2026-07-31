@@ -1,26 +1,24 @@
 from __future__ import annotations
 
 import logging
-import os
 import re
 import time
 from uuid import uuid4
 
-from agents import (
-    Agent,
-    AsyncOpenAI,
-    Model,
-    ModelSettings,
-    OpenAIChatCompletionsModel,
-    RunConfig,
-    Runner,
-)
+from agents import Agent, Runner
 from agents.items import TResponseInputItem
 from pydantic import ValidationError
 
 from chatty import config
 from chatty.catalog import Catalog, CatalogError
 from chatty.debug import AgentDebugHooks
+from chatty.model_provider import (
+    EnvModelProvider,
+    MissingCredentials,
+    ModelProvider,
+    run_config,
+    run_settings,
+)
 from chatty.models import (
     AgentDraft,
     ClarifyReply,
@@ -157,56 +155,22 @@ class RecommendationError(RuntimeError):
         self.diagnostics = diagnostics or {}
 
 
-def build_model() -> tuple[Model, AsyncOpenAI]:
-    """按环境变量创建模型客户端，返回 (模型, 需要关闭的连接)。
-
-    单独抽出来是为了让消融实验能复用同一套配置——
-    对照组和实验组必须用**同一个模型**，否则比较的就不是"有没有 Harness"，
-    而是两个模型谁强了。
-
-    调用方负责在用完后 await client.close()。
-    """
-    config.load_root_env()
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        # 没配密钥属于"环境问题"，不是 Agent 逻辑错误
-        raise RecommendationError("llm_not_configured")
-    base_url = os.environ.get("OPENAI_BASE_URL") or config.DEFAULT_BASE_URL
-    model_id = os.environ.get("MODEL_ID") or config.DEFAULT_MODEL_ID
-    client = AsyncOpenAI(api_key=api_key, base_url=base_url)
-    return OpenAIChatCompletionsModel(model=model_id, openai_client=client), client
-
-
 class Recommender:
     def __init__(
         self,
         catalog: Catalog,
         *,
-        model: Model | None = None,
-        model_id: str | None = None,
+        provider: ModelProvider | None = None,
     ) -> None:
         self.catalog = catalog
-        self._model = model
-        self._model_id = model_id or (
-            "injected-model" if model is not None else config.configured_model_id()
-        )
-        self._client: AsyncOpenAI | None = None
+        # 不传就按环境变量连真实模型。测试注入 StaticModelProvider，完全不联网。
+        self._provider = provider if provider is not None else EnvModelProvider()
+        self._owns_provider = provider is None
 
     @property
     def model_id(self) -> str:
-        return self._model_id
-
-    def _ensure_model(self) -> Model:
-        """惰性创建模型客户端。
-
-        测试时会从构造函数注入假模型（ScriptedModel），此时直接返回、完全不联网；
-        只有真跑的时候才会读环境变量去建真实客户端。
-        """
-        if self._model is not None:
-            return self._model
-        self._model, self._client = build_model()
-        self._model_id = os.environ.get("MODEL_ID") or config.DEFAULT_MODEL_ID
-        return self._model
+        """报告里印的模型 id。它和实际推理用的模型来自同一个提供方，不会对不上。"""
+        return self._provider.model_id
 
     def _instructions(self, allow_clarify: bool) -> str:
         """多轮版要把真实类目填进去，否则模型会反问目录里不存在的子类目。"""
@@ -219,13 +183,13 @@ class Recommender:
     async def close(self) -> None:
         """只释放自己创建的东西。
 
-        catalog 是注入进来的，由建它的人关——所有权写进接口，不做隐式约定。
-        早先这里顺手 `self.catalog.close()`，于是共享同一个 Catalog 的调用方
-        （多轮评估串行跑三条任务）在第一条跑完就被关掉了 sqlite 连接，
+        catalog 和注入进来的 provider 都由建它们的人关——所有权写进接口，
+        不做隐式约定。早先这里顺手 `self.catalog.close()`，于是共享同一个 Catalog
+        的调用方（多轮评估串行跑三条任务）在第一条跑完就被关掉了 sqlite 连接，
         后面两条撞 ProgrammingError，被上层的 except Exception 吞成"任务未通过"。
         """
-        if self._client is not None:
-            await self._client.close()
+        if self._owns_provider:
+            await self._provider.close()
 
     async def recommend(self, request: RecommendationRequest) -> RecommendationResponse:
         """单轮推荐：需求一次给全，模型不该反问。
@@ -258,9 +222,9 @@ class Recommender:
         """跑一轮：Agent Loop → 判断是澄清还是推荐 → 推荐才校验证据。"""
         started = time.perf_counter()  # 用于统计端到端延迟
         # 调试钩子只在开关打开时创建，用来记录每一轮模型输入输出，便于离线复盘。
-        debug_hooks = AgentDebugHooks(self._model_id) if config.agent_debug_enabled() else None
+        debug_hooks = AgentDebugHooks(self.model_id) if config.agent_debug_enabled() else None
         try:
-            model = self._ensure_model()
+            model = self._provider.model()
             # context 是这次运行的证据本，五个工具往里写结果。
             # 多轮时每轮新建，证据**不跨轮累积**——这是个刻意的取舍：
             # 累积的话轮次越多约束越松（第 10 轮时几乎所有商品都「有过证据」），
@@ -275,7 +239,7 @@ class Recommender:
                 name="Chatty",
                 instructions=self._instructions(allow_clarify),
                 model=model,
-                model_settings=ModelSettings(extra_body={"thinking": {"type": "disabled"}}),
+                model_settings=run_settings(),
                 tools=build_tools(),
             )
             # max_turns 是失控保护，不是重试策略。
@@ -293,10 +257,7 @@ class Recommender:
                 # 多轮要先判断信息够不够，比单轮多花一两轮，上限相应放宽
                 max_turns=18 if allow_clarify else 10,
                 hooks=debug_hooks,
-                run_config=RunConfig(
-                    workflow_name="Chatty recommendation",
-                    tracing_disabled=True,
-                ),
+                run_config=run_config("Chatty recommendation"),
             )
             try:
                 draft = parse_agent_draft(result.final_output)
@@ -393,6 +354,11 @@ class Recommender:
             raise
         # 第二段：数据层错误和 Pydantic 校验错误，内部分得细（比如商品不存在、
         # 过滤后无可用商品），但对外统一收敛成一个码，避免把内部细节暴露给调用方。
+        except MissingCredentials as error:
+            # 没配密钥是环境问题，不是 Agent 逻辑错误，保留它自己的码
+            if debug_hooks is not None:
+                debug_hooks.record_failure("llm_not_configured")
+            raise RecommendationError("llm_not_configured") from error
         except (CatalogError, ValidationError) as error:
             if debug_hooks is not None:
                 debug_hooks.record_failure("invalid_recommendation")

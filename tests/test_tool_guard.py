@@ -10,6 +10,7 @@ from __future__ import annotations
 import pytest
 
 from chatty.catalog import Catalog
+from chatty.model_provider import StaticModelProvider
 from chatty.models import RecommendationRequest
 from chatty.tools import (
     TOOL_NAMES,
@@ -193,8 +194,7 @@ async def test_multiple_searches_accumulate_evidence(catalog: Catalog) -> None:
 
     service = Recommender(
         catalog,
-        model=ScriptedModel(script),
-        model_id="scripted-model",
+        provider=StaticModelProvider(ScriptedModel(script), model_id="scripted-model"),
     )
     try:
         response = await service.recommend(RecommendationRequest(user_id="user_churn"))
@@ -264,7 +264,7 @@ async def test_retrieved_documents_are_marked_as_data_not_instructions(
     from tests.test_agent import ScriptedModel, successful_script
 
     model = ScriptedModel(successful_script())
-    service = Recommender(catalog, model=model, model_id="scripted-model")
+    service = Recommender(catalog, provider=StaticModelProvider(model, model_id="scripted-model"))
     try:
         await service.recommend(RecommendationRequest(user_id="user_active"))
     finally:

@@ -73,7 +73,7 @@ Harness 校验工具调用和商品证据，并在响应前从数据库回填价
 ## 技术栈
 
 - Python 3.13+、uv、Pydantic
-- OpenAI Agents SDK、OpenAI-compatible Chat Completions API
+- OpenAI Agents SDK、OpenAI-compatible Responses API
 - SQLite、SQLite FTS5、BM25
 - Ruff、ty、pytest
 
@@ -125,7 +125,7 @@ uv run ty check
 uv run pytest -q
 ```
 
-109 项测试使用脚本化模型，不联网、不产生费用，验证 Harness 契约；真实模型评测衡量的是
+116 项测试使用脚本化模型，不联网、不产生费用，验证 Harness 契约；真实模型评测衡量的是
 概率性行为，两者不能互相替代。
 
 ## 目录

@@ -21,10 +21,11 @@ import logging
 import sys
 import time
 
-from chatty import config, failure_log
-from chatty.agent import RecommendationError, Recommender, build_model
+from chatty import failure_log
+from chatty.agent import RecommendationError, Recommender
 from chatty.catalog import Catalog
 from chatty.conversation import Conversation, Resolve
+from chatty.model_provider import EnvModelProvider, ModelProvider
 from chatty.models import (
     ClarifyReply,
     RecommendationRequest,
@@ -77,21 +78,20 @@ def _to_cents(yuan: object) -> int | None:
     return int(yuan * 100) if isinstance(yuan, int | float) else None
 
 
-async def parse_need(client, model_id: str, text: str, categories: list[str]) -> UserContext:
+async def parse_need(
+    provider: ModelProvider, text: str, categories: list[str]
+) -> UserContext:
     """把一句大白话转成结构化的检索条件。
 
     这是 demo 的输入适配，不属于 Agent 本身——真正的五个工具跑在这之后，
     拿到的仍然是结构化请求。
     """
-    completion = await client.chat.completions.create(
-        model=model_id,
-        messages=[
-            {"role": "system", "content": PARSE_PROMPT.format(categories="、".join(categories))},
-            {"role": "user", "content": text},
-        ],
-        extra_body={"thinking": {"type": "disabled"}},
+    raw = (
+        await provider.complete(
+            text, system=PARSE_PROMPT.format(categories="、".join(categories))
+        )
+        or "{}"
     )
-    raw = completion.choices[0].message.content or "{}"
     # 模型可能把 JSON 包在代码块里，抠出大括号那段。
     # 抠出来的也可能不是合法 JSON —— 这一步本来就是「模型说了不算」的地方，
     # 解析不了就当没给条件，按原话去搜，绝不让 demo 在这里崩掉。
@@ -246,7 +246,7 @@ def print_presets() -> None:
     print()
 
 
-def resolve_command(raw: str, user_id: str) -> tuple[str | None, str, bool]:
+def resolve_command(raw: str, user_id: str, model_id: str = "") -> tuple[str | None, str, bool]:
     """处理一条斜杠命令。
 
     返回 (要问的需求, 身份, 是否继续)。需求为 None 表示这条命令只改状态或只打印，
@@ -262,7 +262,7 @@ def resolve_command(raw: str, user_id: str) -> tuple[str | None, str, bool]:
     elif name == "presets":
         print_presets()
     elif name == "who":
-        print(f"\n  {user_id} · {config.configured_model_id()}\n")
+        print(f"\n  {user_id} · {model_id}\n")
     elif name == "clear":
         print("\033[2J\033[H", end="")
     elif name == "user":
@@ -282,11 +282,15 @@ def resolve_command(raw: str, user_id: str) -> tuple[str | None, str, bool]:
     return None, user_id, True
 
 
-async def interactive(service: Recommender) -> None:
-    """连着换需求试。共用一个 Recommender，数据库和模型连接只建一次。"""
+async def interactive(service: Recommender, provider: ModelProvider) -> None:
+    """连着换需求试。共用一个 Recommender 和一个提供方，连接只建一次。
+
+    早先这里为 parse_need 另建了一个客户端，于是一个进程两个连接、两条关闭路径，
+    而且 /who 打的 model_id 和实际推理用的模型没有代码保证一致。现在只有一个
+    提供方，两件事都不会再发生。
+    """
     categories = sorted({product.category for product in service.catalog.products})
-    _, client = build_model()
-    model_id = config.configured_model_id()
+    model_id = provider.model_id
     user_id = "user_active"
 
     print("\n  Chatty 交互演示")
@@ -310,7 +314,7 @@ async def interactive(service: Recommender) -> None:
                 continue
 
             if text.startswith("/"):
-                need, user_id, keep_going = resolve_command(text, user_id)
+                need, user_id, keep_going = resolve_command(text, user_id, model_id)
                 if not keep_going:
                     break
                 if need is None:
@@ -320,14 +324,13 @@ async def interactive(service: Recommender) -> None:
 
             async def resolve(said: list[str]) -> UserContext:
                 # 用户说过的话累积起来一起解析，否则第二轮只说「2000 以内」会丢掉类目
-                return await parse_need(client, model_id, " ".join(said), categories)
+                return await parse_need(provider, " ".join(said), categories)
 
             await run_conversation(
                 service, user_id, need, resolve=resolve, max_turns=MAX_CLARIFY + 1
             )
     finally:
-        await client.close()
-    print("\n  再见。\n")
+        print("\n  再见。\n")
 
 
 async def main() -> None:
@@ -338,7 +341,10 @@ async def main() -> None:
 
     args = sys.argv[1:]
     catalog = Catalog()
-    service = Recommender(catalog)
+    # 一个进程一个提供方：Agent Loop 和 parse_need 共用它，
+    # 于是 /who 打的 model_id 就是实际推理用的那个
+    provider = EnvModelProvider()
+    service = Recommender(catalog, provider=provider)
     try:
         if args:
             # 带参数就跑一次：第一个是类目，第二个是用户 ID
@@ -352,10 +358,12 @@ async def main() -> None:
             # 一次性给全条件，就一轮：反问了也没有下一轮来接
             await run_conversation(service, user_id, args[0], resolve=fixed, max_turns=1)
         else:
-            await interactive(service)
+            await interactive(service, provider)
     finally:
-        # service.close() 只关它自己建的模型连接；Catalog 是这里建的，这里关
+        # provider 和 catalog 都是这里建的，就由这里关；
+        # service.close() 只释放它自己建的东西（这里一样都没有）
         await service.close()
+        await provider.close()
         catalog.close()
 
 

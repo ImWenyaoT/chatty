@@ -257,12 +257,16 @@ async def test_runner_resets_environment_between_tasks() -> None:
     必须注入脚本化模型——否则会真的调用线上模型，既花钱又不确定，
     而不确定的评估器本身就是坏的评估器。
     """
+    from chatty.model_provider import StaticModelProvider
     from evals.runner import run_task
     from tests.test_agent import ScriptedModel, successful_script
 
+    def scripted() -> StaticModelProvider:
+        return StaticModelProvider(ScriptedModel(successful_script()))
+
     task = _task("L1-earphone-active")
-    first = await run_task(task, model=ScriptedModel(successful_script()))
-    second = await run_task(task, model=ScriptedModel(successful_script()))
+    first = await run_task(task, provider=scripted())
+    second = await run_task(task, provider=scripted())
 
     assert first.passed == second.passed
     assert first.error_code == second.error_code

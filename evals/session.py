@@ -16,10 +16,9 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from agents import Model
-
 from chatty.agent import RecommendationError, Recommender
 from chatty.catalog import Catalog
+from chatty.model_provider import ModelProvider
 from chatty.models import ClarifyReply, RecommendationResponse
 
 # 拿到一个 Recommender，跑完一次会话。调用方在这里决定单轮还是多轮。
@@ -43,7 +42,7 @@ class SessionOutcome:
 async def run_session(
     session: Session,
     *,
-    model: Model | None = None,
+    provider: ModelProvider | None = None,
     data_dir: Path | None = None,
 ) -> SessionOutcome:
     """在一个干净的临时库上跑一次会话。
@@ -53,7 +52,7 @@ async def run_session(
     """
     with tempfile.TemporaryDirectory(prefix="chatty-eval-") as tmp:
         catalog = Catalog(data_dir, database_path=Path(tmp) / "eval.db")
-        recommender = Recommender(catalog, model=model)
+        recommender = Recommender(catalog, provider=provider)
         try:
             outcome = SessionOutcome(forbidden_words=catalog.forbidden_words)
             try:

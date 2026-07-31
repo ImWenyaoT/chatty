@@ -23,8 +23,7 @@ import asyncio
 from dataclasses import dataclass
 from pathlib import Path
 
-from agents import Model
-
+from chatty.model_provider import ModelProvider
 from chatty.models import RecommendationResponse
 from evals.dataset import ALL_TASKS, EvalTask
 from evals.rubric import TaskVerdict, grade
@@ -47,13 +46,13 @@ class EvalRun:
 async def run_task(
     task: EvalTask,
     *,
-    model: Model | None = None,
+    provider: ModelProvider | None = None,
     data_dir: Path | None = None,
 ) -> TaskVerdict:
     """跑一条单轮任务：会话执行交给 run_session，这里只管把结果送去裁决。"""
     outcome = await run_session(
         lambda recommender: recommender.recommend(task.to_request()),
-        model=model,
+        provider=provider,
         data_dir=data_dir,
     )
     # 单轮的期望就是一个推荐结果；respond 那条多轮路径不会走到这里。
@@ -71,7 +70,7 @@ async def run_task(
 async def run_suite(
     tasks: tuple[EvalTask, ...] = ALL_TASKS,
     *,
-    model: Model | None = None,
+    provider: ModelProvider | None = None,
     model_id: str = "unknown",
     data_dir: Path | None = None,
     concurrency: int = 2,
@@ -90,7 +89,7 @@ async def run_suite(
 
     async def guarded(task: EvalTask) -> TaskVerdict:
         async with semaphore:
-            return await run_task(task, model=model, data_dir=data_dir)
+            return await run_task(task, provider=provider, data_dir=data_dir)
 
     # 同一条任务重复 repeat 次，结果平铺进一个列表；
     # 统计时按 task_id 分组，就能知道每条任务各跑了几次、过了几次。

@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 
+from chatty.model_provider import StaticModelProvider
 from chatty.models import ClarifyReply, RecommendationResponse, RecommendedProduct
 from evals.multiturn import (
     MultiTurnEvidence,
@@ -24,24 +25,6 @@ from evals.multiturn import (
 )
 from evals.session import SessionOutcome
 from tests.test_agent import MessageStep, ScriptedModel, successful_script
-
-
-class _FakeChatClient:
-    """用户模拟器的替身：不管问什么都答同一句。"""
-
-    def __init__(self, answer: str) -> None:
-        self.answer = answer
-        self.questions: list[str] = []
-        self.chat = self
-        self.completions = self
-
-    async def create(self, **kwargs: Any) -> Any:
-        self.questions.append(kwargs["messages"][0]["content"])
-        message = type("_M", (), {"content": self.answer})()
-        return type("_C", (), {"choices": [type("_X", (), {"message": message})()]})()
-
-    async def close(self) -> None:  # pragma: no cover - 注入进来的不该被关
-        raise AssertionError("注入的 client 不该被 suite 关掉")
 
 
 def _product(**overrides: Any) -> RecommendedProduct:
@@ -201,13 +184,14 @@ async def test_multiturn_suite_runs_offline_with_injected_model_and_client() -> 
             ensure_ascii=False,
         ),
     )
-    model = ScriptedModel([clarify, *successful_script()])
-    client = _FakeChatClient("耳机")
+    # 一个提供方同时喂 Agent Loop（ScriptedModel）和用户模拟器（replies）
+    provider = StaticModelProvider(
+        ScriptedModel([clarify, *successful_script()]), replies=["耳机"]
+    )
 
     verdicts = await run_multiturn_suite(
         (_task(task_id="M-offline", must_ask_about=frozenset({"类目"})),),
-        model=model,
-        client=client,
+        provider=provider,
     )
 
     assert len(verdicts) == 1
@@ -216,7 +200,7 @@ async def test_multiturn_suite_runs_offline_with_injected_model_and_client() -> 
     assert verdict.clarify_count == 1
     assert verdict.turns == 2
     # 模拟器被问到了 Agent 那句反问
-    assert "你想看哪一类商品" in client.questions[0]
+    assert "你想看哪一类商品" in provider.prompts[0]
     # 对话记录能还原整段过程：开场 → 反问 → 回答 → 推荐
     assert [record.speaker for record in verdict.transcript] == [
         "用户",

@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
 import pytest
@@ -66,31 +65,26 @@ def test_help_table_covers_the_commands_that_exist() -> None:
         assert name in documented
 
 
-@dataclass
-class _Message:
-    content: str | None
+class _FakeProvider:
+    """按脚本回话的提供方，用来喂那些不守 JSON 约定的输出。
 
+    此前这里是个假 chat 客户端，得长出 `self.chat = self; self.completions = self`
+    才能骗过鸭子类型——那正是 provider 不暴露裸客户端的理由。
+    """
 
-@dataclass
-class _Choice:
-    message: _Message
-
-
-@dataclass
-class _Completion:
-    choices: list[_Choice]
-
-
-class _FakeClient:
-    """按脚本回话的模型客户端，用来喂那些不守 JSON 约定的输出。"""
+    model_id = "fake-model"
 
     def __init__(self, content: str | None) -> None:
-        self.chat = self
-        self.completions = self
         self._content = content
 
-    async def create(self, **_: Any) -> _Completion:
-        return _Completion(choices=[_Choice(message=_Message(self._content))])
+    def model(self) -> Any:  # pragma: no cover - parse_need 用不到 Agent Loop
+        raise NotImplementedError
+
+    async def complete(self, prompt: str, *, system: str | None = None) -> str:
+        return self._content or ""
+
+    async def close(self) -> None:
+        pass
 
 
 @pytest.mark.parametrize(
@@ -112,13 +106,13 @@ async def test_parse_need_never_crashes_on_a_model_that_ignores_the_contract(
     这正是这个项目的论点：约束靠代码守，不靠提示词。演示时模型抽一次风
     就整个退出，是最难看的失败。
     """
-    context = await parse_need(_FakeClient(content), "m", "想买个耳机", ["耳机"])
+    context = await parse_need(_FakeProvider(content), "想买个耳机", ["耳机"])
     assert isinstance(context.preferred_categories, list)
 
 
 async def test_parse_need_still_reads_a_well_formed_answer() -> None:
     """兜底不能把正常路径一起吞掉。"""
-    client = _FakeClient('{"category": "耳机", "max_yuan": 2000}')
-    context = await parse_need(client, "m", "想买个降噪耳机，2000 以内", ["耳机"])
+    provider = _FakeProvider('{"category": "耳机", "max_yuan": 2000}')
+    context = await parse_need(provider, "想买个降噪耳机，2000 以内", ["耳机"])
     assert context.preferred_categories == ["耳机"]
     assert context.max_price_cents == 200000
