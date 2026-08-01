@@ -1,3 +1,5 @@
+import type { AgentInputItem } from "@openai/agents";
+
 export const userSegments = [
   "new_user",
   "active",
@@ -109,6 +111,6 @@ export interface ClarifyReply {
 }
 
 export type Reply = RecommendationResponse | ClarifyReply;
-export type InputItem = Record<string, unknown>;
+export type InputItem = AgentInputItem;
 export const isClarify = (reply: Reply): reply is ClarifyReply =>
   "question" in reply;

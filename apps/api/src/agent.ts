@@ -197,7 +197,10 @@ export class Recommender {
       };
       const input = [
         ...history,
-        { role: "user", content: JSON.stringify(request) },
+        {
+          role: "user",
+          content: [{ type: "input_text", text: JSON.stringify(request) }],
+        },
       ] as AgentInputItem[];
       const output = await runtime.run(input, sdkRequest, evidence);
       const draft = parseDraft(output);

@@ -32,13 +32,24 @@ export class Conversation {
       reply,
       [
         ...history,
-        { role: "user", content: JSON.stringify(request) },
+        // SDK 允许当前 user 输入用字符串，但历史中的 assistant item 必须使用结构化 content。
+        // 两种角色统一成结构化格式，避免第二轮在 SDK 内部读取 content.map 时崩溃。
+        {
+          role: "user",
+          content: [{ type: "input_text", text: JSON.stringify(request) }],
+        },
         {
           role: "assistant",
-          content: JSON.stringify({
-            action: "clarify",
-            question: reply.question,
-          }),
+          status: "completed",
+          content: [
+            {
+              type: "output_text",
+              text: JSON.stringify({
+                action: "clarify",
+                question: reply.question,
+              }),
+            },
+          ],
         },
       ],
     ];
