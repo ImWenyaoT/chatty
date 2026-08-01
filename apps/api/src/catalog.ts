@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { DATA_DIR } from "./config.js";
 import { Database, segmentForIndex } from "./database.js";
 import type {
   KnowledgeHit,
@@ -62,7 +63,7 @@ export class Catalog {
   readonly #synonyms: Map<string, string[]>;
 
   constructor(options: { databasePath?: string; dataDir?: string } = {}) {
-    const dataDir = options.dataDir ?? join(process.cwd(), "data");
+    const dataDir = options.dataDir ?? DATA_DIR;
     this.#database = new Database(options.databasePath, dataDir);
     this.products = this.#listProducts();
     this.profiles = new Map(

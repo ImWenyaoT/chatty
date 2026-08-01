@@ -106,10 +106,9 @@ pnpm check            # 提交前统一门禁
 ## 目录
 
 ```text
+apps/api/         Agent、Harness、SQLite、HTTP 与测试
+apps/web/         React + Vite 对话界面
 data/             可读 JSON/JSONL 种子数据
-src/              数据库、Tool、Agent、Harness、会话与 HTTP 层
-web/              React + TypeScript 对话界面
-tests/            确定性契约测试
 docs/adr/         架构决策记录
 ```
 

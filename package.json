@@ -1,34 +1,22 @@
 {
   "name": "chatty",
   "private": true,
-  "type": "module",
   "packageManager": "pnpm@11.18.0",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "dev:web": "pnpm --filter web dev",
-    "build": "tsc -p tsconfig.json && pnpm --filter web build",
-    "start": "node dist/src/server.js",
-    "eval:retrieval": "tsc -p tsconfig.json && node dist/src/retrieval-eval.js",
-    "test": "vitest run tests",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "oxlint src tests web/src vitest.config.ts && prettier --check \"{src,tests,web/src,docs}/**/*.{ts,tsx,css,md}\" \"*.{json,yaml,md,ts}\"",
+    "dev": "pnpm --filter @chatty/api dev",
+    "dev:api": "pnpm --filter @chatty/api dev",
+    "dev:web": "pnpm --filter @chatty/web dev",
+    "build": "pnpm -r build",
+    "start": "pnpm --filter @chatty/api start",
+    "test": "pnpm --filter @chatty/api test",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint && prettier --check \"{apps,docs}/**/*.{ts,tsx,css,md,json}\" \"*.{json,yaml,md}\"",
     "format": "prettier --write .",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm --filter web build"
-  },
-  "dependencies": {
-    "@openai/agents": "^0.14.2",
-    "dotenv": "^17.2.3",
-    "express": "^5.2.1",
-    "openai": "^6.18.0",
-    "zod": "^4.3.6"
+    "eval:retrieval": "pnpm --filter @chatty/api eval:retrieval",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
-    "@types/express": "^5.0.6",
-    "@types/node": "^24.10.1",
     "oxlint": "^1.75.0",
-    "prettier": "^3.9.0",
-    "tsx": "^4.21.0",
-    "typescript": "~6.0.2",
-    "vitest": "^4.0.18"
+    "prettier": "^3.9.0"
   }
 }

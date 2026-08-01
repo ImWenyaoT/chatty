@@ -46,7 +46,7 @@ Harness 执行 Tool ←──────┘
 就是**几个你写好的 TypeScript 函数**，交给模型，让它自己决定什么时候调、传什么参数。
 
 Chatty 有五个：查画像、搜商品、查库存、检索知识、拿营销策略。
-它们全部只读，由 [agent-sdk.ts](../src/agent-sdk.ts) 注册；私有证据规则在 [tools.ts](../src/tools.ts)。
+它们全部只读，由 [agent-sdk.ts](../apps/api/src/agent-sdk.ts) 注册；私有证据规则在 [tools.ts](../apps/api/src/tools.ts)。
 
 模型不能直接查数据库，只能调这五个函数——**这就是权限边界**。
 
@@ -170,11 +170,11 @@ flowchart TB
 
 逐步说：
 
-**① → ②　翻译**（[need-parser.ts](../src/need-parser.ts)）
+**① → ②　翻译**（[need-parser.ts](../apps/api/src/need-parser.ts)）
 先单独问一次模型：「把这句话转成 JSON」。得到 `{类目: 耳机, 最高价: 2000元}`。
 这一步失败了就当没给条件，**绝不让程序崩**。
 
-**③　Agent Loop**（[agent-sdk.ts](../src/agent-sdk.ts) 与 [agent.ts](../src/agent.ts)）
+**③　Agent Loop**（[agent-sdk.ts](../apps/api/src/agent-sdk.ts) 与 [agent.ts](../apps/api/src/agent.ts)）
 模型依次调用：
 
 ```
@@ -194,7 +194,7 @@ get_marketing_strategy→ 活跃用户用什么语气写文案，哪些词不能
 `P003` 在召回集里 ✅、在有货集里 ✅、有知识支撑 ✅ → 放行。
 如果模型推荐了 `P007`（已卖光），这里就会拦下来报 `inventory_not_checked`。
 
-**⑥　重查数据库**（[catalog.ts](../src/catalog.ts) 的 `finalize`）
+**⑥　重查数据库**（[catalog.ts](../apps/api/src/catalog.ts) 的 `finalize`）
 拿 `P003` 回 SQLite 查出真实的名字、价格、库存、标签，**覆盖掉模型说的一切**。
 模型写的 `reason` 和 `marketing_copy` 保留，但要过一遍禁词替换（「打折」→「***」）。
 
@@ -211,7 +211,7 @@ get_marketing_strategy→ 活跃用户用什么语气写文案，哪些词不能
 用户答完，把这一问一答记进 `history`，下一轮模型就知道自己问过什么。
 最多三轮，问不出来就结束。
 
-这套「反问 → 记历史 → 下一轮」的逻辑在 [conversation.ts](../src/conversation.ts)，
+这套「反问 → 记历史 → 下一轮」的逻辑在 [conversation.ts](../apps/api/src/conversation.ts)，
 HTTP 与网页共用这一份协议。
 
 ---
@@ -219,7 +219,7 @@ HTTP 与网页共用这一份协议。
 ## 一个主入口
 
 根目录运行 `pnpm dev` 启动 TypeScript API，`pnpm dev:web` 启动 React 界面。
-网页调用 [api.ts](../src/api.ts)，再进入 `Conversation → Recommender → Agents SDK Runner`；
+网页调用 [api.ts](../apps/api/src/api.ts)，再进入 `Conversation → Recommender → Agents SDK Runner`；
 检索评测用 `pnpm eval:retrieval`，不调用模型。
 
 ---
@@ -342,12 +342,12 @@ Harness 部分：记录真实知识命中，禁止没有知识依据的商品通
 
 ## 第一次读代码，按这个顺序
 
-1. [types.ts](../src/types.ts) —— 领域数据结构
-2. [agent-sdk.ts](../src/agent-sdk.ts) —— Single Agent、五个 Tool 与 SDK Runner
-3. [tools.ts](../src/tools.ts) —— Harness 证据与六条校验
-4. [agent.ts](../src/agent.ts) —— 把 Catalog 接到 SDK 并完成一轮推荐
-5. [catalog.ts](../src/catalog.ts) 的 `finalize` —— 用 SQLite 覆盖模型的话
-6. [conversation.ts](../src/conversation.ts) 与 [api.ts](../src/api.ts) —— 多轮和 HTTP
+1. [types.ts](../apps/api/src/types.ts) —— 领域数据结构
+2. [agent-sdk.ts](../apps/api/src/agent-sdk.ts) —— Single Agent、五个 Tool 与 SDK Runner
+3. [tools.ts](../apps/api/src/tools.ts) —— Harness 证据与六条校验
+4. [agent.ts](../apps/api/src/agent.ts) —— 把 Catalog 接到 SDK 并完成一轮推荐
+5. [catalog.ts](../apps/api/src/catalog.ts) 的 `finalize` —— 用 SQLite 覆盖模型的话
+6. [conversation.ts](../apps/api/src/conversation.ts) 与 [api.ts](../apps/api/src/api.ts) —— 多轮和 HTTP
 
 代码里的中文注释写了很多**「为什么这么做」和「以前踩过什么坑」**，那部分比代码本身值钱。
 

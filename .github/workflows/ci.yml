@@ -14,32 +14,11 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-      - run: uv sync --locked
-      - run: uv run ruff check .
-      - run: uv run ty check
-      - run: uv run pytest -q
-
-  web:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: web
-    steps:
-      - uses: actions/checkout@v7
-      # working-directory 不作用于 uses: 步骤，得显式指到 web/
       - uses: pnpm/action-setup@v4
-        with:
-          package_json_file: web/package.json
       - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: pnpm
-          cache-dependency-path: web/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
-      # build 先跑 tsc -b，类型错误在这里就会挡住
-      - run: pnpm build
+      - run: pnpm check

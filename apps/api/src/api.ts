@@ -129,7 +129,7 @@ export function createApp(injected: Partial<Deps> = {}): Express {
       });
     }
   });
-  const webDist = path.join(ROOT, "web", "dist");
+  const webDist = path.join(ROOT, "apps", "web", "dist");
   if (fs.existsSync(webDist)) {
     app.use(express.static(webDist));
     app.get(/.*/, (_req, res) =>

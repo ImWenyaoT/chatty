@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { Catalog, CatalogError } from "../src/catalog.js";
+import { DATA_DIR } from "../src/config.js";
 import { segmentForIndex, splitIntoChunks } from "../src/database.js";
 import {
   EvidenceError,
@@ -22,7 +23,7 @@ const createCatalog = (): Catalog => {
   roots.push(root);
   return new Catalog({
     databasePath: join(root, "chatty.db"),
-    dataDir: join(process.cwd(), "data"),
+    dataDir: DATA_DIR,
   });
 };
 

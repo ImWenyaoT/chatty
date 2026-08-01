@@ -7,8 +7,8 @@ status: accepted
 原先的项目边界写着「不增加前端、外部数据库或向量数据库」，理由是一个月的 MVP 要控重量：
 终端 demo 已经能演示 Harness 的全部行为，前端只是让它好看一点，不改变论点。
 
-现在反转前半条：**加一个 Web 对话界面（`web/`，Vite + React + TypeScript）和一个
-TypeScript HTTP 层（`src/api.ts`）**。后半条不变——外部数据库和向量数据库仍然不加。
+现在反转前半条：**加一个 Web 对话界面（`apps/web/`，Vite + React + TypeScript）和一个
+TypeScript HTTP 层（`apps/api/src/api.ts`）**。后半条不变——外部数据库和向量数据库仍然不加。
 
 反转的理由是受众。终端 demo 要求对方 clone 仓库、安装依赖、配 key 才能看到东西；
 一个能点开就用的界面把这个门槛降到零。这对一个用来展示工程判断的项目是有分量的差别，

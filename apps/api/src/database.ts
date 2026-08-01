@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
+import { DATA_DIR } from "./config.js";
 import type { KnowledgeDocument, Product, UserProfile } from "./types.js";
 import { userSegments } from "./types.js";
 
@@ -73,7 +74,7 @@ export class SeedDataError extends Error {}
 export class Database {
   readonly connection: DatabaseSync;
 
-  constructor(path = ":memory:", dataDir = join(process.cwd(), "data")) {
+  constructor(path = ":memory:", dataDir = DATA_DIR) {
     this.connection = new DatabaseSync(path);
     try {
       this.connection.exec("PRAGMA journal_mode = WAL");

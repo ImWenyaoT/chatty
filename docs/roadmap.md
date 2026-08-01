@@ -6,7 +6,7 @@
 
 ```mermaid
 flowchart LR
-    UI["web/src/App.tsx"] --> API["src/api.ts"]
+    UI["apps/web/src/App.tsx"] --> API["apps/api/src/api.ts"]
     API --> C["Conversation"]
     C --> R["Recommender"]
     R --> SDK["OpenAI Agents SDK<br/>Agent + Runner"]
@@ -24,14 +24,14 @@ flowchart LR
 
 ## 入口与调用链
 
-| 层            | 文件                                      | Context In              | Context Out                     |
-| ------------- | ----------------------------------------- | ----------------------- | ------------------------------- |
-| HTTP          | [api.ts](../src/api.ts)                   | 自然语言、会话 ID       | recommend / clarify / exhausted |
-| 输入适配      | [need-parser.ts](../src/need-parser.ts)   | 用户原话、可选类目      | `UserContext`                   |
-| 会话          | [conversation.ts](../src/conversation.ts) | 累积话语、history       | 一轮回复、新 history            |
-| Agent/Harness | [agent.ts](../src/agent.ts)               | `RecommendationRequest` | 可信推荐或稳定错误码            |
-| SDK runtime   | [agent-sdk.ts](../src/agent-sdk.ts)       | Agent、Tool、RunContext | Tool Loop、模型草稿             |
-| 数据/检索     | [catalog.ts](../src/catalog.ts)           | 结构化查询              | SQLite 事实与知识命中           |
+| 层            | 文件                                               | Context In              | Context Out                     |
+| ------------- | -------------------------------------------------- | ----------------------- | ------------------------------- |
+| HTTP          | [api.ts](../apps/api/src/api.ts)                   | 自然语言、会话 ID       | recommend / clarify / exhausted |
+| 输入适配      | [need-parser.ts](../apps/api/src/need-parser.ts)   | 用户原话、可选类目      | `UserContext`                   |
+| 会话          | [conversation.ts](../apps/api/src/conversation.ts) | 累积话语、history       | 一轮回复、新 history            |
+| Agent/Harness | [agent.ts](../apps/api/src/agent.ts)               | `RecommendationRequest` | 可信推荐或稳定错误码            |
+| SDK runtime   | [agent-sdk.ts](../apps/api/src/agent-sdk.ts)       | Agent、Tool、RunContext | Tool Loop、模型草稿             |
+| 数据/检索     | [catalog.ts](../apps/api/src/catalog.ts)           | 结构化查询              | SQLite 事实与知识命中           |
 
 主路径：
 
@@ -71,7 +71,7 @@ Tool Call
   └→ evidence：写进 RunContext，只归 Harness
 ```
 
-SDK 负责循环和 Tool 调用；[tools.ts](../src/tools.ts) 负责 Evidence 与业务校验。两者不是同一层职责。
+SDK 负责循环和 Tool 调用；[tools.ts](../apps/api/src/tools.ts) 负责 Evidence 与业务校验。两者不是同一层职责。
 
 ## 六条后置校验
 
@@ -84,11 +84,11 @@ SDK 负责循环和 Tool 调用；[tools.ts](../src/tools.ts) 负责 Evidence �
 | 5   | 推荐 ID 属于库存确认集           | `inventory_not_checked`   |
 | 6   | 推荐 ID 属于知识支撑集           | `product_not_grounded`    |
 
-任一失败都不返回半成品。通过后，[Catalog.finalize](../src/catalog.ts) 会重新从 SQLite 读取名称、价格、库存和标签；模型只拥有 `reason` 与 `marketing_copy`，两者还要经过禁词过滤。
+任一失败都不返回半成品。通过后，[Catalog.finalize](../apps/api/src/catalog.ts) 会重新从 SQLite 读取名称、价格、库存和标签；模型只拥有 `reason` 与 `marketing_copy`，两者还要经过禁词过滤。
 
 ## 数据与 RAG
 
-[database.ts](../src/database.ts) 启动时把 JSON/JSONL 种子事务性投影进 SQLite。运行时业务查询只走 SQLite。
+[database.ts](../apps/api/src/database.ts) 启动时把 JSON/JSONL 种子事务性投影进 SQLite。运行时业务查询只走 SQLite。
 
 知识文档按句子切块（目标约 160 字、重叠 40 字），索引侧和查询侧都对中文按字切分，再由 FTS5 + BM25 排序。同义词只扩展 Query，不修改原文。
 
@@ -107,8 +107,8 @@ SDK 负责循环和 Tool 调用；[tools.ts](../src/tools.ts) 负责 Evidence �
 
 ## 两个 seam
 
-- [model-provider.ts](../src/model-provider.ts)：生产用 DeepSeek Responses；Agents SDK provider 与一次性 `complete()` 共用同一配置。
-- [catalog.ts](../src/catalog.ts)：Tool 不碰 SQL，只调用 Catalog；测试可给每个用例独立 SQLite。
+- [model-provider.ts](../apps/api/src/model-provider.ts)：生产用 DeepSeek Responses；Agents SDK provider 与一次性 `complete()` 共用同一配置。
+- [catalog.ts](../apps/api/src/catalog.ts)：Tool 不碰 SQL，只调用 Catalog；测试可给每个用例独立 SQLite。
 
 ## 运行与验证
 

@@ -62,5 +62,5 @@ docs/*实习.pdf
 
 # TypeScript workspace
 node_modules/
-web/node_modules/
-web/dist/
+apps/*/node_modules/
+apps/*/dist/

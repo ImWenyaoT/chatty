@@ -1,7 +1,11 @@
 import path from "node:path";
+import { existsSync } from "node:fs";
 import { config as loadEnv } from "dotenv";
 
-export const ROOT = process.cwd();
+const cwd = process.cwd();
+export const ROOT = existsSync(path.join(cwd, "data"))
+  ? cwd
+  : path.resolve(cwd, "../..");
 export const DATA_DIR = path.join(ROOT, "data");
 export const DATABASE_PATH = path.join(ROOT, ".local", "chatty.db");
 export const DEFAULT_BASE_URL = "https://api.deepseek.com";

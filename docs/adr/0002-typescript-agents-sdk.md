@@ -5,7 +5,7 @@ status: accepted
 # 统一为 TypeScript 全栈并使用 OpenAI Agents SDK
 
 Chatty 从 Python 后端 + TypeScript 前端改为同一个 pnpm workspace 内的 TypeScript 全栈。
-根目录 `src/` 承担 Agent、Tool、Harness、SQLite 和 HTTP，`web/` 保留 React + Vite。
+`apps/api/` 承担 Agent、Tool、Harness、SQLite 和 HTTP，`apps/web/` 保留 React + Vite。
 
 这次迁移的目标是减少一个小型简历 demo 的运行时和工具链，不改变领域设计。
 Chatty 仍然是 Single Agent，五项能力仍然是 Tool，SQLite 仍然是商品、库存和知识检索的运行时事实源。
