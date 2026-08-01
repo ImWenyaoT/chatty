@@ -201,9 +201,10 @@ async def run_multiturn_task(
         return await Conversation(
             recommender,
             user_id=task.user_id,
+            resolve=resolve,
             num_items=3,
             max_turns=MAX_TURNS,
-        ).converse(task.opening, resolve=resolve, ask=ask)
+        ).converse(task.opening, ask=ask)
 
     outcome = await run_session(session, provider=provider, data_dir=data_dir)
     if isinstance(outcome.reply, RecommendationResponse):

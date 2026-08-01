@@ -35,6 +35,17 @@ async def _resolve(_said: list[str]) -> UserContext:
     return UserContext(preferred_categories=["耳机"])
 
 
+def _conversation(
+    service: Recommender, *, resolve: object = None, max_turns: int = 3
+) -> Conversation:
+    return Conversation(
+        service,
+        user_id="user_active",
+        resolve=resolve or _resolve,  # ty: ignore[invalid-argument-type]
+        max_turns=max_turns,
+    )
+
+
 @pytest.mark.asyncio
 async def test_clarify_question_goes_back_into_history(catalog: Catalog) -> None:
     """反问过的问题必须回到 history 里，否则下一轮模型看不见自己问过什么。"""
@@ -47,9 +58,7 @@ async def test_clarify_question_goes_back_into_history(catalog: Catalog) -> None
         return "耳机"
 
     try:
-        reply = await Conversation(service, user_id="user_active", max_turns=3).converse(
-            "想找个听歌用的", resolve=_resolve, ask=ask
-        )
+        reply = await _conversation(service, max_turns=3).converse("想找个听歌用的", ask=ask)
     finally:
         await service.close()
 
@@ -83,9 +92,7 @@ async def test_everything_the_user_said_is_resolved_together(catalog: Catalog) -
         return "2000 以内"
 
     try:
-        await Conversation(service, user_id="user_active", max_turns=3).converse(
-            "想买个耳机", resolve=resolve, ask=ask
-        )
+        await _conversation(service, resolve=resolve, max_turns=3).converse("想买个耳机", ask=ask)
     finally:
         await service.close()
 
@@ -102,9 +109,7 @@ async def test_user_walking_away_ends_the_conversation(catalog: Catalog) -> None
         return None
 
     try:
-        reply = await Conversation(service, user_id="user_active", max_turns=3).converse(
-            "随便看看", resolve=_resolve, ask=ask
-        )
+        reply = await _conversation(service, max_turns=3).converse("随便看看", ask=ask)
     finally:
         await service.close()
 
@@ -121,9 +126,7 @@ async def test_turns_run_out_instead_of_asking_forever(catalog: Catalog) -> None
     service = Recommender(catalog, provider=StaticModelProvider(model))
 
     try:
-        reply = await Conversation(service, user_id="user_active", max_turns=2).converse(
-            "想买点东西", resolve=_resolve, ask=_answer
-        )
+        reply = await _conversation(service, max_turns=2).converse("想买点东西", ask=_answer)
     finally:
         await service.close()
 
@@ -144,9 +147,7 @@ async def test_single_turn_conversation_never_asks(catalog: Catalog) -> None:
         return "耳机"
 
     try:
-        reply = await Conversation(service, user_id="user_active", max_turns=1).converse(
-            "随便看看", resolve=_resolve, ask=ask
-        )
+        reply = await _conversation(service, max_turns=1).converse("随便看看", ask=ask)
     finally:
         await service.close()
 
@@ -156,4 +157,4 @@ async def test_single_turn_conversation_never_asks(catalog: Catalog) -> None:
 
 def test_max_turns_must_allow_at_least_one_turn(catalog: Catalog) -> None:
     with pytest.raises(ValueError, match="max_turns"):
-        Conversation(Recommender(catalog), user_id="user_active", max_turns=0)
+        _conversation(Recommender(catalog), max_turns=0)

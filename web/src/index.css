@@ -1,0 +1,289 @@
+/*
+ * 只用系统字体，不引 web font。正文以中文为主，CJK 字体动辄几 MB；
+ * latin-only 的 web font 对这个界面几乎没有收益，不值这个体积。
+ */
+:root {
+  --bg: #faf9f7;
+  --panel: #fff;
+  --ink: #1c1917;
+  --dim: #78716c;
+  --line: #e7e5e4;
+  --accent: #0f172a;
+  --danger: #b91c1c;
+
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Microsoft YaHei',
+    sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  line-height: 1.6;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0c0a09;
+    --panel: #1c1917;
+    --ink: #f5f5f4;
+    --dim: #a8a29e;
+    --line: #292524;
+    --accent: #e7e5e4;
+    --danger: #f87171;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.app {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 0 1rem;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.5rem 0 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.hint {
+  margin: 0.25rem 0;
+  color: var(--dim);
+  font-size: 0.8125rem;
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--dim);
+}
+
+select,
+input,
+button {
+  font: inherit;
+  color: inherit;
+}
+
+select {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.375rem;
+  background: var(--panel);
+}
+
+main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.25rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.intro p:first-child {
+  margin-top: 0;
+}
+
+.bubble {
+  margin: 0;
+  padding: 0.625rem 0.875rem;
+  border-radius: 0.75rem;
+  max-width: 85%;
+  white-space: pre-wrap;
+}
+
+.bubble.user {
+  align-self: flex-end;
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.bubble.agent {
+  align-self: flex-start;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+
+.bubble.error {
+  align-self: flex-start;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+.understood {
+  margin: 0;
+  align-self: flex-end;
+  font-size: 0.75rem;
+  color: var(--dim);
+}
+
+.thinking {
+  margin: 0;
+  color: var(--dim);
+  font-size: 0.8125rem;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thinking {
+    animation: none;
+  }
+}
+
+.products {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--panel);
+  padding: 0.875rem;
+}
+
+.card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.name {
+  font-weight: 600;
+}
+
+.price {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.meta {
+  margin: 0.375rem 0 0.625rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--dim);
+}
+
+.id,
+.tag {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.low {
+  color: var(--danger);
+}
+
+.reason,
+.copy {
+  margin: 0.25rem 0;
+  font-size: 0.875rem;
+}
+
+.copy {
+  color: var(--dim);
+}
+
+footer {
+  border-top: 1px solid var(--line);
+  padding: 0.875rem 0 1.25rem;
+}
+
+form {
+  display: flex;
+  gap: 0.5rem;
+}
+
+input {
+  flex: 1;
+  padding: 0.625rem 0.875rem;
+  border: 1px solid var(--line);
+  border-radius: 0.625rem;
+  background: var(--panel);
+}
+
+input:focus-visible,
+select:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+button {
+  padding: 0.625rem 1.125rem;
+  border: none;
+  border-radius: 0.625rem;
+  background: var(--accent);
+  color: var(--bg);
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button.link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.boot-error {
+  max-width: 32rem;
+  margin: 20vh auto;
+  padding: 0 1rem;
+  text-align: center;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8125rem;
+}

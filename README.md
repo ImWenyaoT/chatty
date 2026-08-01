@@ -3,7 +3,7 @@
 Chatty 是面向电商推荐与营销的单 Agent 演示。它让模型理解需求、选择候选商品并生成理由与文案；
 程序通过 Tool、SQLite 和 Harness 保证商品、价格、库存等业务事实可信。
 
-`OpenAI Agents SDK` · `SQLite FTS5` · `Pydantic` · `uv` · `Ruff` · `ty`
+`OpenAI Agents SDK` · `SQLite FTS5` · `Pydantic` · `FastAPI` · `React` · `uv` · `Ruff` · `ty`
 
 ## 工作流与 Agent 设计
 
@@ -59,7 +59,7 @@ flowchart LR
 ## 能力边界
 
 - Chatty 是单 Agent 推荐系统；用户画像、商品搜索、库存检查、知识检索和营销策略都是 Tool。
-- 入口是 `Recommender.recommend()`（单轮）与 `chatty.conversation.Conversation`（信息不足时先澄清）；没有 HTTP 服务或前端。会话之间互不记忆，不是客服式长期对话。
+- 入口是 `Recommender.recommend()`（单轮）与 `chatty.conversation.Conversation`（信息不足时先澄清）；Web 界面与 HTTP 层见 ADR 0001。会话状态存服务端内存，会话之间互不记忆，不是客服式长期对话。
 - 不使用向量库或 LLM-as-a-Judge：前者在当前规模下没有必要，后者无法替代可由 SQL 验证的业务事实。
 - SQLite 适合本地 demo、测试隔离和读多写少场景，不适合高并发、多进程写入或海量数仓分析。
 
@@ -72,10 +72,11 @@ Harness 校验工具调用和商品证据，并在响应前从数据库回填价
 
 ## 技术栈
 
-- Python 3.13+、uv、Pydantic
+- Python 3.13+、uv、Pydantic、FastAPI
 - OpenAI Agents SDK、OpenAI-compatible Responses API
 - SQLite、SQLite FTS5、BM25
-- Ruff、ty、pytest
+- React 19、TypeScript、Vite、pnpm
+- Ruff、ty、pytest、oxlint、Prettier
 
 ## 启动
 
@@ -88,9 +89,17 @@ cp .env.example .env
 # 编辑 .env，填写 OPENAI_API_KEY
 uv sync
 
+# Web 界面：两个终端
+uv run uvicorn chatty.api:create_app --factory   # 后端 :8000
+cd web && pnpm install && pnpm dev               # 前端 :5173
+
+# 终端界面
 uv run python demo.py                  # 交互模式
 uv run python demo.py 家电 user_budget  # 单次推荐
 ```
+
+Web 与终端跑的是同一个 `Conversation`：Web 走 `send()`（一轮一个 HTTP 请求），
+终端走 `converse()`（回调阻塞等输入）。澄清协议只有一份实现。
 
 交互模式可直接输入“想买个降噪耳机，2000 以内”。输入适配器会解析类目与价格区间；
 推荐结果中的 ID、名称、价格与库存均来自 SQLite 重查。
@@ -125,17 +134,18 @@ uv run ty check
 uv run pytest -q
 ```
 
-116 项测试使用脚本化模型，不联网、不产生费用，验证 Harness 契约；真实模型评测衡量的是
+129 项测试使用脚本化模型，不联网、不产生费用，验证 Harness 契约；真实模型评测衡量的是
 概率性行为，两者不能互相替代。
 
 ## 目录
 
 ```text
 data/             可读 JSON/JSONL 种子数据
-src/chatty/       数据库、查询、Tool、Agent Loop 与 Harness
+src/chatty/       数据库、查询、Tool、Agent Loop、Harness 与 HTTP 层
+web/              React + TypeScript 对话界面
 evals/            任务集、评分、检索指标与消融实验
-tests/            Harness 与评估框架测试
-docs/             领域词汇与协作规范
+tests/            Harness、HTTP 层与评估框架测试
+docs/adr/         架构决策记录
 ```
 
 ## License

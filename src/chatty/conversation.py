@@ -40,13 +40,24 @@ Ask = Callable[[str], Awaitable[str | None]]
 
 
 class Conversation:
-    """一次会话。一个实例跑一次，不复用。"""
+    """一次会话。
+
+    两个入口，同一份协议：
+
+      · send()     —— 跑一轮就返回，不阻塞。给 HTTP 用：一轮一个请求，
+                      服务端没法在请求里挂着等用户打字。
+      · converse() —— 跑到给出推荐或轮次用尽，靠 ask 回调拿下一句。
+                      给终端和评估用，两者都能阻塞。
+
+    converse 内部就是循环调 send，所以 `{"action":"clarify"}` 那套形状仍然只有一份。
+    """
 
     def __init__(
         self,
         recommender: Recommender,
         *,
         user_id: str,
+        resolve: Resolve,
         num_items: int = 3,
         max_turns: int = 3,
     ) -> None:
@@ -54,14 +65,53 @@ class Conversation:
             raise ValueError("max_turns 至少为 1，否则一轮都不会跑")
         self._recommender = recommender
         self._user_id = user_id
+        self._resolve = resolve
         self._num_items = num_items
         self._max_turns = max_turns
+
+    @property
+    def max_turns(self) -> int:
+        return self._max_turns
+
+    async def send(
+        self,
+        said: list[str],
+        history: list[TResponseInputItem],
+    ) -> tuple[RecommendationResponse | ClarifyReply, list[TResponseInputItem]]:
+        """跑一轮，返回结果和**更新后的**历史。
+
+        said 是用户到目前为止说过的全部话，不是最新那一句：第二轮只说「2000 以内」时，
+        单看这一句会丢掉第一轮说的类目，所以每轮都拿全部重新解析。
+
+        返回的 history 是新列表，传进来的那个不动——调用方（尤其是 HTTP 层）
+        可能把它存在别处，原地改会让人猜不到什么时候变了。
+        """
+        request = RecommendationRequest(
+            user_id=self._user_id,
+            num_items=self._num_items,
+            context=await self._resolve(said),
+        )
+        reply = await self._recommender.respond(request, history=history)
+        if isinstance(reply, RecommendationResponse):
+            return reply, list(history)
+
+        # 澄清轮：把这一问一答记进历史，下一轮模型才看得见自己问过什么
+        return reply, [
+            *history,
+            {"role": "user", "content": request.model_dump_json()},
+            {
+                "role": "assistant",
+                "content": json.dumps(
+                    {"action": "clarify", "question": reply.question},
+                    ensure_ascii=False,
+                ),
+            },
+        ]
 
     async def converse(
         self,
         opening: str,
         *,
-        resolve: Resolve,
         ask: Ask,
     ) -> RecommendationResponse | ClarifyReply:
         """跑到给出推荐为止，或者跑满轮次上限。
@@ -74,14 +124,7 @@ class Conversation:
         last_question: ClarifyReply | None = None
 
         for turn in range(self._max_turns):
-            # 每轮拿**全部**说过的话重新解析：第二轮用户只说「2000 以内」，
-            # 单看这一句会丢掉第一轮说的类目。
-            request = RecommendationRequest(
-                user_id=self._user_id,
-                num_items=self._num_items,
-                context=await resolve(said),
-            )
-            reply = await self._recommender.respond(request, history=history)
+            reply, history = await self.send(said, history)
             if isinstance(reply, RecommendationResponse):
                 return reply
 
@@ -90,18 +133,6 @@ class Conversation:
             # 输入，评估那边是白花一次用户模拟器的模型调用。
             if turn == self._max_turns - 1:
                 break
-
-            # 这一问一答记进 history，下一轮模型才看得见自己问过什么
-            history.append({"role": "user", "content": request.model_dump_json()})
-            history.append(
-                {
-                    "role": "assistant",
-                    "content": json.dumps(
-                        {"action": "clarify", "question": reply.question},
-                        ensure_ascii=False,
-                    ),
-                }
-            )
             answer = await ask(reply.question)
             if answer is None:
                 break  # 用户不答了，把最后那个问题交回去

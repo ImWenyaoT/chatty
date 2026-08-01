@@ -16,7 +16,6 @@
 """
 
 import asyncio
-import json
 import logging
 import sys
 import time
@@ -32,6 +31,7 @@ from chatty.models import (
     RecommendationResponse,
     UserContext,
 )
+from chatty.need_parser import describe, parse_need
 
 USERS = ("user_active", "user_budget", "user_vip", "user_new", "user_churn")
 STEPS = "画像 → 搜索 → 库存 → 知识检索 → 营销策略 → 生成文案"
@@ -62,62 +62,6 @@ MAX_CLARIFY = 2  # 最多让它追问两次，免得绕不出来
 # ANSI 暗色，让提示不抢正文的注意力；不是终端就留空串
 DIM, RESET = ("\033[2m", "\033[0m") if sys.stdout.isatty() else ("", "")
 
-PARSE_PROMPT = """把用户的购物需求转成 JSON，只输出 JSON 不要别的：
-{{"category": "类目名或 null", "min_yuan": 数字或 null, "max_yuan": 数字或 null}}
-
-可选类目只有：{categories}
-挑最接近的一个；实在对不上就填 null。价格用元为单位。
-
-例：
-「想买个降噪耳机，2000 以内」-> {{"category": "耳机", "min_yuan": null, "max_yuan": 2000}}
-「三千以上的手机」          -> {{"category": "手机", "min_yuan": 3000, "max_yuan": null}}
-"""
-
-
-def _to_cents(yuan: object) -> int | None:
-    return int(yuan * 100) if isinstance(yuan, int | float) else None
-
-
-async def parse_need(
-    provider: ModelProvider, text: str, categories: list[str]
-) -> UserContext:
-    """把一句大白话转成结构化的检索条件。
-
-    这是 demo 的输入适配，不属于 Agent 本身——真正的五个工具跑在这之后，
-    拿到的仍然是结构化请求。
-    """
-    raw = (
-        await provider.complete(
-            text, system=PARSE_PROMPT.format(categories="、".join(categories))
-        )
-        or "{}"
-    )
-    # 模型可能把 JSON 包在代码块里，抠出大括号那段。
-    # 抠出来的也可能不是合法 JSON —— 这一步本来就是「模型说了不算」的地方，
-    # 解析不了就当没给条件，按原话去搜，绝不让 demo 在这里崩掉。
-    start, end = raw.find("{"), raw.rfind("}")
-    try:
-        parsed = json.loads(raw[start : end + 1]) if start != -1 and end > start else {}
-    except json.JSONDecodeError:
-        parsed = {}
-    if not isinstance(parsed, dict):
-        parsed = {}
-
-    return UserContext(
-        preferred_categories=[parsed["category"]] if parsed.get("category") in categories else [],
-        min_price_cents=_to_cents(parsed.get("min_yuan")),
-        max_price_cents=_to_cents(parsed.get("max_yuan")),
-    )
-
-
-def describe(context: UserContext) -> str:
-    """把解析结果说给人听，让人看见这句话被理解成了什么。"""
-    bits = list(context.preferred_categories) or ["不限类目"]
-    if context.min_price_cents:
-        bits.append(f"≥{context.min_price_cents / 100:.0f} 元")
-    if context.max_price_cents:
-        bits.append(f"≤{context.max_price_cents / 100:.0f} 元")
-    return " · ".join(bits)
 
 
 async def _tick() -> None:
@@ -190,7 +134,6 @@ async def run_conversation(
     会话循环、澄清历史的拼装和轮次上限都在 Conversation 里；这里只剩「怎么把
     大白话变成条件」「反问时问谁」这两件 demo 特有的事，以及打印。
     """
-    conversation = Conversation(service, user_id=user_id, num_items=3, max_turns=max_turns)
     last_context = UserContext()
     ticker = _Ticker()
 
@@ -203,6 +146,14 @@ async def run_conversation(
         ticker.start()
         return last_context
 
+    conversation = Conversation(
+        service,
+        user_id=user_id,
+        resolve=tracking_resolve,
+        num_items=3,
+        max_turns=max_turns,
+    )
+
     async def ask(question: str) -> str | None:
         ticker.stop()
         print(f"\r  Chatty 想知道：{question}{' ' * 20}")
@@ -213,7 +164,7 @@ async def run_conversation(
         return None if not answer or answer in ("q", "quit", "exit") else answer
 
     try:
-        reply = await conversation.converse(opening, resolve=tracking_resolve, ask=ask)
+        reply = await conversation.converse(opening, ask=ask)
     except RecommendationError as error:
         # 记下来，之后用 --harvest 收成回归用例
         request = RecommendationRequest(user_id=user_id, num_items=3, context=last_context)
