@@ -139,10 +139,12 @@ flowchart LR
 RecommendationError(code) → HTTP 422 detail=code → api.ts explain(code) → 人话
 ```
 
-已有的码：`clarification_needed` `required_tools_not_used` `knowledge_not_retrieved`
+对外错误码：`clarification_needed` `required_tools_not_used` `knowledge_not_retrieved`
 `profile_not_loaded` `product_not_recalled` `inventory_not_checked` `product_not_grounded`
-`invalid_recommendation` `llm_not_configured` `recommendation_failed`
-`no_available_recommendations` `unknown_recommended_product`。
+`invalid_recommendation` `llm_not_configured` `recommendation_failed`。
+
+`Catalog` 内部还会产生 `no_available_recommendations` 和 `unknown_recommended_product`，
+但 `Recommender` 会将它们统一收敛为对外的 `invalid_recommendation`。
 
 ---
 
@@ -189,7 +191,8 @@ call_log              带参数的调用记录，用于查重
 
 ### ⑥ 回填
 `Catalog.finalize` 重查 SQLite：模型编的 ID → 报错；售罄或超预算 → 跳过；重复推荐 → 去重；
-禁词 → 替换成 `***`；全被过滤光 → `no_available_recommendations`，宁可报错也不返回空列表。
+禁词 → 替换成 `***`；全被过滤光 → 内部报 `no_available_recommendations`，再对外收敛为
+`invalid_recommendation`，宁可报错也不返回空列表。
 
 ---
 

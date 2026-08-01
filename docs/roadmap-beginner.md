@@ -143,7 +143,7 @@ get_marketing_strategy→ 活跃用户用什么语气写文案，哪些词不能
 
 | 入口 | 怎么跑 | 干嘛用 |
 |---|---|---|
-| **网页** | `uvicorn chatty.api:create_app --factory` + `pnpm dev` | 主界面 |
+| **网页** | `uv run uvicorn chatty.api:create_app --factory` + `cd web && pnpm install && pnpm dev` | 主界面 |
 | **终端** | `uv run python demo.py` | 快速试、演示 |
 | **单轮评估** | `uv run python -m evals` | 18 条任务打分，看通过率 |
 | **多轮评估** | `uv run python -m evals --multiturn` | 拿模型当假用户，测它会不会问 |
