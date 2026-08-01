@@ -15,9 +15,8 @@ import {
 import {
   createEvidence,
   guardRepeatedCall,
-  recordInventory,
-  recordKnowledge,
-  recordSearch,
+  EvidenceError,
+  snapshotEvidence,
   validateRecommendationEvidence,
 } from "./tools.js";
 import type {
@@ -113,9 +112,7 @@ export class Recommender {
           request.user_id,
           request.context,
         );
-        evidence.profile = profile;
-        evidence.usedTools.push("get_user_profile");
-        return { model: profile, evidence: { segment: profile.segment } };
+        return { model: profile, evidence: { profile } };
       },
       searchProducts: async (_sdkRequest, input) => {
         if (!evidence.profile) throw new Error("profile_not_loaded");
@@ -128,24 +125,20 @@ export class Recommender {
           tags: input.tags,
           limit: input.limit,
         });
-        recordSearch(evidence, products);
         return {
           model: products,
-          evidence: { productIds: products.map((item) => item.product_id) },
+          evidence: { products },
         };
       },
       checkInventory: async (_sdkRequest, input) => {
         const products = this.catalog.inventory(input.productIds);
-        recordInventory(evidence, products);
         return {
           model: products.map(({ product_id, stock }) => ({
             product_id,
             stock,
             low_stock: stock <= 100,
           })),
-          evidence: {
-            inStockProductIds: products.map((item) => item.product_id),
-          },
+          evidence: { products },
         };
       },
       retrieveKnowledge: async (_sdkRequest, input) => {
@@ -160,19 +153,14 @@ export class Recommender {
           product_ids: input.productIds,
           limit: input.limit,
         });
-        recordKnowledge(
-          evidence,
-          hits,
-          this.catalog.inventory(input.productIds),
-        );
+        const groundedProducts = this.catalog.inventory(input.productIds);
         return {
           model: hits,
-          evidence: { groundedProductIds: [...evidence.knowledgeProductIds] },
+          evidence: { hits, groundedProducts },
         };
       },
       getMarketingStrategy: async (_sdkRequest, input) => {
         const strategy = this.catalog.marketingStrategy(input.segment);
-        evidence.usedTools.push("get_marketing_strategy");
         return { model: strategy, evidence: {} };
       },
     };
@@ -200,10 +188,10 @@ export class Recommender {
         ...history,
         { role: "user", content: JSON.stringify(request) },
       ] as AgentInputItem[];
-      const result = await runtime.run(input, sdkRequest);
+      const result = await runtime.run(input, sdkRequest, evidence);
       const draft = parseDraft(result.output);
       if (draft.action === "clarify") {
-        if (!allowClarify || evidence.usedTools.length)
+        if (!allowClarify || evidence.inStockProductIds.size)
           throw new RecommendationError("invalid_recommendation");
         return {
           request_id: requestId(),
@@ -226,20 +214,31 @@ export class Recommender {
         total_latency_ms: performance.now() - started,
       };
     } catch (error) {
-      if (error instanceof RecommendationError) throw error;
+      const diagnostics = {
+        evidence: snapshotEvidence(evidence),
+        cause: error instanceof Error ? error.message : String(error),
+      };
+      if (error instanceof RecommendationError)
+        throw new RecommendationError(error.code, {
+          ...diagnostics,
+          ...error.diagnostics,
+        });
       if (error instanceof MissingCredentials)
-        throw new RecommendationError("llm_not_configured");
+        throw new RecommendationError("llm_not_configured", diagnostics);
+      if (error instanceof EvidenceError)
+        throw new RecommendationError(error.code, {
+          ...diagnostics,
+          missing: error.missing,
+        });
       if (error instanceof CatalogError)
-        throw new RecommendationError("invalid_recommendation");
+        throw new RecommendationError("invalid_recommendation", diagnostics);
       if (
         error instanceof Error &&
         "code" in error &&
         typeof error.code === "string"
       )
-        throw new RecommendationError(error.code);
-      throw new RecommendationError("recommendation_failed", {
-        cause: error instanceof Error ? error.message : String(error),
-      });
+        throw new RecommendationError(error.code, diagnostics);
+      throw new RecommendationError("recommendation_failed", diagnostics);
     } finally {
       await runtime.close();
     }

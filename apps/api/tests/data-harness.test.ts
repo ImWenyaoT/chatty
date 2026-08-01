@@ -13,6 +13,7 @@ import {
   recordInventory,
   recordKnowledge,
   recordSearch,
+  snapshotEvidence,
   validateRecommendationEvidence,
   validateToolSequence,
 } from "../src/tools.js";
@@ -58,9 +59,42 @@ describe("SQLite 数据投影与 FTS5", () => {
       catalog.close();
     }
   });
+
+  it("长商品名不会挤掉 Harness 已知的类目检索词", () => {
+    const catalog = createCatalog();
+    try {
+      const hits = catalog.retrieveKnowledge({
+        query: "小米 Redmi Buds 6 无线耳机 性价比 入门",
+        categories: ["耳机"],
+        product_ids: ["P023"],
+        limit: 5,
+      });
+      expect(hits.length).toBeGreaterThan(0);
+      expect(hits.every((hit) => hit.category === "耳机")).toBe(true);
+    } finally {
+      catalog.close();
+    }
+  });
 });
 
 describe("Catalog 是商品事实的唯一 seam", () => {
+  it("本轮单边价格约束不会继承冲突的历史画像区间", () => {
+    const catalog = createCatalog();
+    try {
+      expect(
+        catalog.userProfile("user_active", { max_price_cents: 30_000 }),
+      ).toMatchObject({ min_price_cents: 0, max_price_cents: 30_000 });
+      expect(
+        catalog.userProfile("user_budget", { min_price_cents: 200_000 }),
+      ).toMatchObject({
+        min_price_cents: 200_000,
+        max_price_cents: 1_000_000,
+      });
+    } finally {
+      catalog.close();
+    }
+  });
+
   it("搜索按画像排序，库存去重并排除售罄", () => {
     const catalog = createCatalog();
     try {
@@ -146,6 +180,22 @@ describe("Catalog 是商品事实的唯一 seam", () => {
 });
 
 describe("Harness-owned Evidence", () => {
+  it("把 partial evidence 保留为不含业务正文的诊断快照", () => {
+    const evidence = createEvidence();
+    evidence.usedTools.push("get_user_profile", "search_products");
+    evidence.recalledProductIds.add("P023");
+    evidence.callLog.push('search_products({"maxPriceCents":30000})');
+
+    expect(snapshotEvidence(evidence)).toEqual({
+      usedTools: ["get_user_profile", "search_products"],
+      recalledProductIds: ["P023"],
+      inStockProductIds: [],
+      groundedProductIds: [],
+      knowledgeHits: 0,
+      callLog: ['search_products({"maxPriceCents":30000})'],
+    });
+  });
+
   it("允许重复调用与后两步交换，但守住前三步依赖", () => {
     expect(
       validateToolSequence([

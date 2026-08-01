@@ -23,19 +23,63 @@ const request: RecommendationRequest = {
 const handlers = (): ChattyToolHandlers => ({
   getUserProfile: vi.fn(async () => ({
     model: { user_id: "U001", segment: "active" },
-    evidence: { segment: "active" },
+    evidence: {
+      profile: {
+        user_id: "U001",
+        segment: "active" as const,
+        preferred_categories: ["耳机"],
+        min_price_cents: 0,
+        max_price_cents: 20_000,
+        recent_views: [],
+        recent_purchases: [],
+      },
+    },
   })),
   searchProducts: vi.fn(async () => ({
     model: [{ product_id: "P001", name: "蓝牙耳机" }],
-    evidence: { productIds: ["P001"] },
+    evidence: {
+      products: [
+        {
+          product_id: "P001",
+          name: "蓝牙耳机",
+          category: "耳机",
+          price_cents: 19_900,
+          description: "test",
+          brand: "test",
+          seller_id: "S001",
+          stock: 8,
+          tags: [],
+          popularity_score: 1,
+          image_url: "",
+          source: "test",
+        },
+      ],
+    },
   })),
   checkInventory: vi.fn(async () => ({
     model: [{ product_id: "P001", stock: 8 }],
-    evidence: { inStockProductIds: ["P001"] },
+    evidence: {
+      products: [
+        {
+          product_id: "P001",
+          name: "蓝牙耳机",
+          category: "耳机",
+          price_cents: 19_900,
+          description: "test",
+          brand: "test",
+          seller_id: "S001",
+          stock: 8,
+          tags: [],
+          popularity_score: 1,
+          image_url: "",
+          source: "test",
+        },
+      ],
+    },
   })),
   retrieveKnowledge: vi.fn(async () => ({
     model: { documents: [{ content: "适合通勤" }] },
-    evidence: { groundedProductIds: ["P001"] },
+    evidence: { hits: [], groundedProducts: [] },
   })),
   getMarketingStrategy: vi.fn(async () => ({
     model: { tone: "简洁" },
@@ -68,10 +112,13 @@ const runContext = (
     request,
     handlers: toolHandlers,
     evidence: {
+      profile: null,
+      knowledge: [],
       usedTools: [],
       recalledProductIds: new Set(),
       inStockProductIds: new Set(),
-      groundedProductIds: new Set(),
+      knowledgeProductIds: new Set(),
+      callLog: [],
     },
   });
 
@@ -108,7 +155,7 @@ describe("Chatty Agents SDK integration", () => {
       segment: "active",
     });
     expect(output).not.toContain("evidence");
-    expect(context.context.evidence.profileSegment).toBe("active");
+    expect(context.context.evidence.profile?.segment).toBe("active");
     expect(context.context.evidence.usedTools).toEqual(["get_user_profile"]);
   });
 
@@ -150,6 +197,36 @@ describe("Chatty Agents SDK integration", () => {
         JSON.stringify({ productIds: ["P999"] }),
       ),
     ).resolves.toContain("inventory_product_not_recalled");
+  });
+
+  it("keeps model product search inside the explicit user context", async () => {
+    const toolHandlers = handlers();
+    const runtime = createChattyAgentRuntime({
+      handlers: toolHandlers,
+      modelProvider: unusedProvider,
+    });
+    const context = runContext(toolHandlers);
+    await functionTool(runtime, "get_user_profile").invoke(context, "{}");
+
+    await functionTool(runtime, "search_products").invoke(
+      context,
+      JSON.stringify({
+        categories: ["手机"],
+        minPriceCents: 0,
+        maxPriceCents: 999_999,
+        tags: [],
+        limit: 5,
+      }),
+    );
+
+    expect(toolHandlers.searchProducts).toHaveBeenCalledWith(
+      request,
+      expect.objectContaining({
+        categories: ["耳机"],
+        minPriceCents: 0,
+        maxPriceCents: 20_000,
+      }),
+    );
   });
 
   it("creates an injectable Responses provider for DeepSeek", async () => {

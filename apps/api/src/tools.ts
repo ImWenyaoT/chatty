@@ -34,6 +34,28 @@ export const createEvidence = (): RecommendationEvidence => ({
   callLog: [],
 });
 
+export interface EvidenceSnapshot {
+  usedTools: string[];
+  profileSegment?: string;
+  recalledProductIds: string[];
+  inStockProductIds: string[];
+  groundedProductIds: string[];
+  knowledgeHits: number;
+  callLog: string[];
+}
+
+export const snapshotEvidence = (
+  evidence: RecommendationEvidence,
+): EvidenceSnapshot => ({
+  usedTools: [...evidence.usedTools],
+  ...(evidence.profile ? { profileSegment: evidence.profile.segment } : {}),
+  recalledProductIds: [...evidence.recalledProductIds],
+  inStockProductIds: [...evidence.inStockProductIds],
+  groundedProductIds: [...evidence.knowledgeProductIds],
+  knowledgeHits: evidence.knowledge.length,
+  callLog: [...evidence.callLog],
+});
+
 const dependencyChain: ToolName[] = [
   "get_user_profile",
   "search_products",
@@ -74,7 +96,7 @@ export function guardRepeatedCall(
 
 export function recordSearch(
   evidence: RecommendationEvidence,
-  products: Product[],
+  products: readonly Product[],
 ): void {
   for (const product of products)
     evidence.recalledProductIds.add(product.product_id);

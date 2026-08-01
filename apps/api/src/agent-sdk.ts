@@ -9,6 +9,17 @@ import {
 } from "@openai/agents";
 import { z } from "zod";
 
+import {
+  createEvidence,
+  recordInventory,
+  recordKnowledge,
+  recordSearch,
+  snapshotEvidence,
+  type EvidenceSnapshot,
+  type RecommendationEvidence,
+} from "./tools.js";
+import type { KnowledgeHit, Product, UserProfile } from "./types.js";
+
 export const CHATTY_TOOL_NAMES = [
   "get_user_profile",
   "search_products",
@@ -41,7 +52,7 @@ export interface HarnessToolResult<TModel, TEvidence> {
 export interface ChattyToolHandlers {
   getUserProfile(
     request: RecommendationRequest,
-  ): Promise<HarnessToolResult<unknown, { segment: string }>>;
+  ): Promise<HarnessToolResult<unknown, { profile: UserProfile }>>;
   searchProducts(
     request: RecommendationRequest,
     input: {
@@ -51,11 +62,11 @@ export interface ChattyToolHandlers {
       tags: string[];
       limit: number;
     },
-  ): Promise<HarnessToolResult<unknown, { productIds: string[] }>>;
+  ): Promise<HarnessToolResult<unknown, { products: Product[] }>>;
   checkInventory(
     request: RecommendationRequest,
     input: { productIds: string[] },
-  ): Promise<HarnessToolResult<unknown, { inStockProductIds: string[] }>>;
+  ): Promise<HarnessToolResult<unknown, { products: Product[] }>>;
   retrieveKnowledge(
     request: RecommendationRequest,
     input: {
@@ -64,33 +75,22 @@ export interface ChattyToolHandlers {
       productIds: string[];
       limit: number;
     },
-  ): Promise<HarnessToolResult<unknown, { groundedProductIds: string[] }>>;
+  ): Promise<
+    HarnessToolResult<
+      unknown,
+      { hits: KnowledgeHit[]; groundedProducts: Product[] }
+    >
+  >;
   getMarketingStrategy(
     request: RecommendationRequest,
     input: { segment: string },
   ): Promise<HarnessToolResult<unknown, Record<string, never>>>;
 }
 
-export interface HarnessEvidence {
-  readonly usedTools: ChattyToolName[];
-  profileSegment?: string;
-  readonly recalledProductIds: Set<string>;
-  readonly inStockProductIds: Set<string>;
-  readonly groundedProductIds: Set<string>;
-}
-
 export interface ChattyRunContext {
   readonly request: RecommendationRequest;
   readonly handlers: ChattyToolHandlers;
-  readonly evidence: HarnessEvidence;
-}
-
-export interface EvidenceSnapshot {
-  usedTools: ChattyToolName[];
-  profileSegment?: string;
-  recalledProductIds: string[];
-  inStockProductIds: string[];
-  groundedProductIds: string[];
+  readonly evidence: RecommendationEvidence;
 }
 
 export interface ChattyRunResult {
@@ -103,6 +103,7 @@ export interface ChattyAgentRuntime {
   run(
     input: string | AgentInputItem[],
     request: RecommendationRequest,
+    evidence?: RecommendationEvidence,
   ): Promise<ChattyRunResult>;
   close(): Promise<void>;
 }
@@ -129,10 +130,6 @@ const requireContext = (
 const exposeModelResult = <TModel, TEvidence>(
   result: HarnessToolResult<TModel, TEvidence>,
 ): string => JSON.stringify(result.model);
-
-const addAll = (target: Set<string>, values: readonly string[]): void => {
-  for (const value of values) target.add(value);
-};
 
 const getProfileParameters = z.object({});
 const searchParameters = z.object({
@@ -161,7 +158,7 @@ const createTools = () => {
     async execute(_input, runContext) {
       const context = requireContext(runContext);
       const result = await context.handlers.getUserProfile(context.request);
-      context.evidence.profileSegment = result.evidence.segment;
+      context.evidence.profile = result.evidence.profile;
       context.evidence.usedTools.push("get_user_profile");
       return exposeModelResult(result);
     },
@@ -174,14 +171,25 @@ const createTools = () => {
     parameters: searchParameters,
     async execute(input, runContext) {
       const context = requireContext(runContext);
-      if (!context.evidence.profileSegment)
-        throw new Error("profile_not_loaded");
+      if (!context.evidence.profile) throw new Error("profile_not_loaded");
+      const preferred = context.request.context.preferredCategories;
+      const constrained = {
+        ...input,
+        categories: preferred.length ? preferred : input.categories,
+        minPriceCents: Math.max(
+          input.minPriceCents,
+          context.request.context.minPriceCents ?? input.minPriceCents,
+        ),
+        maxPriceCents: Math.min(
+          input.maxPriceCents,
+          context.request.context.maxPriceCents ?? input.maxPriceCents,
+        ),
+      };
       const result = await context.handlers.searchProducts(
         context.request,
-        input,
+        constrained,
       );
-      addAll(context.evidence.recalledProductIds, result.evidence.productIds);
-      context.evidence.usedTools.push("search_products");
+      recordSearch(context.evidence, result.evidence.products);
       return exposeModelResult(result);
     },
   });
@@ -204,11 +212,7 @@ const createTools = () => {
         context.request,
         input,
       );
-      addAll(
-        context.evidence.inStockProductIds,
-        result.evidence.inStockProductIds,
-      );
-      context.evidence.usedTools.push("check_inventory");
+      recordInventory(context.evidence, result.evidence.products);
       return exposeModelResult(result);
     },
   });
@@ -224,11 +228,11 @@ const createTools = () => {
         context.request,
         input,
       );
-      addAll(
-        context.evidence.groundedProductIds,
-        result.evidence.groundedProductIds,
+      recordKnowledge(
+        context.evidence,
+        result.evidence.hits,
+        result.evidence.groundedProducts,
       );
-      context.evidence.usedTools.push("retrieve_knowledge");
       return exposeModelResult(result);
     },
   });
@@ -243,9 +247,8 @@ const createTools = () => {
     parameters: marketingParameters,
     async execute(input, runContext) {
       const context = requireContext(runContext);
-      if (!context.evidence.profileSegment)
-        throw new Error("profile_not_loaded");
-      if (input.segment !== context.evidence.profileSegment) {
+      if (!context.evidence.profile) throw new Error("profile_not_loaded");
+      if (input.segment !== context.evidence.profile.segment) {
         throw new Error("marketing_segment_mismatch");
       }
       const result = await context.handlers.getMarketingStrategy(
@@ -279,28 +282,14 @@ const INSTRUCTIONS = `你是 Chatty，一个电商推荐与营销 Single Agent�
 {"action":"recommend","recommendations":[{"product_id":"商品ID","reason":"推荐理由","marketing_copy":"营销文案"}]}
 需要澄清时才输出：{"action":"clarify","question":"问题"}`;
 
-const snapshotEvidence = (evidence: HarnessEvidence): EvidenceSnapshot => ({
-  usedTools: [...evidence.usedTools],
-  ...(evidence.profileSegment
-    ? { profileSegment: evidence.profileSegment }
-    : {}),
-  recalledProductIds: [...evidence.recalledProductIds],
-  inStockProductIds: [...evidence.inStockProductIds],
-  groundedProductIds: [...evidence.groundedProductIds],
-});
-
 const createContext = (
   request: RecommendationRequest,
   handlers: ChattyToolHandlers,
+  evidence: RecommendationEvidence,
 ): ChattyRunContext => ({
   request,
   handlers,
-  evidence: {
-    usedTools: [],
-    recalledProductIds: new Set(),
-    inStockProductIds: new Set(),
-    groundedProductIds: new Set(),
-  },
+  evidence,
 });
 
 /** DeepSeek 的 OpenAI-compatible Responses endpoint，由 Agents SDK 持有 agent loop。 */
@@ -348,8 +337,8 @@ export const createChattyAgentRuntime = ({
 
   return {
     agent,
-    async run(input, request) {
-      const context = createContext(request, handlers);
+    async run(input, request, evidence = createEvidence()) {
+      const context = createContext(request, handlers, evidence);
       const result = await runner.run(agent, input, { context, maxTurns });
       return {
         output:

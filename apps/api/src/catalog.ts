@@ -123,8 +123,14 @@ export class Catalog {
       preferred_categories: overrides.preferred_categories?.length
         ? overrides.preferred_categories
         : base.preferred_categories,
-      min_price_cents: overrides.min_price_cents ?? base.min_price_cents,
-      max_price_cents: overrides.max_price_cents ?? base.max_price_cents,
+      min_price_cents:
+        overrides.min_price_cents ??
+        (overrides.max_price_cents === undefined ? base.min_price_cents : 0),
+      max_price_cents:
+        overrides.max_price_cents ??
+        (overrides.min_price_cents === undefined
+          ? base.max_price_cents
+          : 1_000_000),
       recent_views: overrides.recent_views?.length
         ? overrides.recent_views
         : base.recent_views,
@@ -193,7 +199,10 @@ export class Catalog {
   }): KnowledgeHit[] {
     if (input.limit < 1 || input.limit > 8)
       throw new CatalogError("invalid_knowledge_limit");
-    const expression = this.#matchExpression(this.#rewriteQuery(input.query));
+    // 类目是 Harness 已知的稳定检索词，优先于模型生成的长 query 进入 FTS token 上限。
+    const expression = this.#matchExpression(
+      this.#rewriteQuery([...input.categories, input.query].join(" ")),
+    );
     if (!expression) return [];
 
     const filters: string[] = [];
