@@ -37,49 +37,15 @@ const handlers = (): ChattyToolHandlers => ({
   })),
   searchProducts: vi.fn(async () => ({
     model: [{ product_id: "P001", name: "蓝牙耳机" }],
-    evidence: {
-      products: [
-        {
-          product_id: "P001",
-          name: "蓝牙耳机",
-          category: "耳机",
-          price_cents: 19_900,
-          description: "test",
-          brand: "test",
-          seller_id: "S001",
-          stock: 8,
-          tags: [],
-          popularity_score: 1,
-          image_url: "",
-          source: "test",
-        },
-      ],
-    },
+    evidence: { productIds: ["P001"] },
   })),
   checkInventory: vi.fn(async () => ({
     model: [{ product_id: "P001", stock: 8 }],
-    evidence: {
-      products: [
-        {
-          product_id: "P001",
-          name: "蓝牙耳机",
-          category: "耳机",
-          price_cents: 19_900,
-          description: "test",
-          brand: "test",
-          seller_id: "S001",
-          stock: 8,
-          tags: [],
-          popularity_score: 1,
-          image_url: "",
-          source: "test",
-        },
-      ],
-    },
+    evidence: { productIds: ["P001"] },
   })),
   retrieveKnowledge: vi.fn(async () => ({
     model: { documents: [{ content: "适合通勤" }] },
-    evidence: { hits: [], groundedProducts: [] },
+    evidence: { hits: [], groundedProductIds: [] },
   })),
   getMarketingStrategy: vi.fn(async () => ({
     model: { tone: "简洁" },

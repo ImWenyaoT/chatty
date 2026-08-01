@@ -1,6 +1,5 @@
 import type {
   KnowledgeHit,
-  Product,
   RecommendationDraftItem,
   UserProfile,
 } from "./types.js";
@@ -34,6 +33,7 @@ export const createEvidence = (): RecommendationEvidence => ({
   callLog: [],
 });
 
+// 诊断快照只保留校验事实，不复制用户画像或知识正文，也不会进入模型上下文。
 export interface EvidenceSnapshot {
   usedTools: string[];
   profileSegment?: string;
@@ -96,37 +96,29 @@ export function guardRepeatedCall(
 
 export function recordSearch(
   evidence: RecommendationEvidence,
-  products: readonly Product[],
+  productIds: readonly string[],
 ): void {
-  for (const product of products)
-    evidence.recalledProductIds.add(product.product_id);
+  for (const productId of productIds)
+    evidence.recalledProductIds.add(productId);
   evidence.usedTools.push("search_products");
 }
 
 export function recordInventory(
   evidence: RecommendationEvidence,
-  products: Product[],
+  productIds: readonly string[],
 ): void {
-  for (const product of products)
-    evidence.inStockProductIds.add(product.product_id);
+  for (const productId of productIds) evidence.inStockProductIds.add(productId);
   evidence.usedTools.push("check_inventory");
 }
 
 export function recordKnowledge(
   evidence: RecommendationEvidence,
   hits: KnowledgeHit[],
-  products: Product[],
+  groundedProductIds: readonly string[],
 ): void {
   evidence.knowledge.push(...hits);
-  const genericCategories = new Set<string>();
-  for (const hit of hits) {
-    if (hit.product_id) evidence.knowledgeProductIds.add(hit.product_id);
-    else genericCategories.add(hit.category);
-  }
-  for (const product of products) {
-    if (genericCategories.has(product.category))
-      evidence.knowledgeProductIds.add(product.product_id);
-  }
+  for (const productId of groundedProductIds)
+    evidence.knowledgeProductIds.add(productId);
   evidence.usedTools.push("retrieve_knowledge");
 }
 

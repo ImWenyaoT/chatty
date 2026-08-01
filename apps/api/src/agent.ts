@@ -127,7 +127,7 @@ export class Recommender {
         });
         return {
           model: products,
-          evidence: { products },
+          evidence: { productIds: products.map((item) => item.product_id) },
         };
       },
       checkInventory: async (_sdkRequest, input) => {
@@ -138,7 +138,7 @@ export class Recommender {
             stock,
             low_stock: stock <= 100,
           })),
-          evidence: { products },
+          evidence: { productIds: products.map((item) => item.product_id) },
         };
       },
       retrieveKnowledge: async (_sdkRequest, input) => {
@@ -153,10 +153,21 @@ export class Recommender {
           product_ids: input.productIds,
           limit: input.limit,
         });
-        const groundedProducts = this.catalog.inventory(input.productIds);
+        const genericCategories = new Set(
+          hits.filter((hit) => !hit.product_id).map((hit) => hit.category),
+        );
+        const groundedProductIds = [
+          ...new Set([
+            ...hits.flatMap((hit) => (hit.product_id ? [hit.product_id] : [])),
+            ...this.catalog
+              .inventory(input.productIds)
+              .filter((product) => genericCategories.has(product.category))
+              .map((product) => product.product_id),
+          ]),
+        ];
         return {
           model: hits,
-          evidence: { hits, groundedProducts },
+          evidence: { hits, groundedProductIds },
         };
       },
       getMarketingStrategy: async (_sdkRequest, input) => {
@@ -188,9 +199,10 @@ export class Recommender {
         ...history,
         { role: "user", content: JSON.stringify(request) },
       ] as AgentInputItem[];
-      const result = await runtime.run(input, sdkRequest, evidence);
-      const draft = parseDraft(result.output);
+      const output = await runtime.run(input, sdkRequest, evidence);
+      const draft = parseDraft(output);
       if (draft.action === "clarify") {
+        // Tool 已证明没有可售候选时允许澄清；有候选却拒绝推荐仍视为模型违约。
         if (!allowClarify || evidence.inStockProductIds.size)
           throw new RecommendationError("invalid_recommendation");
         return {

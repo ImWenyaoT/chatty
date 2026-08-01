@@ -123,6 +123,7 @@ export class Catalog {
       preferred_categories: overrides.preferred_categories?.length
         ? overrides.preferred_categories
         : base.preferred_categories,
+      // 单边价格约束代表本轮的新区间，另一端应开放，不能继承与它冲突的历史画像。
       min_price_cents:
         overrides.min_price_cents ??
         (overrides.max_price_cents === undefined ? base.min_price_cents : 0),

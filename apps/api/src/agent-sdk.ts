@@ -14,11 +14,9 @@ import {
   recordInventory,
   recordKnowledge,
   recordSearch,
-  snapshotEvidence,
-  type EvidenceSnapshot,
   type RecommendationEvidence,
 } from "./tools.js";
-import type { KnowledgeHit, Product, UserProfile } from "./types.js";
+import type { KnowledgeHit, UserProfile } from "./types.js";
 
 export const CHATTY_TOOL_NAMES = [
   "get_user_profile",
@@ -62,11 +60,11 @@ export interface ChattyToolHandlers {
       tags: string[];
       limit: number;
     },
-  ): Promise<HarnessToolResult<unknown, { products: Product[] }>>;
+  ): Promise<HarnessToolResult<unknown, { productIds: string[] }>>;
   checkInventory(
     request: RecommendationRequest,
     input: { productIds: string[] },
-  ): Promise<HarnessToolResult<unknown, { products: Product[] }>>;
+  ): Promise<HarnessToolResult<unknown, { productIds: string[] }>>;
   retrieveKnowledge(
     request: RecommendationRequest,
     input: {
@@ -78,7 +76,7 @@ export interface ChattyToolHandlers {
   ): Promise<
     HarnessToolResult<
       unknown,
-      { hits: KnowledgeHit[]; groundedProducts: Product[] }
+      { hits: KnowledgeHit[]; groundedProductIds: string[] }
     >
   >;
   getMarketingStrategy(
@@ -93,18 +91,13 @@ export interface ChattyRunContext {
   readonly evidence: RecommendationEvidence;
 }
 
-export interface ChattyRunResult {
-  output: string;
-  evidence: EvidenceSnapshot;
-}
-
 export interface ChattyAgentRuntime {
   readonly agent: Agent<ChattyRunContext>;
   run(
     input: string | AgentInputItem[],
     request: RecommendationRequest,
     evidence?: RecommendationEvidence,
-  ): Promise<ChattyRunResult>;
+  ): Promise<string>;
   close(): Promise<void>;
 }
 
@@ -173,6 +166,7 @@ const createTools = () => {
       const context = requireContext(runContext);
       if (!context.evidence.profile) throw new Error("profile_not_loaded");
       const preferred = context.request.context.preferredCategories;
+      // 模型负责提出搜索参数；Harness 将它收窄到用户本轮明确约束，不能自行放宽预算或类目。
       const constrained = {
         ...input,
         categories: preferred.length ? preferred : input.categories,
@@ -189,7 +183,7 @@ const createTools = () => {
         context.request,
         constrained,
       );
-      recordSearch(context.evidence, result.evidence.products);
+      recordSearch(context.evidence, result.evidence.productIds);
       return exposeModelResult(result);
     },
   });
@@ -212,7 +206,7 @@ const createTools = () => {
         context.request,
         input,
       );
-      recordInventory(context.evidence, result.evidence.products);
+      recordInventory(context.evidence, result.evidence.productIds);
       return exposeModelResult(result);
     },
   });
@@ -231,7 +225,7 @@ const createTools = () => {
       recordKnowledge(
         context.evidence,
         result.evidence.hits,
-        result.evidence.groundedProducts,
+        result.evidence.groundedProductIds,
       );
       return exposeModelResult(result);
     },
@@ -340,13 +334,9 @@ export const createChattyAgentRuntime = ({
     async run(input, request, evidence = createEvidence()) {
       const context = createContext(request, handlers, evidence);
       const result = await runner.run(agent, input, { context, maxTurns });
-      return {
-        output:
-          typeof result.finalOutput === "string"
-            ? result.finalOutput
-            : JSON.stringify(result.finalOutput ?? ""),
-        evidence: snapshotEvidence(context.evidence),
-      };
+      return typeof result.finalOutput === "string"
+        ? result.finalOutput
+        : JSON.stringify(result.finalOutput ?? "");
     },
     async close() {
       if (ownsProvider && provider instanceof OpenAIProvider)

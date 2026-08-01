@@ -232,10 +232,15 @@ describe("Harness-owned Evidence", () => {
         tags: [],
         limit: 5,
       });
-      recordSearch(evidence, products);
+      recordSearch(
+        evidence,
+        products.map((item) => item.product_id),
+      );
       recordInventory(
         evidence,
-        catalog.inventory(products.map((item) => item.product_id)),
+        catalog
+          .inventory(products.map((item) => item.product_id))
+          .map((item) => item.product_id),
       );
       const hits = catalog.retrieveKnowledge({
         query: "降噪 耳机",
@@ -243,7 +248,11 @@ describe("Harness-owned Evidence", () => {
         product_ids: products.map((item) => item.product_id),
         limit: 3,
       });
-      recordKnowledge(evidence, hits, catalog.products);
+      recordKnowledge(
+        evidence,
+        hits,
+        products.map((item) => item.product_id),
+      );
       evidence.usedTools.push("get_marketing_strategy");
       const valid = [
         {
