@@ -1,7 +1,7 @@
 /**
  * 后端接口的类型与调用。
  *
- * 这些类型是手写的，和 src/chatty/api.py 里的 pydantic 模型一一对应。手写而不是
+ * 这些类型是手写的，和 src/api.ts 的响应模型一一对应。手写而不是
  * 生成，是因为只有三个端点、四个模型——生成器要引一整套工具链，维护成本比抄一遍高。
  * 端点一改这里会跟着改，改漏了 UI 上立刻看得见。
  */
@@ -62,7 +62,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { 'content-type': 'application/json', ...init?.headers },
   })
   if (!response.ok) {
-    // FastAPI 的 detail 可能是字符串（我们抛的领域码），也可能是校验错误数组
+    // detail 通常是领域错误码；其他 4xx 统一回退成 http_<status>
     const body = await response.json().catch(() => null)
     const detail = body?.detail
     throw new ApiError(typeof detail === 'string' ? detail : `http_${response.status}`)

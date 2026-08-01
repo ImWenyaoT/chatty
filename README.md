@@ -47,11 +47,10 @@ flowchart LR
 ## 自进化与评估
 
 - 画像自进化：成功请求只把本轮显式类目偏好回写到用户画像；当前请求始终优先于历史偏好。
-- 确定性测试：使用脚本化模型验证 Tool 顺序、证据门禁、HTTP 契约和画像回写，不联网。
-- 真实模型评测：任务级约束用代码和 SQL 评分；检索单独量化；消融对照用于验证 Tool + Harness 的价值。
+- 确定性测试：验证 Agents SDK Tool、证据门禁、SQLite/FTS5、配置优先级和画像回写，不联网。
+- 检索评测：10 条标注 Query 用代码计算 `recall@5` 与 MRR，不调用模型。
 
-仓库中的检索、端到端和消融数字均是小规模合成数据上的工程验证：
-它们说明 Harness 能否守住业务约束，不代表真实电商推荐质量或统计显著性。
+这些都是小规模合成数据上的工程验证，不代表真实电商推荐质量或统计显著性。
 
 ## 技术栈
 
@@ -77,7 +76,7 @@ pnpm dev       # TypeScript 后端 :8000
 pnpm dev:web   # React 前端 :5173
 ```
 
-前端通过 Vite 将 `/api` 代理到后端。Web 与终端入口共用同一个 `Conversation`；
+前端通过 Vite 将 `/api` 代理到后端。HTTP 层与 Agent 共用同一个 `Conversation`；
 推荐结果中的 ID、名称、价格与库存均来自 SQLite 重查。
 
 ## 配置
@@ -86,13 +85,12 @@ pnpm dev:web   # React 前端 :5173
 后加载的文件不会覆盖已存在的变量，因此本机 shell/CI 注入的密钥始终最优先。
 `.env` 和 `.env.local` 都不入库；仓库只保留 `.env.example`。
 
-| 环境变量             | 默认值                     | 说明                                             |
-| -------------------- | -------------------------- | ------------------------------------------------ |
-| `DEEPSEEK_API_KEY`   | 空                         | 主密钥，真实 DeepSeek 调用必填                   |
-| `OPENAI_API_KEY`     | 空                         | 兼容后备；仅在 `DEEPSEEK_API_KEY` 缺失时使用     |
-| `DEEPSEEK_BASE_URL`  | `https://api.deepseek.com` | DeepSeek OpenAI-compatible Endpoint              |
-| `DEEPSEEK_MODEL`     | `deepseek-v4-flash`        | 调用模型；当前 DeepSeek Responses API 支持的模型 |
-| `CHATTY_AGENT_DEBUG` | 关闭                       | 设为 `1` 时记录可观测的 Agent 轨迹，不记录密钥   |
+| 环境变量            | 默认值                     | 说明                                             |
+| ------------------- | -------------------------- | ------------------------------------------------ |
+| `DEEPSEEK_API_KEY`  | 空                         | 主密钥，真实 DeepSeek 调用必填                   |
+| `OPENAI_API_KEY`    | 空                         | 兼容后备；仅在 `DEEPSEEK_API_KEY` 缺失时使用     |
+| `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | DeepSeek OpenAI-compatible Endpoint              |
+| `DEEPSEEK_MODEL`    | `deepseek-v4-flash`        | 调用模型；当前 DeepSeek Responses API 支持的模型 |
 
 ## 评测与质量门禁
 

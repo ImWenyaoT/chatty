@@ -43,10 +43,10 @@ Harness 执行 Tool ←──────┘
 
 ### 1. Tool（工具）
 
-就是**几个你写好的普通 Python 函数**，交给模型，让它自己决定什么时候调、传什么参数。
+就是**几个你写好的 TypeScript 函数**，交给模型，让它自己决定什么时候调、传什么参数。
 
 Chatty 有五个：查画像、搜商品、查库存、检索知识、拿营销策略。
-它们全部只读，都在 [tools.py](../src/chatty/tools.py)。
+它们全部只读，由 [agent-sdk.ts](../src/agent-sdk.ts) 注册；私有证据规则在 [tools.ts](../src/tools.ts)。
 
 模型不能直接查数据库，只能调这五个函数——**这就是权限边界**。
 
@@ -84,7 +84,7 @@ Harness 不只是模型输出后的参数校验，它负责四件事：
 
 任何一条不满足 → **直接报错**，不返回半成品。
 
-那本「记录」是 `RecommendationContext`，就是一个 dataclass。里面的状态分三类：
+那本「记录」是 Agents SDK `RunContext` 里的 `RecommendationEvidence`。里面的状态分三类：
 
 | 状态     | 例子                            | 回答的问题              |
 | -------- | ------------------------------- | ----------------------- |
@@ -170,11 +170,11 @@ flowchart TB
 
 逐步说：
 
-**① → ②　翻译**（[need_parser.py](../src/chatty/need_parser.py)）
+**① → ②　翻译**（[need-parser.ts](../src/need-parser.ts)）
 先单独问一次模型：「把这句话转成 JSON」。得到 `{类目: 耳机, 最高价: 2000元}`。
 这一步失败了就当没给条件，**绝不让程序崩**。
 
-**③　Agent Loop**（[agent.py](../src/chatty/agent.py)）
+**③　Agent Loop**（[agent-sdk.ts](../src/agent-sdk.ts) 与 [agent.ts](../src/agent.ts)）
 模型依次调用：
 
 ```
@@ -194,7 +194,7 @@ get_marketing_strategy→ 活跃用户用什么语气写文案，哪些词不能
 `P003` 在召回集里 ✅、在有货集里 ✅、有知识支撑 ✅ → 放行。
 如果模型推荐了 `P007`（已卖光），这里就会拦下来报 `inventory_not_checked`。
 
-**⑥　重查数据库**（[catalog.py](../src/chatty/catalog.py) 的 `finalize`）
+**⑥　重查数据库**（[catalog.ts](../src/catalog.ts) 的 `finalize`）
 拿 `P003` 回 SQLite 查出真实的名字、价格、库存、标签，**覆盖掉模型说的一切**。
 模型写的 `reason` 和 `marketing_copy` 保留，但要过一遍禁词替换（「打折」→「***」）。
 
@@ -211,24 +211,16 @@ get_marketing_strategy→ 活跃用户用什么语气写文案，哪些词不能
 用户答完，把这一问一答记进 `history`，下一轮模型就知道自己问过什么。
 最多三轮，问不出来就结束。
 
-这套「反问 → 记历史 → 下一轮」的逻辑在 [conversation.py](../src/chatty/conversation.py)，
-**只有一份**——终端、网页、评估都用它。
+这套「反问 → 记历史 → 下一轮」的逻辑在 [conversation.ts](../src/conversation.ts)，
+HTTP 与网页共用这一份协议。
 
 ---
 
-## 四个入口，一条主干
+## 一个主入口
 
-同一套逻辑有四个用法：
-
-| 入口         | 怎么跑                                                                                  | 干嘛用                       |
-| ------------ | --------------------------------------------------------------------------------------- | ---------------------------- |
-| **网页**     | `uv run uvicorn chatty.api:create_app --factory` + `cd web && pnpm install && pnpm dev` | 主界面                       |
-| **终端**     | `uv run python demo.py`                                                                 | 快速试、演示                 |
-| **单轮评估** | `uv run python -m evals`                                                                | 18 条任务打分，看通过率      |
-| **多轮评估** | `uv run python -m evals --multiturn`                                                    | 拿模型当假用户，测它会不会问 |
-
-它们只在两件事上不同：**怎么把话变成条件**、**怎么拿到下一句回答**。
-其余（历史怎么拼、最多几轮、证据不跨轮）全共用。
+根目录运行 `pnpm dev` 启动 TypeScript API，`pnpm dev:web` 启动 React 界面。
+网页调用 [api.ts](../src/api.ts)，再进入 `Conversation → Recommender → Agents SDK Runner`；
+检索评测用 `pnpm eval:retrieval`，不调用模型。
 
 ---
 
@@ -350,12 +342,12 @@ Harness 部分：记录真实知识命中，禁止没有知识依据的商品通
 
 ## 第一次读代码，按这个顺序
 
-1. [models.py](../src/chatty/models.py) —— 所有数据结构，20 分钟看完，看完就有全局感
-2. [tools.py](../src/chatty/tools.py) —— 五个工具 + 证据本，Chatty 的手脚
-3. [agent.py](../src/chatty/agent.py) 的 `_run_turn` —— 一轮的完整流程，**最重要的一个函数**
-4. [catalog.py](../src/chatty/catalog.py) 的 `finalize` —— 怎么用数据库覆盖模型的话
-5. [conversation.py](../src/chatty/conversation.py) —— 多轮反问怎么管
-6. [api.py](../src/chatty/api.py) —— 最薄的一层，最后看
+1. [types.ts](../src/types.ts) —— 领域数据结构
+2. [agent-sdk.ts](../src/agent-sdk.ts) —— Single Agent、五个 Tool 与 SDK Runner
+3. [tools.ts](../src/tools.ts) —— Harness 证据与六条校验
+4. [agent.ts](../src/agent.ts) —— 把 Catalog 接到 SDK 并完成一轮推荐
+5. [catalog.ts](../src/catalog.ts) 的 `finalize` —— 用 SQLite 覆盖模型的话
+6. [conversation.ts](../src/conversation.ts) 与 [api.ts](../src/api.ts) —— 多轮和 HTTP
 
 代码里的中文注释写了很多**「为什么这么做」和「以前踩过什么坑」**，那部分比代码本身值钱。
 
