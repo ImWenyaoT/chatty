@@ -71,10 +71,11 @@ pnpm install
 cp .env.example .env.local
 # 编辑 .env.local，填写 DEEPSEEK_API_KEY
 
-# 两个终端
-pnpm dev       # TypeScript 后端 :8000
-pnpm dev:web   # React 前端 :5173
+pnpm dev
 ```
+
+打开 `http://localhost:5173` 使用 Chatty。根命令会同时启动 Web GUI 与其所需的
+TypeScript API；`dev:api` / `dev:web` 仅用于单独调试。
 
 前端通过 Vite 将 `/api` 代理到后端。HTTP 层与 Agent 共用同一个 `Conversation`；
 推荐结果中的 ID、名称、价格与库存均来自 SQLite 重查。
