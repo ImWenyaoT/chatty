@@ -51,12 +51,12 @@ flowchart TB
 - `resolve` —— 用户说过的话 → 结构化条件
 - `ask` —— 拿到下一句用户回答
 
-| 入口 | 文件 | 用途 | 会话循环 | resolve | ask |
-|---|---|---|---|---|---|
-| 终端 demo | [demo.py](../demo.py) | 人手演示、产生失败轨迹 | `converse()` | `parse_need`（调模型） | `input()` 阻塞 |
-| HTTP + Web | [api.py](../src/chatty/api.py) → [App.tsx](../web/src/App.tsx) | 浏览器对话界面 | `send()`，一轮一请求 | `parse_need` | 无（下一次 HTTP 请求就是回答） |
-| 单轮评估 | [evals/runner.py](../evals/runner.py) | 18 条任务打分 | 不走 Conversation | 任务里写死 | 无 |
-| 多轮评估 | [evals/multiturn.py](../evals/multiturn.py) | 测「缺信息会不会问出来」 | `converse()` | 关键词匹配（要可复现） | 用户模拟器（调模型） |
+| 入口       | 文件                                                           | 用途                     | 会话循环             | resolve                | ask                            |
+| ---------- | -------------------------------------------------------------- | ------------------------ | -------------------- | ---------------------- | ------------------------------ |
+| 终端 demo  | [demo.py](../demo.py)                                          | 人手演示、产生失败轨迹   | `converse()`         | `parse_need`（调模型） | `input()` 阻塞                 |
+| HTTP + Web | [api.py](../src/chatty/api.py) → [App.tsx](../web/src/App.tsx) | 浏览器对话界面           | `send()`，一轮一请求 | `parse_need`           | 无（下一次 HTTP 请求就是回答） |
+| 单轮评估   | [evals/runner.py](../evals/runner.py)                          | 18 条任务打分            | 不走 Conversation    | 任务里写死             | 无                             |
+| 多轮评估   | [evals/multiturn.py](../evals/multiturn.py)                    | 测「缺信息会不会问出来」 | `converse()`         | 关键词匹配（要可复现） | 用户模拟器（调模型）           |
 
 服务端没法在一个 HTTP 请求里挂着等用户打字，所以 `Conversation` 给了两个入口：
 `send()` 跑一轮就返回，`converse()` 内部循环调 `send()`。澄清历史的拼装形状因此
@@ -106,12 +106,12 @@ flowchart TB
 
 ### 输入（逐层收窄，每层都有类型）
 
-| 层 | 类型 | 内容 |
-|---|---|---|
-| 最外 | `TurnRequest{text}` | 一句自然语言，1–500 字 |
-| 适配后 | `UserContext` | `preferred_categories` / `min_price_cents` / `max_price_cents` / `recent_views` / `recent_purchases` |
-| 进 Agent | `RecommendationRequest` | `user_id` + `num_items` + `context`，序列化成 JSON |
-| 多轮 | `list[TResponseInputItem]` | 上面那个 JSON 前面接 history（`{"role":..., "content":...}`） |
+| 层       | 类型                       | 内容                                                                                                 |
+| -------- | -------------------------- | ---------------------------------------------------------------------------------------------------- |
+| 最外     | `TurnRequest{text}`        | 一句自然语言，1–500 字                                                                               |
+| 适配后   | `UserContext`              | `preferred_categories` / `min_price_cents` / `max_price_cents` / `recent_views` / `recent_purchases` |
+| 进 Agent | `RecommendationRequest`    | `user_id` + `num_items` + `context`，序列化成 JSON                                                   |
+| 多轮     | `list[TResponseInputItem]` | 上面那个 JSON 前面接 history（`{"role":..., "content":...}`）                                        |
 
 模型能看到的只有这个 JSON 和五个 tool 的 schema。**证据本对模型不可见，只有工具能写**
 （[tools.py:70-88](../src/chatty/tools.py#L70-L88)）——这是「模型说做过了不算数」的物理保证。
@@ -127,11 +127,11 @@ flowchart LR
 
 **`RecommendedProduct` 的字段来源**，这是整个项目的核心承诺：
 
-| 字段 | 来源 |
-|---|---|
+| 字段                                                                            | 来源                                                                    |
+| ------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | `product_id` `name` `category` `price_cents` `brand` `stock` `tags` `low_stock` | SQLite 重查（[catalog.py:170-207](../src/chatty/catalog.py#L170-L207)） |
-| `score` | 代码计算（热度 0.55 + 画像匹配 0.25 + 近期行为 0.15 + 价格区间 0.05） |
-| `reason` `marketing_copy` | **只有这两项来自模型**，且先过一遍禁词替换 |
+| `score`                                                                         | 代码计算（热度 0.55 + 画像匹配 0.25 + 近期行为 0.15 + 价格区间 0.05）   |
+| `reason` `marketing_copy`                                                       | **只有这两项来自模型**，且先过一遍禁词替换                              |
 
 **错误码**是稳定契约，一路透传到浏览器：
 
@@ -151,15 +151,18 @@ RecommendationError(code) → HTTP 422 detail=code → api.ts explain(code) → 
 ## 5. 核心流程：一轮 6 步
 
 ### ① 输入适配
+
 `parse_need` 一次 `complete()` 调用把大白话转成 `UserContext`。不走 Agent Loop——不需要
 工具，一问一答更快更稳。解析不出来返回空条件，**不让调用方在这里崩掉**。
 
 ### ② Agent Loop
+
 五个只读 tool，提示词里给的顺序是画像 → 搜索 → 库存 → 知识检索 → 营销策略。
 `max_turns` 单轮 10、多轮 18，是失控保护不是重试策略。
 同参数第 4 次调用被 `guard_repeated_call` 拦下，异常回给模型让它改策略。
 
 ### ③ 收证据
+
 工具执行时往 `RecommendationContext` 累加（`|=` 不是 `=`，分多次搜不同类目不会互相覆盖）：
 
 ```
@@ -172,24 +175,26 @@ call_log              带参数的调用记录，用于查重
 ```
 
 ### ④ 解析草稿
+
 模型返回纯文本（DeepSeek 不吃 `json_schema`），三个候选依次试：Markdown 代码块 →
 掐头去尾取 `{...}` → 整段原文。多轮时若模型用大白话反问且**一个工具都没调**，
 降级成 `ClarifyReply`；单轮不给这条路。
 
 ### ⑤ Harness 六条校验（[agent.py:288-327](../src/chatty/agent.py#L288-L327)）
 
-| # | 校验 | 失败码 |
-|---|---|---|
-| ① | 五工具都调过，且「画像→搜索→库存」偏序成立（允许重复、允许知识与营销换序） | `required_tools_not_used` |
-| ② | 知识检索有命中 | `knowledge_not_retrieved` |
-| ③ | 画像已加载 | `profile_not_loaded` |
-| ④ | 推荐 ID ⊆ 搜索召回集 | `product_not_recalled` |
-| ⑤ | 推荐 ID ⊆ 有货集 | `inventory_not_checked` |
-| ⑥ | 推荐 ID ⊆ 有知识支撑集 | `product_not_grounded` |
+| #   | 校验                                                                       | 失败码                    |
+| --- | -------------------------------------------------------------------------- | ------------------------- |
+| ①   | 五工具都调过，且「画像→搜索→库存」偏序成立（允许重复、允许知识与营销换序） | `required_tools_not_used` |
+| ②   | 知识检索有命中                                                             | `knowledge_not_retrieved` |
+| ③   | 画像已加载                                                                 | `profile_not_loaded`      |
+| ④   | 推荐 ID ⊆ 搜索召回集                                                       | `product_not_recalled`    |
+| ⑤   | 推荐 ID ⊆ 有货集                                                           | `inventory_not_checked`   |
+| ⑥   | 推荐 ID ⊆ 有知识支撑集                                                     | `product_not_grounded`    |
 
 任一不过就明确失败，**不返回看似成功的降级结果**。
 
 ### ⑥ 回填
+
 `Catalog.finalize` 重查 SQLite：模型编的 ID → 报错；售罄或超预算 → 跳过；重复推荐 → 去重；
 禁词 → 替换成 `***`；全被过滤光 → 内部报 `no_available_recommendations`，再对外收敛为
 `invalid_recommendation`，宁可报错也不返回空列表。
@@ -228,12 +233,12 @@ flowchart LR
 
 ## 7. 状态住在哪
 
-| 状态 | 位置 | 生命周期 |
-|---|---|---|
-| 会话（`said` / `history` / `turns`） | `SessionStore`，HTTP 进程内存 | 重启即丢（ADR 0001） |
-| 证据本 `RecommendationContext` | 每轮新建 | **不跨轮累积**——累积会让六条校验形同虚设，代价是每轮重跑五个工具 |
-| 商品 / 画像 / 知识 | SQLite | 进程级，启动时重建 |
-| 失败轨迹 | `.local/failures.jsonl` | 追加写，供 harvest 读 |
+| 状态                                 | 位置                          | 生命周期                                                         |
+| ------------------------------------ | ----------------------------- | ---------------------------------------------------------------- |
+| 会话（`said` / `history` / `turns`） | `SessionStore`，HTTP 进程内存 | 重启即丢（ADR 0001）                                             |
+| 证据本 `RecommendationContext`       | 每轮新建                      | **不跨轮累积**——累积会让六条校验形同虚设，代价是每轮重跑五个工具 |
+| 商品 / 画像 / 知识                   | SQLite                        | 进程级，启动时重建                                               |
+| 失败轨迹                             | `.local/failures.jsonl`       | 追加写，供 harvest 读                                            |
 
 ---
 

@@ -23,9 +23,7 @@
 提交前运行：
 
 ```bash
-uv run ruff check .
-uv run ty check
-uv run pytest -q
+pnpm check
 ```
 
 ## Agent skills

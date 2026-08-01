@@ -1,0 +1,9 @@
+packages:
+  - web
+allowBuilds:
+  esbuild: true
+minimumReleaseAgeExclude:
+  - "@openai/agents-core@0.14.2"
+  - "@openai/agents-openai@0.14.2"
+  - "@openai/agents-realtime@0.14.2"
+  - "@openai/agents@0.14.2"

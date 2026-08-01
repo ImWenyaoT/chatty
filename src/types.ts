@@ -31,6 +31,8 @@ export interface UserContext {
   max_price_cents?: number;
 }
 
+export const emptyContext = (): UserContext => ({});
+
 export interface UserProfile {
   user_id: string;
   segment: UserSegment;
@@ -87,3 +89,26 @@ export interface RecommendedProduct {
   reason: string;
   marketing_copy: string;
 }
+
+export type AgentDraft =
+  | { action: "clarify"; question: string }
+  | { action: "recommend"; recommendations: RecommendationDraftItem[] };
+
+export interface RecommendationResponse {
+  request_id: string;
+  user_id: string;
+  products: RecommendedProduct[];
+  total_latency_ms: number;
+}
+
+export interface ClarifyReply {
+  request_id: string;
+  user_id: string;
+  question: string;
+  total_latency_ms: number;
+}
+
+export type Reply = RecommendationResponse | ClarifyReply;
+export type InputItem = Record<string, unknown>;
+export const isClarify = (reply: Reply): reply is ClarifyReply =>
+  "question" in reply;

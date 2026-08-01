@@ -7,10 +7,10 @@ status: accepted
 原先的项目边界写着「不增加前端、外部数据库或向量数据库」，理由是一个月的 MVP 要控重量：
 终端 demo 已经能演示 Harness 的全部行为，前端只是让它好看一点，不改变论点。
 
-现在反转前半条：**加一个 Web 对话界面（`web/`，Vite + React + TS）和一个 FastAPI 层
-（`src/chatty/api.py`）**。后半条不变——外部数据库和向量数据库仍然不加。
+现在反转前半条：**加一个 Web 对话界面（`web/`，Vite + React + TypeScript）和一个
+TypeScript HTTP 层（`src/api.ts`）**。后半条不变——外部数据库和向量数据库仍然不加。
 
-反转的理由是受众。终端 demo 要求对方 clone 仓库、装 uv、配 key 才能看到东西；
+反转的理由是受众。终端 demo 要求对方 clone 仓库、安装依赖、配 key 才能看到东西；
 一个能点开就用的界面把这个门槛降到零。这对一个用来展示工程判断的项目是有分量的差别，
 不是「好看一点」。
 
@@ -20,17 +20,13 @@ status: accepted
 知识检索」，加一张会话表就是给它加第二种职责。演示场景重启丢会话可以接受；真要持久化，
 那时再单独决定。
 
-**`Conversation` 补一个无状态入口 `send()`，而不是让 HTTP 层自己拼历史。**
-`converse()` 靠 `ask` 回调阻塞等下一句，这对终端和评估都成立（两者都能阻塞），
-但 HTTP 是一轮一个请求，服务端没法在请求里挂着等用户打字。
-让 HTTP 层绕开 `Conversation` 直接调 `Recommender.respond()` 是最省事的写法，
-但那会把 `{"action":"clarify"}` 这套协议形状散到第三个调用方手里——
-那正是先前刚收敛掉的问题。所以 `send()` 承担一轮，`converse()` 内部循环调它，
-协议仍然只有一份。
+**`Conversation` 提供一轮入口 `send()`，而不是让 HTTP 层自己拼历史。**
+HTTP 是一轮一个请求；若让 HTTP 层绕开 `Conversation` 直接调 Agent，
+就会把 `{"action":"clarify"}` 协议形状和会话历史拼装分散到多个调用方。
+所以 `send()` 承担一轮，协议仍然只有一份。
 
 ## 不变的边界
 
-- 终端 demo（`demo.py`）暂时保留：它是唯一不需要起服务就能手动验证的入口。
-  GUI 稳定之后再决定删不删。
+- 终端 demo 与 HTTP 层共用同一个 `Conversation`，不复制 Agent 或 Harness 逻辑。
 - 前端不引 web font，用系统字体（CJK 为主，web font 体积不划算）。
 - 前端不碰业务事实：商品、价格、库存仍然只从 SQLite 重查后由后端给出。

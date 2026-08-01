@@ -86,7 +86,7 @@ export const takeTurn = (sessionId: string, text: string) =>
 
 /** 错误码 → 人话。没收录的码原样显示，总比吞掉强。 */
 const MESSAGES: Record<string, string> = {
-  llm_not_configured: '没配 OPENAI_API_KEY，后端连不上模型',
+  llm_not_configured: '没配 DEEPSEEK_API_KEY，后端连不上模型',
   invalid_recommendation: '条件太紧，目录里没有同时满足类目和价格的商品',
   recommendation_failed: '模型这轮没按约定走，重试一次通常就好',
   required_tools_not_used: '模型跳过了必须调用的工具，被 Harness 拦下了',

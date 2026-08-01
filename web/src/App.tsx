@@ -90,7 +90,7 @@ export default function App() {
       <main className="boot-error">
         <p>{bootError}</p>
         <p className="hint">
-          先起后端：<code>uv run uvicorn chatty.api:create_app --factory</code>
+          先起后端：<code>pnpm dev</code>
         </p>
       </main>
     )
