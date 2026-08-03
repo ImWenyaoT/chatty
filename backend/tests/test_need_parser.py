@@ -1,6 +1,25 @@
+from unittest.mock import AsyncMock
+
 import pytest
 
+from app.model_provider import ResponsesModelProvider
 from app.need_parser import NeedParseError, describe, parse_need
+from app.settings import Settings
+
+
+@pytest.mark.asyncio
+async def test_model_provider_converts_missing_output_text_to_empty_string() -> None:
+    provider = ResponsesModelProvider(Settings(api_key="test-key"))
+    provider.client.responses.create = AsyncMock(
+        return_value=type("Response", (), {"output_text": None})()
+    )
+
+    try:
+        result = await provider.complete("test")
+    finally:
+        await provider.close()
+
+    assert result == ""
 
 
 @pytest.mark.asyncio

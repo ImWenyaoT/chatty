@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from contextlib import asynccontextmanager
@@ -15,7 +16,7 @@ from pydantic import BaseModel, Field, field_validator
 from app.agent import RecommendationError, Recommender
 from app.catalog import Catalog
 from app.conversation import Conversation
-from app.model_provider import ResponsesModelProvider
+from app.model_provider import MissingCredentialsError, ResponsesModelProvider
 from app.models import ClarifyReply, UserContext
 from app.need_parser import NeedParseError, describe, parse_need
 from app.settings import FRONTEND_DIST
@@ -54,6 +55,7 @@ class SessionState:
     said: list[str] = field(default_factory=list)
     history: list[dict[str, Any]] = field(default_factory=list)
     turns: int = 0
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
 def create_app(
@@ -106,62 +108,69 @@ def create_app(
         session = sessions.get(session_id)
         if session is None:
             raise HTTPException(status_code=404, detail="session_not_found")
-        if session.turns >= MAX_TURNS:
-            raise HTTPException(status_code=409, detail="conversation_exhausted")
+        # 同一 session 串行处理，避免两个请求同时覆盖 history 和 turns。
+        async with session.lock:
+            if session.turns >= MAX_TURNS:
+                raise HTTPException(status_code=409, detail="conversation_exhausted")
 
-        said = [*session.said, body.text]
-        understood = UserContext()
+            said = [*session.said, body.text]
+            understood = UserContext()
 
-        async def resolve_context(values: list[str]) -> UserContext:
-            nonlocal understood
-            understood = await parse_need(
-                app_provider.complete,
-                " ".join(values),
-                app_catalog.categories,
-            )
-            return understood
+            async def resolve_context(values: list[str]) -> UserContext:
+                nonlocal understood
+                try:
+                    understood = await parse_need(
+                        app_provider.complete,
+                        " ".join(values),
+                        app_catalog.categories,
+                    )
+                except MissingCredentialsError as error:
+                    raise RecommendationError("llm_not_configured") from error
+                return understood
 
-        try:
-            conversation = Conversation(
-                Recommender(app_catalog, app_provider),
-                session.user_id,
-                resolve_context,
-            )
-            reply, history = await conversation.send(said, session.history)
-        except RecommendationError as error:
-            LOGGER.error("%s %s", error.code, error.diagnostics)
-            raise HTTPException(status_code=422, detail=error.code) from error
-        except NeedParseError as error:
-            LOGGER.error("need_parse_failed: %s", error)
-            raise HTTPException(status_code=422, detail="need_parse_failed") from error
+            try:
+                conversation = Conversation(
+                    Recommender(app_catalog, app_provider),
+                    session.user_id,
+                    resolve_context,
+                )
+                reply, history = await conversation.send(said, session.history)
+            except RecommendationError as error:
+                LOGGER.error("%s %s", error.code, error.diagnostics)
+                raise HTTPException(status_code=422, detail=error.code) from error
+            except NeedParseError as error:
+                LOGGER.error("need_parse_failed: %s", error)
+                raise HTTPException(
+                    status_code=422, detail="need_parse_failed"
+                ) from error
 
-        session.said = said
-        session.history = history
-        session.turns += 1
-        turns_left = MAX_TURNS - session.turns
+            session.said = said
+            session.history = history
+            session.turns += 1
+            turns_left = MAX_TURNS - session.turns
 
-        # recommend / clarify / exhausted 共用这些观察字段，前端不再自行推导。
-        common = {
-            "understood_as": describe(understood),
-            "latency_ms": reply.total_latency_ms,
-            "turns_left": turns_left,
-        }
-        if isinstance(reply, ClarifyReply):
-            reply_kind = "clarify"
-            if turns_left == 0:
-                reply_kind = "exhausted"
+            # recommend / clarify / exhausted 共用这些观察字段，前端不再自行推导。
+            common = {
+                "understood_as": describe(understood),
+                "latency_ms": reply.total_latency_ms,
+                "turns_left": turns_left,
+            }
+            if isinstance(reply, ClarifyReply):
+                reply_kind = "clarify"
+                if turns_left == 0:
+                    reply_kind = "exhausted"
+                return {
+                    **common,
+                    "kind": reply_kind,
+                    "question": reply.question,
+                    "products": [],
+                }
             return {
                 **common,
-                "kind": reply_kind,
-                "question": reply.question,
-                "products": [],
+                "kind": "recommend",
+                "question": None,
+                "products": [product.model_dump() for product in reply.products],
             }
-        return {
-            **common,
-            "kind": "recommend",
-            "question": None,
-            "products": [product.model_dump() for product in reply.products],
-        }
 
     # 必须最后挂载，避免静态页面遮住 /api 和 /health。
     if FRONTEND_DIST.exists():

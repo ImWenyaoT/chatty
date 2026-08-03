@@ -37,7 +37,8 @@ class ResponsesModelProvider:
             input=prompt,
             reasoning={"effort": "none"},
         )
-        return response.output_text
+        # Responses API 允许只有 Tool/Reasoning 输出，此时 output_text 可能为空。
+        return response.output_text or ""
 
     async def close(self) -> None:
         await self.client.close()

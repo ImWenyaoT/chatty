@@ -188,6 +188,11 @@ class Recommender:
             raise RecommendationError(
                 str(error), _diagnostics(evidence, error)
             ) from error
+        except Exception as error:
+            # Tool 或 SDK 的未知异常不能穿透 HTTP 层成为无结构的 500。
+            raise RecommendationError(
+                "recommendation_failed", _diagnostics(evidence, error)
+            ) from error
 
 
 def _diagnostics(evidence: RecommendationEvidence, error: Exception) -> dict[str, Any]:
