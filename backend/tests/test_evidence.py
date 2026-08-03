@@ -10,6 +10,7 @@ from app.evidence import (
     record_knowledge,
     record_search,
     snapshot_evidence,
+    validate_clarification_evidence,
     validate_recommendation_evidence,
     validate_tool_sequence,
 )
@@ -72,6 +73,35 @@ def test_tool_sequence_requires_all_registered_tools() -> None:
 
     assert error is not None
     assert "未调用的工具" in error
+
+
+def test_clarification_requires_all_tools_and_no_available_product() -> None:
+    evidence = RecommendationEvidence()
+    evidence.used_tools.extend(
+        [
+            "get_user_profile",
+            "search_products",
+            "check_inventory",
+            "retrieve_knowledge",
+            "get_marketing_strategy",
+        ]
+    )
+
+    validate_clarification_evidence(evidence)
+
+    evidence.in_stock_product_ids.add("P023")
+    with pytest.raises(EvidenceError, match="invalid_recommendation"):
+        validate_clarification_evidence(evidence)
+
+
+def test_clarification_rejects_incomplete_tool_sequence() -> None:
+    evidence = RecommendationEvidence()
+    evidence.used_tools.append("get_user_profile")
+
+    with pytest.raises(EvidenceError) as caught:
+        validate_clarification_evidence(evidence)
+
+    assert caught.value.code == "required_tools_not_used"
 
 
 def test_repeated_call_guard_allows_three_equal_calls() -> None:

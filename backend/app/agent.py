@@ -13,6 +13,7 @@ from app.evidence import (
     EvidenceError,
     RecommendationEvidence,
     snapshot_evidence,
+    validate_clarification_evidence,
     validate_recommendation_evidence,
 )
 from app.model_provider import MissingCredentialsError, ResponsesModelProvider
@@ -140,8 +141,7 @@ class Recommender:
             latency_ms = (time.perf_counter() - started) * 1000
 
             if draft.action == "clarify":
-                if evidence.in_stock_product_ids:
-                    raise RecommendationError("invalid_recommendation")
+                validate_clarification_evidence(evidence)
                 if draft.question is None:
                     raise RecommendationError("invalid_draft")
                 return ClarifyReply(

@@ -200,3 +200,14 @@ def validate_recommendation_evidence(
         missing_product_ids = sorted(recommended_product_ids - verified_product_ids)
         if missing_product_ids:
             raise EvidenceError(error_code, missing_product_ids)
+
+
+def validate_clarification_evidence(evidence: RecommendationEvidence) -> None:
+    """澄清可以没有候选商品，但仍必须完成五个 Tool。"""
+
+    sequence_error = validate_tool_sequence(evidence.used_tools)
+    if sequence_error:
+        raise EvidenceError("required_tools_not_used", detail=sequence_error)
+
+    if evidence.in_stock_product_ids:
+        raise EvidenceError("invalid_recommendation")

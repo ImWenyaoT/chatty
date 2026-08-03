@@ -79,12 +79,31 @@ async def main() -> None:
             catalog = Catalog()
             try:
                 reply = await Recommender(catalog, provider).respond(case.request)
+                products_by_id = {
+                    product.product_id: product for product in catalog.products
+                }
                 action = "recommend"
                 products_valid = True
                 if isinstance(reply, ClarifyReply):
                     action = "clarify"
                 else:
                     for product in reply.products:
+                        stored_product = products_by_id.get(product.product_id)
+                        if stored_product is None:
+                            products_valid = False
+                            continue
+                        if product.name != stored_product.name:
+                            products_valid = False
+                        if product.category != stored_product.category:
+                            products_valid = False
+                        if product.price_cents != stored_product.price_cents:
+                            products_valid = False
+                        if product.brand != stored_product.brand:
+                            products_valid = False
+                        if product.stock != stored_product.stock:
+                            products_valid = False
+                        if product.tags != stored_product.tags:
+                            products_valid = False
                         if product.stock <= 0:
                             products_valid = False
                         if (
