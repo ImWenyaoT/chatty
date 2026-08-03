@@ -1,0 +1,30 @@
+{
+  "name": "chatty",
+  "private": true,
+  "packageManager": "pnpm@11.18.0",
+  "engines": {
+    "node": ">=24",
+    "pnpm": ">=11.18.0"
+  },
+  "scripts": {
+    "setup": "UV_CACHE_DIR=.cache/uv uv sync --project backend && pnpm install --frozen-lockfile",
+    "dev": "concurrently -k -n api,web \"pnpm dev:api\" \"pnpm dev:web\"",
+    "dev:api": "UV_CACHE_DIR=.cache/uv uv run --project backend uvicorn --factory app.api:create_app --host 127.0.0.1 --port 8000 --reload",
+    "dev:web": "pnpm --filter @chatty/frontend dev",
+    "build": "pnpm --filter @chatty/frontend build",
+    "start": "pnpm build && UV_CACHE_DIR=.cache/uv uv run --project backend python -m app.main",
+    "test": "UV_CACHE_DIR=.cache/uv uv run --project backend pytest -c backend/pyproject.toml",
+    "typecheck": "pnpm --filter @chatty/frontend typecheck && UV_CACHE_DIR=.cache/uv uv run --project backend ty check backend/app backend/tests",
+    "lint": "pnpm lint:frontend && pnpm lint:backend && pnpm format:check",
+    "lint:frontend": "pnpm --filter @chatty/frontend lint",
+    "lint:backend": "UV_CACHE_DIR=.cache/uv uv run --project backend ruff check backend/app backend/tests",
+    "format": "pnpm --filter @chatty/frontend format && UV_CACHE_DIR=.cache/uv uv run --project backend ruff format backend/app backend/tests",
+    "format:check": "pnpm --filter @chatty/frontend exec prettier --check . && UV_CACHE_DIR=.cache/uv uv run --project backend ruff format --check backend/app backend/tests",
+    "eval:retrieval": "UV_CACHE_DIR=.cache/uv uv run --project backend python -m app.evals.retrieval",
+    "eval:agent": "UV_CACHE_DIR=.cache/uv uv run --project backend python -m app.evals.agent",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
