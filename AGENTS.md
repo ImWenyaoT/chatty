@@ -23,7 +23,7 @@
 提交前运行：
 
 ```bash
-pnpm check
+pnpm run check
 ```
 
 ## Agent skills

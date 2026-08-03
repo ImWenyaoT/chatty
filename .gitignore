@@ -60,7 +60,7 @@ docs/jd.md
 docs/*实习.pdf
 *.log
 
-# TypeScript workspace
+# 前端 workspace
 node_modules/
-apps/*/node_modules/
-apps/*/dist/
+frontend/node_modules/
+frontend/dist/
