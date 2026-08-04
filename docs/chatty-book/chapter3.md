@@ -29,13 +29,25 @@ Agent 调用 `retrieve_knowledge`：`general` scope 检索政策等通用知识�
 Harness 自动附加当前类目与在售商品 ID。Tool Result 进入 Model Context；如果第一次结果
 不足，Agent 可以调整 Query 再检索，Harness 最多允许三次。
 
-```text
-固定检索：用户需求 → 检索一次 → Model → 答案
+```mermaid
+flowchart TB
+    subgraph Offline["离线：构建可检索知识"]
+        Seed["54 篇 JSONL 知识文档"] --> Chunk["按句子切块"]
+        Chunk --> FTS[("SQLite FTS5 Index")]
+    end
 
-Chatty：用户需求 → Agent Loop → retrieve_knowledge
-                         ↑               ↓
-                         └── 调整 Query ──┘
-                                  → 生成答案
+    subgraph Online["在线：Model 主动检索"]
+        Input["TaskFrame + 当前候选商品"] --> Decide["Model 选择 scope / Query"]
+        Decide --> Tool["retrieve_knowledge"]
+        Tool --> Rank["FTS5 + BM25"]
+        FTS --> Rank
+        Rank --> Result["Tool Result 进入 Model Context"]
+        Result --> Rewrite{"依据充分？"}
+        Rewrite -->|"否"| Decide
+        Rewrite -->|"是"| Draft["生成回答 / 推荐理由"]
+        Rank -.-> Evidence["Harness-owned Evidence"]
+        Evidence --> Validate["输出前确定性校验"]
+    end
 ```
 
 因此，RAG 不只是 FTS5 的一次查询，而是从知识检索、结果进入 Context，到 Model 使用知识

@@ -33,12 +33,16 @@ Chatty 让 Model 只生成一个推荐草稿：
 
 校验通过以后，`Catalog.finalize` 再从 SQLite 读取商品名称、类目、价格、品牌、库存和标签。即使 Model 在草稿中想象了一个更低价格，也没有机会进入最终响应。推荐理由和营销文案虽然来自 Model，还要经过禁用词过滤。
 
-```text
-Model Draft
-  → Evidence 集合校验
-  → SQLite 重新读取事实
-  → 文案过滤
-  → 最终响应
+```mermaid
+flowchart LR
+    Tool["Tool 执行"] --> Result["Tool Result<br/>给 Model 继续推理"]
+    Tool --> Evidence["Harness-owned Evidence<br/>给确定性代码校验"]
+    Result --> Draft["AgentDraft"]
+    Draft --> Gate{"Evidence + SQLite 重查"}
+    Evidence --> Gate
+    SQLite[("SQLite")] --> Gate
+    Gate -->|"通过"| Reply["RecommendationResponse"]
+    Gate -->|"失败"| Error["结构化错误"]
 ```
 
 这就是 Harness 的核心价值：Model 负责开放式判断，代码负责可执行规则，SQLite 负责业务真值。系统不是因为“相信模型”而正确，而是因为关键结论都能被验证。
