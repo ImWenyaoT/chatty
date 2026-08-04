@@ -1,9 +1,8 @@
 /**
  * 后端接口的类型与调用。
  *
- * 这些类型是手写的，和后端 HTTP 响应模型一一对应。手写而不是
- * 生成，是因为只有三个端点、四个模型——生成器要引一整套工具链，维护成本比抄一遍高。
- * 端点一改这里会跟着改，改漏了 UI 上立刻看得见。
+ * 这些类型和运行时 Decoder 手写维护，因为当前 API 很小；引入代码生成工具链的成本
+ * 高于这里的显式校验。端点契约变化时，Decoder 会让不完整的响应直接失败。
  */
 
 /** 商品的全部字段都由后端从 SQLite 重查后给出，前端不做任何业务计算。 */
@@ -20,14 +19,24 @@ export interface Product {
   marketing_copy: string
 }
 
-/** 一轮的结果。三种互斥情况，UI 按 kind 分支。 */
+/** 一轮的结果。四种互斥情况，UI 按 kind 分支。 */
 export interface Turn {
-  kind: 'recommend' | 'clarify' | 'exhausted'
+  kind: 'answer' | 'recommend' | 'clarify' | 'exhausted'
   understood_as: string
+  answer: string | null
   question: string | null
   products: Product[]
   latency_ms: number
   turns_left: number
+  trace: string[]
+  usage: RunUsage
+}
+
+export interface RunUsage {
+  model_requests: number
+  input_tokens: number
+  output_tokens: number
+  total_tokens: number
 }
 
 export interface CatalogInfo {
@@ -35,6 +44,37 @@ export interface CatalogInfo {
   users: CatalogUser[]
   product_count: number
   model_id: string
+}
+
+export interface CatalogProduct {
+  product_id: string
+  name: string
+  category: string
+  price_cents: number
+  description: string
+  brand: string
+  seller_id: string
+  stock: number
+  tags: string[]
+  popularity_score: number
+  source: string
+}
+
+export interface CatalogProfile {
+  user_id: string
+  segment: string
+  display_name: string
+  profile_label: string
+  preferred_categories: string[]
+  min_price_cents: number
+  max_price_cents: number
+  recent_views: string[]
+  recent_purchases: string[]
+}
+
+export interface CatalogData {
+  products: CatalogProduct[]
+  profiles: CatalogProfile[]
 }
 
 interface CatalogUser {
@@ -124,6 +164,46 @@ const decodeCatalog = (value: unknown): CatalogInfo => {
   }
 }
 
+const decodeCatalogProduct = (value: unknown): CatalogProduct => {
+  if (!isRecord(value)) return invalidResponse()
+  if (typeof value.product_id !== 'string') return invalidResponse()
+  if (typeof value.name !== 'string') return invalidResponse()
+  if (typeof value.category !== 'string') return invalidResponse()
+  if (typeof value.price_cents !== 'number') return invalidResponse()
+  if (typeof value.description !== 'string') return invalidResponse()
+  if (typeof value.brand !== 'string') return invalidResponse()
+  if (typeof value.seller_id !== 'string') return invalidResponse()
+  if (typeof value.stock !== 'number') return invalidResponse()
+  if (!isStringArray(value.tags)) return invalidResponse()
+  if (typeof value.popularity_score !== 'number') return invalidResponse()
+  if (typeof value.source !== 'string') return invalidResponse()
+  return value as unknown as CatalogProduct
+}
+
+const decodeCatalogProfile = (value: unknown): CatalogProfile => {
+  if (!isRecord(value)) return invalidResponse()
+  if (typeof value.user_id !== 'string') return invalidResponse()
+  if (typeof value.segment !== 'string') return invalidResponse()
+  if (typeof value.display_name !== 'string') return invalidResponse()
+  if (typeof value.profile_label !== 'string') return invalidResponse()
+  if (!isStringArray(value.preferred_categories)) return invalidResponse()
+  if (typeof value.min_price_cents !== 'number') return invalidResponse()
+  if (typeof value.max_price_cents !== 'number') return invalidResponse()
+  if (!isStringArray(value.recent_views)) return invalidResponse()
+  if (!isStringArray(value.recent_purchases)) return invalidResponse()
+  return value as unknown as CatalogProfile
+}
+
+const decodeCatalogData = (value: unknown): CatalogData => {
+  if (!isRecord(value)) return invalidResponse()
+  if (!Array.isArray(value.products)) return invalidResponse()
+  if (!Array.isArray(value.profiles)) return invalidResponse()
+  return {
+    products: value.products.map(decodeCatalogProduct),
+    profiles: value.profiles.map(decodeCatalogProfile),
+  }
+}
+
 const decodeSession = (value: unknown): { session_id: string } => {
   if (!isRecord(value)) return invalidResponse()
   if (typeof value.session_id !== 'string') return invalidResponse()
@@ -133,23 +213,39 @@ const decodeSession = (value: unknown): { session_id: string } => {
 const decodeTurn = (value: unknown): Turn => {
   if (!isRecord(value)) return invalidResponse()
 
-  const validKinds = ['recommend', 'clarify', 'exhausted']
+  const validKinds = ['answer', 'recommend', 'clarify', 'exhausted']
   if (!validKinds.includes(String(value.kind))) return invalidResponse()
   if (typeof value.understood_as !== 'string') return invalidResponse()
+  if (typeof value.answer !== 'string' && value.answer !== null) return invalidResponse()
   if (typeof value.question !== 'string' && value.question !== null) return invalidResponse()
   if (!Array.isArray(value.products)) return invalidResponse()
   if (typeof value.latency_ms !== 'number') return invalidResponse()
   if (typeof value.turns_left !== 'number') return invalidResponse()
-  if (value.kind !== 'recommend' && !value.question) {
+  if (!isStringArray(value.trace)) return invalidResponse()
+  if (!isRecord(value.usage)) return invalidResponse()
+  if (typeof value.usage.model_requests !== 'number') return invalidResponse()
+  if (typeof value.usage.input_tokens !== 'number') return invalidResponse()
+  if (typeof value.usage.output_tokens !== 'number') return invalidResponse()
+  if (typeof value.usage.total_tokens !== 'number') return invalidResponse()
+  if ((value.kind === 'clarify' || value.kind === 'exhausted') && !value.question) {
     return invalidResponse()
   }
+  if (value.kind === 'answer' && !value.answer) return invalidResponse()
   return {
     kind: value.kind as Turn['kind'],
     understood_as: value.understood_as,
+    answer: value.answer,
     question: value.question,
     products: value.products.map(decodeProduct),
     latency_ms: value.latency_ms,
     turns_left: value.turns_left,
+    trace: value.trace,
+    usage: {
+      model_requests: value.usage.model_requests,
+      input_tokens: value.usage.input_tokens,
+      output_tokens: value.usage.output_tokens,
+      total_tokens: value.usage.total_tokens,
+    },
   }
 }
 
@@ -192,6 +288,10 @@ export const fetchCatalog = () => {
   return request('/api/catalog', decodeCatalog)
 }
 
+export const fetchCatalogData = () => {
+  return request('/api/catalog/data', decodeCatalogData)
+}
+
 export const createSession = (userId: string) => {
   return request('/api/sessions', decodeSession, {
     method: 'POST',
@@ -209,17 +309,20 @@ export const takeTurn = (sessionId: string, text: string) => {
 /** 错误码 → 人话。没收录的码原样显示，总比吞掉强。 */
 const MESSAGES: Record<string, string> = {
   llm_not_configured: '没配 DEEPSEEK_API_KEY，后端连不上模型',
-  invalid_recommendation: '条件太紧，目录里没有同时满足类目和价格的商品',
+  invalid_recommendation: '已找到可售商品，但模型未返回有效推荐，已停止本轮',
   invalid_draft: '模型没有按约定返回完整结果，已停止本轮',
   duplicate_recommended_product: '模型重复推荐了同一商品，已停止本轮',
   recommended_product_out_of_stock: '商品在最终确认时已售罄，请重新查询',
   recommended_product_outside_price_range: '商品在最终确认时超出预算，请重新查询',
   required_tools_not_used: '模型跳过了必须调用的工具，被 Harness 拦下了',
   knowledge_not_retrieved: '没检索到支撑理由的知识，不允许凭空生成',
+  profile_not_loaded: '用户画像没有成功读取，本轮已停止',
   product_not_recalled: '模型推荐了搜索结果之外的商品，被证据校验拦下了',
+  inventory_not_checked: '推荐商品没有经过库存确认，被证据校验拦下了',
+  product_not_grounded: '推荐商品缺少知识依据，被证据校验拦下了',
   conversation_exhausted: '这轮问得够多了，开一段新对话再试',
   session_not_found: '会话不在了，开一段新的',
-  need_parse_failed: '没有可靠地理解这句话，请换一种说法再试',
+  task_frame_parse_failed: '没有可靠地理解这句话，请换一种说法再试',
   invalid_response: '后端响应格式不正确，请查看服务日志',
   invalid_error_response: '后端错误响应格式不正确，请查看服务日志',
   network_error: '连不上后端，请确认服务已经启动',

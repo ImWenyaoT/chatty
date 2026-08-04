@@ -10,6 +10,7 @@
 
 Chatty 当前的事实来自 SQLite 和 RAG，输出协议由 Tool Schema 与 Instructions 约束，价格和库存由 Harness 校验。项目也没有足够的真实用户轨迹、独立训练集和可靠奖励信号。
 
-因此，Chatty 现在不进行 SFT、LoRA 或强化学习。更合理的顺序是先建立第 6 章的评估集，找到可重复的失败，再判断问题究竟来自 Model、Context、Tool 还是 Harness。
+因此，Chatty 现在不进行 SFT、LoRA 或强化学习。更合理的顺序是先建立第 6 章的评估集，
+找到可重复的失败，再判断问题来自 Model，还是 Harness 内的 Context、Tool 或控制逻辑。
 
 不训练并不表示拒绝模型能力，而是避免用昂贵且难验证的方法修复本可以由数据或代码明确解决的问题。

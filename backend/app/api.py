@@ -13,22 +13,44 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
-from app.agent import RecommendationError, Recommender
-from app.catalog import Catalog
-from app.conversation import Conversation
-from app.model_provider import MissingCredentialsError, ResponsesModelProvider
-from app.models import ClarifyReply, UserContext
-from app.need_parser import NeedParseError, describe, parse_need
+from app.agent import Chatty, ChattyAgent, ChattyContext, ChattyError
+from app.data.catalog import Catalog
+from app.data.models import ClarifyReply, KnowledgeReply
+from app.model_provider import ResponsesModelProvider
 from app.settings import FRONTEND_DIST
 
 LOGGER = logging.getLogger("chatty")
-MAX_TURNS = 3
 DEMO_USERS = [
-    {"id": "user_active", "label": "活跃用户"},
-    {"id": "user_budget", "label": "价格敏感用户"},
-    {"id": "user_vip", "label": "高价值用户"},
-    {"id": "user_new", "label": "新用户"},
-    {"id": "user_churn", "label": "流失风险用户"},
+    {
+        "id": "user_active",
+        "label": "用户 A · 活跃型",
+        "display_name": "用户 A",
+        "profile_label": "活跃型",
+    },
+    {
+        "id": "user_budget",
+        "label": "用户 B · 价格敏感型",
+        "display_name": "用户 B",
+        "profile_label": "价格敏感型",
+    },
+    {
+        "id": "user_vip",
+        "label": "用户 C · 高价值型",
+        "display_name": "用户 C",
+        "profile_label": "高价值型",
+    },
+    {
+        "id": "user_new",
+        "label": "用户 D · 新客型",
+        "display_name": "用户 D",
+        "profile_label": "新客型",
+    },
+    {
+        "id": "user_churn",
+        "label": "用户 E · 流失风险型",
+        "display_name": "用户 E",
+        "profile_label": "流失风险型",
+    },
 ]
 DEMO_USER_IDS = {user["id"] for user in DEMO_USERS}
 
@@ -52,20 +74,20 @@ class TurnBody(BaseModel):
 @dataclass
 class SessionState:
     user_id: str
-    said: list[str] = field(default_factory=list)
-    history: list[dict[str, Any]] = field(default_factory=list)
-    turns: int = 0
+    context: ChattyContext = field(default_factory=ChattyContext)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
 def create_app(
     catalog: Catalog | None = None,
     provider: ResponsesModelProvider | None = None,
+    chatty: ChattyAgent | None = None,
 ) -> FastAPI:
     owns_catalog = catalog is None
     owns_provider = provider is None
     app_catalog = catalog or Catalog()
     app_provider = provider or ResponsesModelProvider()
+    app_chatty = chatty or Chatty(app_catalog, app_provider)
     sessions: dict[str, SessionState] = {}
 
     @asynccontextmanager
@@ -95,6 +117,22 @@ def create_app(
             "model_id": app_provider.model_id,
         }
 
+    @app.get("/api/catalog/data")
+    async def catalog_data() -> dict[str, Any]:
+        """为 Demo 提供只读的 SQLite 商品与画像快照。"""
+
+        return {
+            "products": [product.model_dump() for product in app_catalog.products],
+            "profiles": [
+                {
+                    **app_catalog.profiles[user["id"]].model_dump(),
+                    "display_name": user["display_name"],
+                    "profile_label": user["profile_label"],
+                }
+                for user in DEMO_USERS
+            ],
+        }
+
     @app.post("/api/sessions")
     async def create_session(body: CreateSessionBody) -> dict[str, str]:
         if body.user_id not in DEMO_USER_IDS:
@@ -110,66 +148,55 @@ def create_app(
             raise HTTPException(status_code=404, detail="session_not_found")
         # 同一 session 串行处理，避免两个请求同时覆盖 history 和 turns。
         async with session.lock:
-            if session.turns >= MAX_TURNS:
-                raise HTTPException(status_code=409, detail="conversation_exhausted")
-
-            said = [*session.said, body.text]
-            understood = UserContext()
-
-            async def resolve_context(values: list[str]) -> UserContext:
-                nonlocal understood
-                try:
-                    understood = await parse_need(
-                        app_provider.complete,
-                        " ".join(values),
-                        app_catalog.categories,
-                    )
-                except MissingCredentialsError as error:
-                    raise RecommendationError("llm_not_configured") from error
-                return understood
-
             try:
-                conversation = Conversation(
-                    Recommender(app_catalog, app_provider),
+                turn = await app_chatty.run(
                     session.user_id,
-                    resolve_context,
+                    body.text,
+                    session.context,
                 )
-                reply, history = await conversation.send(said, session.history)
-            except RecommendationError as error:
+            except ChattyError as error:
                 LOGGER.error("%s %s", error.code, error.diagnostics)
-                raise HTTPException(status_code=422, detail=error.code) from error
-            except NeedParseError as error:
-                LOGGER.error("need_parse_failed: %s", error)
-                raise HTTPException(
-                    status_code=422, detail="need_parse_failed"
-                ) from error
+                status = 409 if error.code == "conversation_exhausted" else 422
+                raise HTTPException(status_code=status, detail=error.code) from error
 
-            session.said = said
-            session.history = history
-            session.turns += 1
-            turns_left = MAX_TURNS - session.turns
+            session.context = turn.context
 
             # recommend / clarify / exhausted 共用这些观察字段，前端不再自行推导。
             common = {
-                "understood_as": describe(understood),
-                "latency_ms": reply.total_latency_ms,
-                "turns_left": turns_left,
+                "understood_as": turn.understood_as,
+                "answer": turn.reply.answer,
+                "latency_ms": turn.latency_ms,
+                "turns_left": turn.turns_left,
+                "trace": turn.trace,
+                "usage": {
+                    "model_requests": turn.usage.requests,
+                    "input_tokens": turn.usage.input_tokens,
+                    "output_tokens": turn.usage.output_tokens,
+                    "total_tokens": turn.usage.total_tokens,
+                },
             }
-            if isinstance(reply, ClarifyReply):
+            if isinstance(turn.reply, KnowledgeReply):
+                return {
+                    **common,
+                    "kind": "answer",
+                    "question": None,
+                    "products": [],
+                }
+            if isinstance(turn.reply, ClarifyReply):
                 reply_kind = "clarify"
-                if turns_left == 0:
+                if turn.turns_left == 0:
                     reply_kind = "exhausted"
                 return {
                     **common,
                     "kind": reply_kind,
-                    "question": reply.question,
+                    "question": turn.reply.question,
                     "products": [],
                 }
             return {
                 **common,
                 "kind": "recommend",
                 "question": None,
-                "products": [product.model_dump() for product in reply.products],
+                "products": [product.model_dump() for product in turn.reply.products],
             }
 
     # 必须最后挂载，避免静态页面遮住 /api 和 /health。

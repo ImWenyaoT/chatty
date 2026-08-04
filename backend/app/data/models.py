@@ -46,6 +46,29 @@ class UserContext(BaseModel):
     max_price_cents: int | None = None
 
 
+class ProductNeed(BaseModel):
+    """用户明确表达的商品约束；字段为空仍表示用户正在找商品。"""
+
+    category: str | None = None
+    min_yuan: float | None = Field(default=None, ge=0)
+    max_yuan: float | None = Field(default=None, ge=0)
+
+
+class TaskFrame(BaseModel):
+    """Harness 使用的领域形状；不直接作为 provider structured output。"""
+
+    product_need: ProductNeed | None = None
+    knowledge_query: str | None = None
+
+    @model_validator(mode="after")
+    def at_least_one_context_is_required(self) -> "TaskFrame":
+        if self.product_need is None and not (self.knowledge_query or "").strip():
+            raise ValueError("empty_task_frame")
+        if self.knowledge_query is not None:
+            self.knowledge_query = self.knowledge_query.strip() or None
+        return self
+
+
 class UserProfile(BaseModel):
     user_id: str
     segment: UserSegment
@@ -89,6 +112,22 @@ class RecommendationRequest(BaseModel):
     context: UserContext = Field(default_factory=UserContext)
 
 
+class RecommendationContext(BaseModel):
+    """Harness 在进入 Model 前确定的画像、候选商品和在售商品。"""
+
+    request: RecommendationRequest
+    profile: UserProfile
+    candidates: list[Product]
+    inventory: list[Product]
+
+
+class TaskContext(BaseModel):
+    """进入主 Agent Loop 前已经准备好的全部业务 Context。"""
+
+    frame: TaskFrame
+    recommendation: RecommendationContext | None = None
+
+
 class RecommendedProduct(BaseModel):
     product_id: str
     name: str
@@ -105,12 +144,18 @@ class RecommendedProduct(BaseModel):
 class AgentDraft(BaseModel):
     """模型生成的草稿；Harness 仍会在之后验证其中的商品。"""
 
-    action: Literal["clarify", "recommend"]
+    action: Literal["answer", "clarify", "recommend"]
+    answer: str | None = None
     question: str | None = None
     recommendations: list[RecommendationDraftItem] | None = None
 
     @model_validator(mode="after")
     def action_payload_must_match(self) -> "AgentDraft":
+        if self.action == "answer":
+            if not self.answer or not self.answer.strip():
+                raise ValueError("answer_required")
+            if self.question or self.recommendations:
+                raise ValueError("answer_must_not_include_product_payload")
         if self.action == "clarify":
             if not self.question or not self.question.strip():
                 raise ValueError("clarify_question_required")
@@ -126,12 +171,16 @@ class AgentDraft(BaseModel):
 
 class RecommendationResponse(BaseModel):
     products: list[RecommendedProduct]
-    total_latency_ms: float
+    answer: str | None = None
 
 
 class ClarifyReply(BaseModel):
     question: str
-    total_latency_ms: float
+    answer: str | None = None
 
 
-Reply = RecommendationResponse | ClarifyReply
+class KnowledgeReply(BaseModel):
+    answer: str
+
+
+Reply = RecommendationResponse | ClarifyReply | KnowledgeReply

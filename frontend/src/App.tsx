@@ -7,8 +7,10 @@ import {
   takeTurn,
   type CatalogInfo,
   type Product,
+  type RunUsage,
   type Turn,
 } from './api'
+import CatalogBrowser from './CatalogBrowser'
 
 /**
  * 会话里的一条记录。
@@ -20,13 +22,16 @@ import {
 type Entry =
   | { kind: 'user'; text: string }
   | { kind: 'understood'; text: string }
+  | { kind: 'answer'; text: string }
   | { kind: 'question'; text: string }
-  | { kind: 'products'; products: Product[]; latencyMs: number }
+  | { kind: 'run'; trace: string[]; latencyMs: number; usage: RunUsage }
+  | { kind: 'products'; products: Product[] }
   | { kind: 'error'; code: string }
 
 const yuan = (cents: number) => (cents / 100).toFixed(2)
 
 export default function App() {
+  const [view, setView] = useState<'chat' | 'data'>('chat')
   const [info, setInfo] = useState<CatalogInfo | null>(null)
   const [userId, setUserId] = useState('user_active')
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -84,17 +89,30 @@ export default function App() {
 
       const turn: Turn = await takeTurn(activeSessionId, trimmed)
       setTurnsLeft(turn.turns_left)
-      let responseEntry: Entry
+      const responseEntries: Entry[] = [
+        {
+          kind: 'run',
+          trace: turn.trace,
+          latencyMs: turn.latency_ms,
+          usage: turn.usage,
+        },
+      ]
+      if (turn.answer) {
+        responseEntries.push({ kind: 'answer', text: turn.answer })
+      }
       if (turn.kind === 'recommend') {
-        responseEntry = { kind: 'products', products: turn.products, latencyMs: turn.latency_ms }
-      } else {
+        responseEntries.push({
+          kind: 'products',
+          products: turn.products,
+        })
+      } else if (turn.kind !== 'answer') {
         if (!turn.question) throw new ApiError('invalid_response')
-        responseEntry = { kind: 'question', text: turn.question }
+        responseEntries.push({ kind: 'question', text: turn.question })
       }
       setEntries((current) => [
         ...current,
         { kind: 'understood', text: turn.understood_as },
-        responseEntry,
+        ...responseEntries,
       ])
     } catch (error: unknown) {
       let code = 'invalid_response'
@@ -130,67 +148,95 @@ export default function App() {
   if (busy) inputPlaceholder = '正在跑…'
 
   return (
-    <div className="app">
+    <div className={view === 'data' ? 'app data-mode' : 'app'}>
       <header>
-        <div>
+        <div className="brand">
           <h1>Chatty</h1>
           <p className="hint">{catalogSummary}</p>
         </div>
-        <label className="identity">
-          用户画像
-          <select value={userId} onChange={(event) => reset(event.target.value)} disabled={busy}>
-            {info?.users.map((user) => (
-              <option key={user.id} value={user.id}>
-                {user.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <nav className="primary-tabs" aria-label="主要功能">
+          <button
+            type="button"
+            className={view === 'chat' ? 'tab active' : 'tab'}
+            onClick={() => setView('chat')}
+          >
+            对话
+          </button>
+          <button
+            type="button"
+            className={view === 'data' ? 'tab active' : 'tab'}
+            onClick={() => setView('data')}
+          >
+            数据
+          </button>
+        </nav>
+        {view === 'chat' ? (
+          <label className="identity">
+            演示用户
+            <select value={userId} onChange={(event) => reset(event.target.value)} disabled={busy}>
+              {info?.users.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <span className="read-only">只读</span>
+        )}
       </header>
 
       <main>
-        {entries.length === 0 && info && (
-          <section className="intro">
-            <p>用大白话说需求，比如「想买个降噪耳机，2000 以内」。</p>
-            <p className="hint">类目：{info.categories.join('、')}</p>
-            <p className="hint">换个身份问同样的需求，能看出画像对结果的影响。</p>
-          </section>
+        {view === 'data' ? (
+          <CatalogBrowser />
+        ) : (
+          <>
+            {entries.length === 0 && info && (
+              <section className="intro">
+                <p>用大白话说需求，比如「想买个降噪耳机，2000 以内」。</p>
+                <p className="hint">类目：{info.categories.join('、')}</p>
+                <p className="hint">换个身份问同样的需求，能看出画像对结果的影响。</p>
+              </section>
+            )}
+
+            {entries.map((entry, index) => (
+              <Bubble key={index} entry={entry} />
+            ))}
+
+            {busy ? <p className="thinking">正在理解需求并执行必要步骤…</p> : null}
+            <div ref={bottom} />
+          </>
         )}
-
-        {entries.map((entry, index) => (
-          <Bubble key={index} entry={entry} />
-        ))}
-
-        {busy && <p className="thinking">画像 → 搜索 → 库存 → 知识检索 → 营销策略…</p>}
-        <div ref={bottom} />
       </main>
 
-      <footer>
-        {exhausted && (
-          <p className="hint">
-            这段对话问到头了。
-            <button type="button" className="link" onClick={() => reset()}>
-              开一段新的
+      {view === 'chat' ? (
+        <footer>
+          {exhausted && (
+            <p className="hint">
+              这段对话问到头了。
+              <button type="button" className="link" onClick={() => reset()}>
+                开一段新的
+              </button>
+            </p>
+          )}
+          <form
+            onSubmit={(event) => {
+              event.preventDefault()
+              void send(text)
+            }}
+          >
+            <input
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              placeholder={inputPlaceholder}
+              disabled={busy || exhausted}
+            />
+            <button type="submit" disabled={busy || !text.trim() || exhausted}>
+              发送
             </button>
-          </p>
-        )}
-        <form
-          onSubmit={(event) => {
-            event.preventDefault()
-            void send(text)
-          }}
-        >
-          <input
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            placeholder={inputPlaceholder}
-            disabled={busy || exhausted}
-          />
-          <button type="submit" disabled={busy || !text.trim() || exhausted}>
-            发送
-          </button>
-        </form>
-      </footer>
+          </form>
+        </footer>
+      ) : null}
     </div>
   )
 }
@@ -203,6 +249,8 @@ function Bubble({ entry }: { entry: Entry }) {
       return <p className="understood">理解为 · {entry.text}</p>
     case 'question':
       return <p className="bubble agent">{entry.text}</p>
+    case 'answer':
+      return <p className="bubble agent">{entry.text}</p>
     case 'error':
       return (
         <p className="bubble error">
@@ -210,10 +258,11 @@ function Bubble({ entry }: { entry: Entry }) {
           <span className="code">{entry.code}</span>
         </p>
       )
+    case 'run':
+      return <RunTrace trace={entry.trace} latencyMs={entry.latencyMs} usage={entry.usage} />
     case 'products':
       return (
         <section className="products">
-          <p className="hint">跑完五个工具，{(entry.latencyMs / 1000).toFixed(1)}s</p>
           {entry.products.map((product) => (
             <ProductCard key={product.product_id} product={product} />
           ))}
@@ -224,6 +273,47 @@ function Bubble({ entry }: { entry: Entry }) {
         </section>
       )
   }
+}
+
+const TRACE_LABELS: Record<string, string> = {
+  task_framing: '理解需求',
+  get_user_profile: '读取用户画像',
+  search_products: '搜索商品',
+  check_inventory: '确认库存',
+  retrieve_knowledge: '检索知识',
+  get_marketing_strategy: '读取营销策略',
+  response_generation: '生成回答',
+  evidence_validation: '校验 Evidence',
+}
+
+const tokenNumber = new Intl.NumberFormat('zh-CN')
+
+function RunTrace({
+  trace,
+  latencyMs,
+  usage,
+}: {
+  trace: string[]
+  latencyMs: number
+  usage: RunUsage
+}) {
+  return (
+    <details className="run-trace">
+      <summary>
+        完成 · {(latencyMs / 1000).toFixed(1)}s · {usage.model_requests} 次 Model 请求 ·{' '}
+        {tokenNumber.format(usage.total_tokens)} tokens
+      </summary>
+      <ol>
+        {trace.map((step) => (
+          <li key={step}>{TRACE_LABELS[step] ?? step}</li>
+        ))}
+      </ol>
+      <p>
+        Input {tokenNumber.format(usage.input_tokens)} · Output{' '}
+        {tokenNumber.format(usage.output_tokens)} tokens
+      </p>
+    </details>
+  )
 }
 
 function ProductCard({ product }: { product: Product }) {

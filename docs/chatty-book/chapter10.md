@@ -17,4 +17,6 @@ Chatty 有五个 Tool，但只有一个 Agent。Tool 和 Agent 的区别不在�
 
 多 Agent 的价值通常来自真实的信息隔离、不同权限、外部反馈或可以并行完成的独立任务。Chatty 当前没有这些条件，所以 Single Agent 是更直接的实现。
 
-这也让系统边界更清楚：Model 负责一条推荐任务，Tool 提供外部能力，Harness 负责整个循环和事实裁决。未来只有当新任务无法在同一个 Context 和验证边界内完成时，才需要重新考虑多个 Agent。
+这也让系统边界更清楚：Agent 内部由 Model 完成开放式判断，Harness 提供 Tool、负责
+整个循环和事实裁决。未来只有当新任务无法在同一个 Context 和验证边界内完成时，才需要
+重新考虑多个 Agent。
