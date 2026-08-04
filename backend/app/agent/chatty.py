@@ -1,3 +1,5 @@
+"""Chatty 的外层 Harness：理解任务、执行 Agent，并整理本轮状态。"""
+
 from __future__ import annotations
 
 import json
@@ -81,6 +83,8 @@ class Chatty:
         try:
             if not self.provider.configured:
                 raise MissingCredentialsError("llm_not_configured")
+
+            # 第一步只把自然语言整理成业务字段，不搜索商品，也不生成答案。
             frame_result = await Runner.run(
                 build_task_frame_agent(self.provider, self.catalog.categories),
                 "\n".join(
@@ -96,6 +100,8 @@ class Chatty:
                 frame_result.final_output,
                 self.catalog.categories,
             )
+
+            # 第二步由 Harness 准备可信数据，再让主 Agent 调 Tool 和生成回复。
             evidence = RecommendationEvidence()
             task_context = prepare_task_context(
                 frame,
@@ -113,6 +119,8 @@ class Chatty:
             usage.add(frame_result.context_wrapper.usage)
             usage.add(evidence.usage)
             latency_ms = (time.perf_counter() - started) * 1000
+
+            # 只有澄清请求需要保留上下文；任务完成后不把旧信息带入下一轮。
             history: list[dict[str, Any]] = []
             next_pending_messages: list[str] = []
             if isinstance(reply, ClarifyReply):

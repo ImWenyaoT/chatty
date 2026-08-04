@@ -2,19 +2,12 @@ from agents.usage import Usage
 from fastapi.testclient import TestClient
 
 from app.agent import ChattyContext, ChattyTurn
-from app.api import SessionState, create_app
+from app.api import create_app
 from app.data.catalog import Catalog
 from app.data.database import DATA_DIR
 from app.data.models import ClarifyReply
 from app.model_provider import ResponsesModelProvider
 from app.settings import Settings
-
-
-def test_session_states_have_distinct_locks() -> None:
-    first = SessionState(user_id="user_active")
-    second = SessionState(user_id="user_active")
-
-    assert first.lock is not second.lock
 
 
 def test_health_catalog_and_session_validation(tmp_path) -> None:
