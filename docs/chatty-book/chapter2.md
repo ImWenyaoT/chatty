@@ -56,7 +56,7 @@ Harness 管理，因此这里不依赖 `previous_response_id`。
 
 | Context | 所在位置 | 生命周期 |
 | --- | --- | --- |
-| `ChattyContext(said / history / turns)` | FastAPI 进程内存中的不透明会话值 | 待澄清任务与轮次；任务完成后清空内容 |
+| `ChattyContext(pending_user_messages / history / turns)` | FastAPI 进程内存中的不透明会话值 | 待澄清任务与轮次；任务完成后清空内容 |
 | Evidence 与 Tool trace | Agents SDK RunContext | 每轮重新创建，不跨轮复用 |
 | 商品、库存、知识与画像 | SQLite | 运行时业务事实 |
 

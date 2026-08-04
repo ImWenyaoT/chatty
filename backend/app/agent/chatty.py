@@ -31,7 +31,9 @@ MAX_TURNS = 3
 
 @dataclass
 class ChattyContext:
-    said: list[str] = field(default_factory=list)
+    """只保留未完成澄清所需的消息；任务完成后下一轮从空 Context 开始。"""
+
+    pending_user_messages: list[str] = field(default_factory=list)
     history: list[dict[str, Any]] = field(default_factory=list)
     turns: int = 0
 
@@ -69,11 +71,13 @@ class Chatty:
         self.executor = ChattyExecutor(catalog, provider)
 
     async def run(self, user_id: str, text: str, context: ChattyContext) -> ChattyTurn:
+        """执行一次 Context In / Context Out，不在 Chatty 内保存跨请求状态。"""
+
         started = time.perf_counter()
         if context.turns >= MAX_TURNS:
             raise ChattyError("conversation_exhausted")
 
-        said = [*context.said, text]
+        pending_messages = [*context.pending_user_messages, text]
         try:
             if not self.provider.configured:
                 raise MissingCredentialsError("llm_not_configured")
@@ -81,7 +85,7 @@ class Chatty:
                 build_task_frame_agent(self.provider, self.catalog.categories),
                 "\n".join(
                     f"用户第{index}轮：{message}"
-                    for index, message in enumerate(said, start=1)
+                    for index, message in enumerate(pending_messages, start=1)
                 ),
                 max_turns=1,
                 error_handlers={
@@ -110,9 +114,9 @@ class Chatty:
             usage.add(evidence.usage)
             latency_ms = (time.perf_counter() - started) * 1000
             history: list[dict[str, Any]] = []
-            next_said: list[str] = []
+            next_pending_messages: list[str] = []
             if isinstance(reply, ClarifyReply):
-                next_said = said
+                next_pending_messages = pending_messages
                 history = list(context.history)
                 history.extend(_clarification_history(text, reply))
         except MissingCredentialsError as error:
@@ -127,7 +131,7 @@ class Chatty:
             raise ChattyError(str(error)) from error
 
         next_context = ChattyContext(
-            said=next_said,
+            pending_user_messages=next_pending_messages,
             history=history,
             turns=context.turns + 1,
         )

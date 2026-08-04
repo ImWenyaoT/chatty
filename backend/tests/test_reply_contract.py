@@ -30,7 +30,7 @@ def test_http_returns_one_stable_shape_for_a_knowledge_answer(tmp_path) -> None:
                     answer="默认使用平台合作快递，具体承运方以订单页为准。",
                 ),
                 understood_as="知识：快递公司",
-                context=ChattyContext(said=[text], turns=1),
+                context=ChattyContext(pending_user_messages=[text], turns=1),
                 turns_left=2,
                 trace=["task_framing", "retrieve_knowledge", "evidence_validation"],
                 usage=Usage(
@@ -95,7 +95,7 @@ def test_http_preserves_answer_and_products_for_a_mixed_request(tmp_path) -> Non
                     answer="该商品适用七天无理由退货，需保持完好。",
                 ),
                 understood_as="耳机 · ≤200 元 · 知识：七天无理由退货条件",
-                context=ChattyContext(said=[text], turns=1),
+                context=ChattyContext(pending_user_messages=[text], turns=1),
                 turns_left=2,
                 trace=["task_framing", "retrieve_knowledge", "evidence_validation"],
                 usage=Usage(),
@@ -133,11 +133,14 @@ def test_http_carries_clarification_context_into_the_next_turn(tmp_path) -> None
             self, user_id: str, text: str, context: ChattyContext
         ) -> ChattyTurn:
             self.contexts.append(context)
-            said = [*context.said, text]
+            pending_messages = [*context.pending_user_messages, text]
             return ChattyTurn(
                 reply=ClarifyReply(question="还需要什么？"),
                 understood_as="耳机",
-                context=ChattyContext(said=said, turns=context.turns + 1),
+                context=ChattyContext(
+                    pending_user_messages=pending_messages,
+                    turns=context.turns + 1,
+                ),
                 turns_left=2 - context.turns,
                 trace=["task_framing", "evidence_validation"],
                 usage=Usage(),
@@ -156,7 +159,7 @@ def test_http_carries_clarification_context_into_the_next_turn(tmp_path) -> None
 
         assert fake_chatty.contexts == [
             ChattyContext(),
-            ChattyContext(said=["给我推荐耳机"], turns=1),
+            ChattyContext(pending_user_messages=["给我推荐耳机"], turns=1),
         ]
     finally:
         catalog.close()

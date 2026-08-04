@@ -211,115 +211,14 @@ class ChattyExecutor:
         user_text: str,
         history: list[dict[str, Any]] | None = None,
     ) -> Reply:
-        recommendation_context = task_context.recommendation
-        request = (
-            recommendation_context.request
-            if recommendation_context is not None
-            else None
-        )
-        # RunContext 同时带业务依赖和 Harness Evidence。Tool 可以写 Evidence，
-        # 但这部分不会作为 Tool Result 回传给模型。
-        run_context = ChattyRunContext(
-            request=request,
-            catalog=self.catalog,
-            evidence=evidence,
-        )
-        agent = build_chatty_agent(self.provider)
-        model_input = cast(list[TResponseInputItem], list(history or []))
-        # 原始用户输入和 Harness-owned Context 分开标源；query rewrite 不能替代原话。
-        model_input.append(
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "input_text",
-                        "text": user_text,
-                    }
-                ],
-            }
-        )
-        model_input.append(
-            {
-                "role": "developer",
-                "content": [
-                    {
-                        "type": "input_text",
-                        "text": (
-                            "<harness_context>\n"
-                            f"{task_context.model_dump_json()}\n"
-                            "</harness_context>"
-                        ),
-                    }
-                ],
-            }
-        )
-
         try:
-            error_handlers: RunErrorHandlers[ChattyRunContext] = {
-                "invalid_final_output": lambda data: correct_invalid_draft(
-                    data, self.provider
-                )
-            }
-            result = await Runner.run(
-                agent,
-                model_input,
-                context=run_context,
-                max_turns=12,
-                hooks=ChattyRunHooks(),
-                run_config=RunConfig(
-                    call_model_input_filter=append_agent_status,
-                    tool_execution=ToolExecutionConfig(max_function_tool_concurrency=1),
-                ),
-                error_handlers=error_handlers,
+            draft = await self._generate_draft(
+                task_context,
+                evidence,
+                user_text,
+                history,
             )
-            record_run_usage(evidence, result.context_wrapper.usage)
-            draft = result.final_output
-
-            _validate_knowledge_answer(task_context, evidence, draft.answer)
-
-            if draft.action == "answer":
-                if (
-                    task_context.frame.knowledge_query is None
-                    or recommendation_context is not None
-                    or draft.answer is None
-                ):
-                    raise RecommendationError("invalid_draft")
-                return KnowledgeReply(answer=draft.answer)
-
-            if draft.action == "clarify":
-                if recommendation_context is None:
-                    raise RecommendationError("invalid_draft")
-                validate_clarification_evidence(evidence)
-                if draft.question is None:
-                    raise RecommendationError("invalid_draft")
-                return ClarifyReply(
-                    question=draft.question,
-                    answer=draft.answer,
-                )
-
-            recommendations = draft.recommendations
-            if recommendations is None:
-                raise RecommendationError("invalid_draft")
-            if recommendation_context is None or request is None:
-                raise RecommendationError("invalid_draft")
-            # 模型输出现在仍是草稿。只有 Evidence 校验与 SQLite 重查都通过，
-            # 才能构造给用户看的 RecommendationResponse。
-            validate_recommendation_evidence(evidence, recommendations)
-            if evidence.profile is None:
-                raise RecommendationError("profile_not_loaded")
-            products = self.catalog.finalize(
-                recommendations,
-                request,
-                evidence.profile,
-            )
-            self.catalog.update_user_profile_after_success(
-                request.user_id,
-                request.context.preferred_categories or [],
-            )
-            return RecommendationResponse(
-                products=products,
-                answer=draft.answer,
-            )
+            return self._finalize_reply(task_context, evidence, draft)
         except RecommendationError as error:
             diagnostics = _diagnostics(evidence, error)
             diagnostics.update(error.diagnostics)
@@ -338,6 +237,119 @@ class ChattyExecutor:
             raise RecommendationError(
                 "recommendation_failed", _diagnostics(evidence, error)
             ) from error
+
+    async def _generate_draft(
+        self,
+        task_context: TaskContext,
+        evidence: RecommendationEvidence,
+        user_text: str,
+        history: list[dict[str, Any]] | None,
+    ) -> AgentDraft:
+        """运行主 Agent Loop；此阶段只产出草稿，不返回用户结果。"""
+
+        recommendation = task_context.recommendation
+        request = recommendation.request if recommendation is not None else None
+        # Tool Result 返回模型；Evidence 留在 RunContext，仅供 Harness 校验。
+        run_context = ChattyRunContext(
+            request=request,
+            catalog=self.catalog,
+            evidence=evidence,
+        )
+        error_handlers: RunErrorHandlers[ChattyRunContext] = {
+            "invalid_final_output": lambda data: correct_invalid_draft(
+                data, self.provider
+            )
+        }
+        result = await Runner.run(
+            build_chatty_agent(self.provider),
+            _build_model_input(task_context, user_text, history),
+            context=run_context,
+            max_turns=12,
+            hooks=ChattyRunHooks(),
+            run_config=RunConfig(
+                call_model_input_filter=append_agent_status,
+                tool_execution=ToolExecutionConfig(max_function_tool_concurrency=1),
+            ),
+            error_handlers=error_handlers,
+        )
+        record_run_usage(evidence, result.context_wrapper.usage)
+        return result.final_output
+
+    def _finalize_reply(
+        self,
+        task_context: TaskContext,
+        evidence: RecommendationEvidence,
+        draft: AgentDraft,
+    ) -> Reply:
+        """用 Harness Evidence 和 SQLite 把模型草稿收敛为领域 Reply。"""
+
+        recommendation = task_context.recommendation
+        _validate_knowledge_answer(task_context, evidence, draft.answer)
+
+        if draft.action == "answer":
+            if (
+                task_context.frame.knowledge_query is None
+                or recommendation is not None
+                or draft.answer is None
+            ):
+                raise RecommendationError("invalid_draft")
+            return KnowledgeReply(answer=draft.answer)
+
+        if draft.action == "clarify":
+            if recommendation is None or draft.question is None:
+                raise RecommendationError("invalid_draft")
+            validate_clarification_evidence(evidence)
+            return ClarifyReply(question=draft.question, answer=draft.answer)
+
+        if recommendation is None or draft.recommendations is None:
+            raise RecommendationError("invalid_draft")
+        validate_recommendation_evidence(evidence, draft.recommendations)
+        if evidence.profile is None:
+            raise RecommendationError("profile_not_loaded")
+
+        request = recommendation.request
+        products = self.catalog.finalize(
+            draft.recommendations,
+            request,
+            evidence.profile,
+        )
+        self.catalog.update_user_profile_after_success(
+            request.user_id,
+            request.context.preferred_categories or [],
+        )
+        return RecommendationResponse(products=products, answer=draft.answer)
+
+
+def _build_model_input(
+    task_context: TaskContext,
+    user_text: str,
+    history: list[dict[str, Any]] | None,
+) -> list[TResponseInputItem]:
+    """保留用户原话，并把 Harness Context 作为独立来源注入。"""
+
+    model_input = cast(list[TResponseInputItem], list(history or []))
+    model_input.append(
+        {
+            "role": "user",
+            "content": [{"type": "input_text", "text": user_text}],
+        }
+    )
+    model_input.append(
+        {
+            "role": "developer",
+            "content": [
+                {
+                    "type": "input_text",
+                    "text": (
+                        "<harness_context>\n"
+                        f"{task_context.model_dump_json()}\n"
+                        "</harness_context>"
+                    ),
+                }
+            ],
+        }
+    )
+    return model_input
 
 
 def _validate_knowledge_answer(

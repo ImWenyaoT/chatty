@@ -209,7 +209,7 @@ async def test_task_framing_receives_the_full_clarification_conversation(
         turn = await chatty.run(
             "user_active",
             "预算 200 元",
-            ChattyContext(said=["给我推荐耳机"], turns=1),
+            ChattyContext(pending_user_messages=["给我推荐耳机"], turns=1),
         )
     finally:
         await provider.close()
@@ -218,7 +218,7 @@ async def test_task_framing_receives_the_full_clarification_conversation(
     assert len(parser_inputs) == 1
     assert "给我推荐耳机" in parser_inputs[0]
     assert "预算 200 元" in parser_inputs[0]
-    assert turn.context.said == ["给我推荐耳机", "预算 200 元"]
+    assert turn.context.pending_user_messages == ["给我推荐耳机", "预算 200 元"]
     assert turn.usage.requests == 3
     assert turn.usage.input_tokens == 400
     assert turn.usage.output_tokens == 60
@@ -262,5 +262,5 @@ async def test_completed_task_does_not_leak_into_the_next_task(
         catalog.close()
 
     assert parser_inputs == ["用户第1轮：退货政策", "用户第1轮：快递公司"]
-    assert first.context.said == []
+    assert first.context.pending_user_messages == []
     assert first.context.history == []

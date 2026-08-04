@@ -58,8 +58,8 @@ def evaluate_retrieval(catalog: Catalog) -> dict[str, int | float]:
 
     return {
         "cases": len(CASES),
-        "recall_at_5": hits / len(CASES),
-        "mrr": round(reciprocal_rank_total / len(CASES), 4),
+        "hit_rate_at_5": hits / len(CASES),
+        "mrr_at_5": round(reciprocal_rank_total / len(CASES), 4),
     }
 
 
@@ -77,7 +77,7 @@ def main() -> None:
             indent=2,
         )
     )
-    if metrics["recall_at_5"] < 1:
+    if metrics["hit_rate_at_5"] < 1:
         raise SystemExit(1)
 
 
