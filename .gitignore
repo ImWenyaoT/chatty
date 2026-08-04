@@ -18,6 +18,8 @@ __pycache__/
 # 工具缓存
 # ============================================================
 .cache/
+.pnpm-store/
+node_modules/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
@@ -59,8 +61,3 @@ dist/
 docs/jd.md
 docs/*实习.pdf
 *.log
-
-# 前端 workspace
-node_modules/
-frontend/node_modules/
-frontend/dist/
