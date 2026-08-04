@@ -20,3 +20,7 @@ Chatty 有五个 Tool，但只有一个 Agent。Tool 和 Agent 的区别不在�
 这也让系统边界更清楚：Agent 内部由 Model 完成开放式判断，Harness 提供 Tool、负责
 整个循环和事实裁决。未来只有当新任务无法在同一个 Context 和验证边界内完成时，才需要
 重新考虑多个 Agent。
+
+---
+
+[← 上一章：中文 Web GUI](chapter9.md) · [返回目录](README.md)
