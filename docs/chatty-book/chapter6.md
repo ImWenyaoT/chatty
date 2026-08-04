@@ -19,7 +19,7 @@ pnpm test
 pnpm eval:retrieval
 ```
 
-十条标注 Query 会经过真实 FTS5 检索，程序计算 `recall@5` 和 MRR。它只回答“相关文档有没有被排在前面”，不评价完整 Agent。
+十条标注 Query 会经过真实 FTS5 检索，程序计算 `HitRate@5` 和 `MRR@5`。前者统计 Top 5 是否至少命中一篇相关文档，后者衡量首篇相关文档在 Top 5 中的排名；它们不评价完整 Agent。
 
 第三层是端到端 Agent 评估：
 

@@ -5,7 +5,7 @@ from app.evals.agent import AgentCase, answer_contains, case_succeeds, reply_act
 from app.evals.retrieval import main as run_retrieval_eval
 
 
-def test_retrieval_eval_exits_nonzero_when_recall_regresses(monkeypatch) -> None:
+def test_retrieval_eval_exits_nonzero_when_hit_rate_regresses(monkeypatch) -> None:
     class EmptyCatalog:
         def retrieve_knowledge(self, **kwargs):
             return []
