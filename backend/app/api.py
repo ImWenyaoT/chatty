@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from contextlib import asynccontextmanager
@@ -74,6 +75,7 @@ class TurnBody(BaseModel):
 class SessionState:
     user_id: str
     context: ChattyContext = field(default_factory=ChattyContext)
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
 def create_app(
@@ -144,57 +146,58 @@ def create_app(
         session = sessions.get(session_id)
         if session is None:
             raise HTTPException(status_code=404, detail="session_not_found")
-        # Demo 前端在请求期间会禁用输入，因此每个 session 一次只发一轮。
-        try:
-            turn = await app_chatty.run(
-                session.user_id,
-                body.text,
-                session.context,
-            )
-        except ChattyError as error:
-            LOGGER.error("%s %s", error.code, error.diagnostics)
-            status = 409 if error.code == "conversation_exhausted" else 422
-            raise HTTPException(status_code=status, detail=error.code) from error
+        # 同一 session 串行处理，避免并发请求覆盖彼此的 context。
+        async with session.lock:
+            try:
+                turn = await app_chatty.run(
+                    session.user_id,
+                    body.text,
+                    session.context,
+                )
+            except ChattyError as error:
+                LOGGER.error("%s %s", error.code, error.diagnostics)
+                status = 409 if error.code == "conversation_exhausted" else 422
+                raise HTTPException(status_code=status, detail=error.code) from error
 
-        session.context = turn.context
+            session.context = turn.context
 
-        # recommend / clarify / exhausted 共用这些观察字段，前端不再自行推导。
-        common = {
-            "understood_as": turn.understood_as,
-            "answer": turn.reply.answer,
-            "latency_ms": turn.latency_ms,
-            "turns_left": turn.turns_left,
-            "trace": turn.trace,
-            "usage": {
-                "model_requests": turn.usage.requests,
-                "input_tokens": turn.usage.input_tokens,
-                "output_tokens": turn.usage.output_tokens,
-                "total_tokens": turn.usage.total_tokens,
-            },
-        }
-        if isinstance(turn.reply, KnowledgeReply):
+            # recommend / clarify / exhausted 共用这些观察字段，前端不再自行推导。
+            common = {
+                "understood_as": turn.understood_as,
+                "answer": turn.reply.answer,
+                "latency_ms": turn.latency_ms,
+                "turns_left": turn.turns_left,
+                "trace": turn.trace,
+                "usage": {
+                    "model_requests": turn.usage.requests,
+                    "input_tokens": turn.usage.input_tokens,
+                    "output_tokens": turn.usage.output_tokens,
+                    "total_tokens": turn.usage.total_tokens,
+                },
+            }
+            if isinstance(turn.reply, KnowledgeReply):
+                return {
+                    **common,
+                    "kind": "answer",
+                    "question": None,
+                    "products": [],
+                }
+            if isinstance(turn.reply, ClarifyReply):
+                reply_kind = "clarify"
+                if turn.turns_left == 0:
+                    reply_kind = "exhausted"
+                return {
+                    **common,
+                    "kind": reply_kind,
+                    "question": turn.reply.question,
+                    "products": [],
+                }
             return {
                 **common,
-                "kind": "answer",
+                "kind": "recommend",
                 "question": None,
-                "products": [],
+                "products": [product.model_dump() for product in turn.reply.products],
             }
-        if isinstance(turn.reply, ClarifyReply):
-            reply_kind = "clarify"
-            if turn.turns_left == 0:
-                reply_kind = "exhausted"
-            return {
-                **common,
-                "kind": reply_kind,
-                "question": turn.reply.question,
-                "products": [],
-            }
-        return {
-            **common,
-            "kind": "recommend",
-            "question": None,
-            "products": [product.model_dump() for product in turn.reply.products],
-        }
 
     # 必须最后挂载，避免静态页面遮住 /api 和 /health。
     if FRONTEND_DIST.exists():
