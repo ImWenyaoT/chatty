@@ -1,3 +1,5 @@
+"""把 Harness Evidence 投影为模型可见状态，并约束下一批 Tool 调用。"""
+
 from __future__ import annotations
 
 import json
@@ -35,6 +37,8 @@ class ToolBatch:
 
 
 def stage_for(evidence: RecommendationEvidence) -> WorkflowStage:
+    """Evidence 是唯一状态源；阶段不单独持久化，避免两份状态漂移。"""
+
     used = set(evidence.used_tools)
     support = set(evidence.required_support_tools)
     if not support.issubset(used):
@@ -63,6 +67,8 @@ def plan_tool_batch(
     evidence: RecommendationEvidence,
     calls: list[tuple[str, str]],
 ) -> ToolBatch:
+    """在 Tool 执行前冻结整批决策，避免并发调用依赖完成先后顺序。"""
+
     stage = stage_for(evidence)
     allowed = set(allowed_tools(evidence))
     accepted: set[str] = set()
@@ -79,6 +85,8 @@ def plan_tool_batch(
 
 
 def render_agent_status(evidence: RecommendationEvidence) -> str:
+    """只披露进度与下一步，不把 Harness-owned Evidence 交给模型。"""
+
     stage = stage_for(evidence)
     completed = ", ".join(dict.fromkeys(evidence.used_tools)) or "none"
     required_scopes = ", ".join(evidence.required_knowledge_scopes) or "none"
@@ -101,6 +109,8 @@ def render_agent_status(evidence: RecommendationEvidence) -> str:
 
 
 def append_agent_status(data: CallModelData[Any]) -> ModelInputData:
+    """每轮重新追加状态快照，不改写原始对话 Context。"""
+
     if data.context is None:
         return data.model_data
     status_item: Any = {
@@ -135,6 +145,8 @@ class ChattyRunHooks(RunHooks[Any]):
 async def stage_guardrail(
     data: ToolInputGuardrailData,
 ) -> ToolGuardrailFunctionOutput:
+    """执行 Hook 已冻结的批次决策，并把拒绝原因返回模型。"""
+
     tool_context = data.context
     run_context = tool_context.context
     decision = run_context.batch_decisions.get(tool_context.tool_call_id)

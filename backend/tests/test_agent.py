@@ -152,7 +152,14 @@ async def test_mixed_task_cannot_finish_as_a_knowledge_only_answer(
         evidence,
     )
 
-    async def fake_run(*args, **kwargs):
+    async def fake_run(agent, model_input, **kwargs):
+        del agent, kwargs
+        assert model_input[-2]["role"] == "user"
+        assert model_input[-2]["content"][0]["text"] == "推荐耳机并说明退货政策"
+        assert model_input[-1]["role"] == "developer"
+        harness_context = model_input[-1]["content"][0]["text"]
+        assert "<harness_context>" in harness_context
+        assert "七天无理由退货条件" in harness_context
         return type(
             "Result",
             (),

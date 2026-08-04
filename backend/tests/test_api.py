@@ -84,7 +84,7 @@ def test_http_adapter_calls_chatty_through_one_turn_interface(tmp_path) -> None:
             return ChattyTurn(
                 reply=ClarifyReply(question="预算可以提高吗？"),
                 understood_as="耳机 · ≤200 元",
-                context=ChattyContext(said=[text]),
+                context=ChattyContext(pending_user_messages=[text]),
                 turns_left=2,
                 trace=["task_framing", "evidence_validation"],
                 usage=Usage(),
