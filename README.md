@@ -174,7 +174,7 @@ flowchart LR
 | --- | --- |
 | Python | 3.12+ |
 | Node.js | 24+ |
-| pnpm | 11.18+ |
+| pnpm | 11.20+ |
 | uv | 当前稳定版 |
 | Model API | DeepSeek Responses API key |
 

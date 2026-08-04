@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "packageManager": "pnpm@11.18.0",
+  "packageManager": "pnpm@11.20.0",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -22,7 +22,7 @@
     "@vitejs/plugin-react": "^6.0.4",
     "oxlint": "^1.75.0",
     "prettier": "^3.9.6",
-    "typescript": "~6.0.2",
+    "typescript": "~7.0.2",
     "vite": "^8.2.0"
   }
 }
