@@ -15,7 +15,8 @@ cp .env.example .env.local
 pnpm dev
 ```
 
-打开 `http://localhost:5173`。`pnpm dev` 会同时启动中文 Web GUI 与 API。
+打开 `http://localhost:5173`。`pnpm dev` 会同时启动中文 Web GUI 与 API；界面包含对话和
+只读 SQLite 数据页，并在每轮完成后展示 Harness Trace、耗时与 Token Usage。
 
 配置优先级为 `.env.local > .env > 系统环境变量`。也支持 `OPENAI_API_KEY`、
 `OPENAI_BASE_URL` 和 `MODEL_ID` 这些兼容变量；默认使用 DeepSeek。
@@ -30,7 +31,7 @@ pnpm dev
 ```bash
 pnpm test             # 确定性测试，不联网
 pnpm eval:retrieval   # FTS5 检索评测，不联网
-pnpm eval:agent       # 真实 DeepSeek + Harness 端到端评估
+pnpm eval:agent       # 真实 DeepSeek + 完整 Chatty.run() 端到端评估
 pnpm run check        # lint、typecheck、test、build
 ```
 

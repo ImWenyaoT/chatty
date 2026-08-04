@@ -16,7 +16,7 @@ Chatty 让 Model 只生成一个推荐草稿：
 
 | # | 检查 | 稳定错误码 |
 | --- | --- | --- |
-| 1 | 五个 Tool 都执行，并且前三个遵守依赖顺序 | `required_tools_not_used` |
+| 1 | 当前 TaskFrame 要求的 Tool 已执行；商品路径前三步遵守依赖顺序 | `required_tools_not_used` |
 | 2 | 知识检索至少命中一条内容 | `knowledge_not_retrieved` |
 | 3 | 当前用户画像已经加载 | `profile_not_loaded` |
 | 4 | 推荐 ID 属于商品搜索的召回集合 | `product_not_recalled` |
@@ -45,7 +45,7 @@ Model Draft
 
 代码里还有两个值得注意的接口位置：
 
-- `model_provider.py` 隔离 DeepSeek Responses 接入。Need Parser 和 Agents SDK 共用同一份模型配置。
+- `model_provider.py` 隔离 DeepSeek Responses 接入。Task Framer 和主 Agent Loop 共用同一份模型配置。
 - `catalog.py` 隔离 Tool 与 SQL。Tool 只表达业务查询，测试可以给 Catalog 使用独立 SQLite。
 
 这两个位置让模型接入、业务数据和 Agent Loop 各自集中，但没有再增加一层只负责转发的抽象。

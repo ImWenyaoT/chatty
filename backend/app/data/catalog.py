@@ -5,8 +5,8 @@ import re
 import sqlite3
 from pathlib import Path
 
-from app.database import DATA_DIR, Database, SeedDataError, segment_for_index
-from app.models import (
+from app.data.database import DATA_DIR, Database, SeedDataError, segment_for_index
+from app.data.models import (
     KnowledgeHit,
     MarketingStrategy,
     Product,

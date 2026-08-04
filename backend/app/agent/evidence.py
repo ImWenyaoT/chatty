@@ -10,9 +10,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Final, Literal
 
+from agents.usage import Usage
 from pydantic import BaseModel, ConfigDict
 
-from app.models import KnowledgeHit, RecommendationDraftItem, UserProfile
+from app.data.models import KnowledgeHit, RecommendationDraftItem, UserProfile
 
 ToolName = Literal[
     "get_user_profile",
@@ -45,11 +46,22 @@ class RecommendationEvidence:
 
     profile: UserProfile | None = None
     knowledge: list[KnowledgeHit] = field(default_factory=list)
+    general_knowledge_hits: int = 0
     recalled_product_ids: set[str] = field(default_factory=set)
+    recalled_product_order: list[str] = field(default_factory=list)
     in_stock_product_ids: set[str] = field(default_factory=set)
+    in_stock_product_order: list[str] = field(default_factory=list)
     knowledge_product_ids: set[str] = field(default_factory=set)
     used_tools: list[str] = field(default_factory=list)
     call_log: list[str] = field(default_factory=list)
+    blocked_attempts: list[str] = field(default_factory=list)
+    required_support_tools: tuple[str, ...] = (
+        "retrieve_knowledge",
+        "get_marketing_strategy",
+    )
+    usage: Usage = field(default_factory=Usage)
+    completed_knowledge_scopes: set[str] = field(default_factory=set)
+    required_knowledge_scopes: tuple[str, ...] = ()
 
 
 class EvidenceSnapshot(BaseModel):
@@ -81,6 +93,12 @@ def snapshot_evidence(evidence: RecommendationEvidence) -> EvidenceSnapshot:
         knowledge_hits=len(evidence.knowledge),
         call_log=list(evidence.call_log),
     )
+
+
+def record_run_usage(evidence: RecommendationEvidence, usage: Usage) -> None:
+    """记录 Agents SDK 汇总的 Model 请求与 Token 用量。"""
+
+    evidence.usage.add(usage)
 
 
 def validate_tool_sequence(used_tools: Sequence[str]) -> str | None:
@@ -133,7 +151,10 @@ def record_search(
 ) -> None:
     """记录商品搜索真正返回过的商品 ID。"""
 
-    evidence.recalled_product_ids.update(product_ids)
+    for product_id in product_ids:
+        if product_id not in evidence.recalled_product_ids:
+            evidence.recalled_product_order.append(product_id)
+        evidence.recalled_product_ids.add(product_id)
     evidence.used_tools.append("search_products")
 
 
@@ -143,7 +164,10 @@ def record_inventory(
 ) -> None:
     """记录已经确认有库存的商品 ID。"""
 
-    evidence.in_stock_product_ids.update(product_ids)
+    for product_id in product_ids:
+        if product_id not in evidence.in_stock_product_ids:
+            evidence.in_stock_product_order.append(product_id)
+        evidence.in_stock_product_ids.add(product_id)
     evidence.used_tools.append("check_inventory")
 
 
@@ -151,10 +175,15 @@ def record_knowledge(
     evidence: RecommendationEvidence,
     hits: Sequence[KnowledgeHit],
     grounded_product_ids: Sequence[str],
+    *,
+    scope: str,
 ) -> None:
     """记录检索命中，以及这些知识能够支撑的商品 ID。"""
 
     evidence.knowledge.extend(hits)
+    evidence.completed_knowledge_scopes.add(scope)
+    if scope == "general":
+        evidence.general_knowledge_hits += len(hits)
     evidence.knowledge_product_ids.update(grounded_product_ids)
     evidence.used_tools.append("retrieve_knowledge")
 

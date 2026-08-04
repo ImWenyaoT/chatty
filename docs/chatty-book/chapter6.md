@@ -1,6 +1,7 @@
 # 第 6 章：如何评估 Chatty
 
-只测试某个函数是否返回预期值，还不足以说明一个 Agent 可以工作。Chatty 的评估需要覆盖 Model、Tool Loop、Harness 和 SQLite 组成的完整系统。
+只测试某个函数是否返回预期值，还不足以说明一个 Agent 可以工作。Chatty 的评估需要覆盖
+Model、包含 Tool Loop 的 Harness，以及 SQLite 组成的完整系统。
 
 项目保留三层评估。
 
@@ -26,7 +27,12 @@ pnpm eval:retrieval
 pnpm eval:agent
 ```
 
-它调用真实 DeepSeek，让完整的 `Model + Harness` 处理一组购物任务。每条任务都用代码检查：应该推荐还是澄清、商品类目和预算是否正确、库存是否大于零，以及最终字段是否与 SQLite 一致。
+它通过 `Chatty.run()` 调用真实 DeepSeek，让完整的 Task Framer、`Model + Harness` 处理
+商品推荐、政策问答和混合请求。
+每条任务都用代码检查：应该推荐、回答还是澄清，商品类目和预算是否正确、库存是否
+大于零，以及最终字段是否与 SQLite 一致。评估直接复用 Agents SDK `RunResult` 汇总的
+Model 请求数与 Token Usage，并记录覆盖需求解析与主 Agent 的端到端延迟；不另建 Trace
+或 Eval 平台。政策用例还检查回答是否包含由知识文档确定的必要事实。
 
 这些事实可以由程序直接判断，因此不需要再让另一个语言模型打分。任何价格、库存或商品 ID 错误都是硬失败，而不是“整体看起来还不错”。
 

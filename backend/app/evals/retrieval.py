@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from app.catalog import Catalog
+from app.data.catalog import Catalog
 
 
 @dataclass(frozen=True)
@@ -34,43 +34,51 @@ CASES = [
 ]
 
 
-def main() -> None:
-    catalog = Catalog()
+def evaluate_retrieval(catalog: Catalog) -> dict[str, int | float]:
     hits = 0
     reciprocal_rank_total = 0.0
+    for case in CASES:
+        document_ids = [
+            hit.doc_id
+            for hit in catalog.retrieve_knowledge(
+                query=case.query,
+                categories=case.categories,
+                product_ids=case.product_ids,
+                limit=5,
+            )
+        ]
+        rank: int | None = None
+        for index, doc_id in enumerate(document_ids):
+            if doc_id in case.relevant_document_ids:
+                rank = index
+                break
+        if rank is not None:
+            hits += 1
+            reciprocal_rank_total += 1 / (rank + 1)
+
+    return {
+        "cases": len(CASES),
+        "recall_at_5": hits / len(CASES),
+        "mrr": round(reciprocal_rank_total / len(CASES), 4),
+    }
+
+
+def main() -> None:
+    catalog = Catalog()
     try:
-        for case in CASES:
-            document_ids = [
-                hit.doc_id
-                for hit in catalog.retrieve_knowledge(
-                    query=case.query,
-                    categories=case.categories,
-                    product_ids=case.product_ids,
-                    limit=5,
-                )
-            ]
-            rank: int | None = None
-            for index, doc_id in enumerate(document_ids):
-                if doc_id in case.relevant_document_ids:
-                    rank = index
-                    break
-            if rank is not None:
-                hits += 1
-                reciprocal_rank_total += 1 / (rank + 1)
+        metrics = evaluate_retrieval(catalog)
     finally:
         catalog.close()
 
     print(
         json.dumps(
-            {
-                "cases": len(CASES),
-                "recall_at_5": hits / len(CASES),
-                "mrr": round(reciprocal_rank_total / len(CASES), 4),
-            },
+            metrics,
             ensure_ascii=False,
             indent=2,
         )
     )
+    if metrics["recall_at_5"] < 1:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

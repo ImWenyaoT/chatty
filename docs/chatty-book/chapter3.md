@@ -24,7 +24,10 @@ JSON 和 JSONL 文件只负责提供可读的初始化种子。启动时，`data
 索引和查询两侧都会处理中文分词，FTS5 负责全文匹配，BM25 负责排序。同义词只扩展
 查询词，不修改知识原文，因此检索结果仍能回到可读、可追踪的原始内容。
 
-检索使用 SQLite FTS5 和 BM25。Agent 通过 `retrieve_knowledge` Tool 提交 Query、类目和商品 ID，检索结果进入 Model Context，参与推荐理由生成。如果第一次结果不合适，Agent 可以调整 Query 再搜一次。
+检索使用 SQLite FTS5 和 BM25。离线阶段只负责分块与建索引，不调用 Model。在线阶段由
+Agent 调用 `retrieve_knowledge`：`general` scope 检索政策等通用知识，`product` scope 由
+Harness 自动附加当前类目与在售商品 ID。Tool Result 进入 Model Context；如果第一次结果
+不足，Agent 可以调整 Query 再检索，Harness 最多允许三次。
 
 ```text
 固定检索：用户需求 → 检索一次 → Model → 答案
@@ -35,6 +38,15 @@ Chatty：用户需求 → Agent Loop → retrieve_knowledge
                                   → 生成答案
 ```
 
-因此，RAG 不只是 FTS5 的一次查询，而是从知识检索、结果进入 Context，到 Model 使用知识生成推荐的完整过程。由于检索由 Agent 在循环中调用，Chatty 使用的是 Agentic RAG。
+因此，RAG 不只是 FTS5 的一次查询，而是从知识检索、结果进入 Context，到 Model 使用知识
+生成回答的完整过程。政策问答与商品推荐都不在 Agent Loop 前预取知识；由于检索由 Agent
+观察结果后主动发起或改写，Chatty 使用的是最小 Agentic RAG。
+
+这也是一种单跳的渐进式披露：Model 只常驻看到 `retrieve_knowledge` 的 Tool Interface，
+不会看到完整知识库；调用后只把命中的少量原文 Chunk 放进 Context。它与 Claude Code
+Skills 的“先看到名称和简述，选中后再加载正文”采用同一原则，但 Chatty 当前文档短、
+数据量小，因此把“定位内容”和“读取内容”合并在一次检索中，避免额外一次 Model 往返。
+只有当检索评测显示返回内容过长或无关 Context 明显增加时，才需要拆成 `search` 与 `read`
+两级披露。
 
 当前数据规模小、关键词和商品 ID 都很明确，FTS5 已经足够。向量数据库、Reranker 或 GraphRAG 只有在现有检索无法满足数据规模和语义召回时才有引入价值。

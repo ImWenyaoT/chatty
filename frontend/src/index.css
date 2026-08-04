@@ -53,6 +53,10 @@ body {
   flex-direction: column;
 }
 
+.app.data-mode {
+  max-width: 72rem;
+}
+
 header {
   display: flex;
   align-items: flex-start;
@@ -67,6 +71,41 @@ h1 {
   font-size: 1.25rem;
   font-weight: 600;
   letter-spacing: 0.02em;
+}
+
+.brand {
+  min-width: 0;
+}
+
+.primary-tabs,
+.section-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+button.tab {
+  padding: 0.375rem 0.625rem;
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--dim);
+  font-size: 0.8125rem;
+}
+
+button.tab:hover {
+  color: var(--ink);
+}
+
+button.tab.active {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.read-only {
+  color: var(--dim);
+  font-size: 0.8125rem;
 }
 
 .hint {
@@ -157,6 +196,28 @@ main {
   color: var(--dim);
   font-size: 0.8125rem;
   animation: pulse 1.4s ease-in-out infinite;
+}
+
+.run-trace {
+  align-self: flex-start;
+  max-width: 100%;
+  color: var(--dim);
+  font-size: 0.75rem;
+}
+
+.run-trace summary {
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+.run-trace ol {
+  margin: 0.5rem 0 0.25rem;
+  padding-left: 1.25rem;
+}
+
+.run-trace p {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 @keyframes pulse {
@@ -286,4 +347,99 @@ button.link {
 code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.8125rem;
+}
+
+.catalog-browser {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.catalog-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.catalog-heading h2 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.catalog-search {
+  display: grid;
+  grid-template-columns: auto minmax(12rem, 24rem);
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--dim);
+  font-size: 0.8125rem;
+}
+
+.catalog-search input {
+  width: 100%;
+}
+
+.table-scroll {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 0.625rem;
+  background: var(--panel);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+th,
+td {
+  padding: 0.625rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  color: var(--dim);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+tbody tr:hover {
+  background: color-mix(in srgb, var(--panel) 90%, var(--dim));
+}
+
+.cell-detail {
+  display: block;
+  color: var(--dim);
+  font-size: 0.75rem;
+}
+
+.numeric {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+  text-align: right;
+  white-space: nowrap;
+}
+
+.out-of-stock {
+  color: var(--danger);
+}
+
+.empty {
+  margin: 1rem 0;
+  color: var(--dim);
+  text-align: center;
 }

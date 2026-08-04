@@ -3,9 +3,9 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from app.catalog import Catalog, CatalogError
-from app.database import DATA_DIR, segment_for_index, split_into_chunks
-from app.models import (
+from app.data.catalog import Catalog, CatalogError
+from app.data.database import DATA_DIR, segment_for_index, split_into_chunks
+from app.data.models import (
     AgentDraft,
     RecommendationDraftItem,
     RecommendationRequest,
@@ -79,6 +79,29 @@ def test_search_ranks_by_profile_and_inventory_filters(catalog: Catalog) -> None
 def test_knowledge_rejects_an_empty_query(catalog: Catalog) -> None:
     with pytest.raises(CatalogError, match="empty_knowledge_query"):
         catalog.retrieve_knowledge(query=" ", categories=[], product_ids=[], limit=3)
+
+
+@pytest.mark.parametrize(
+    "query, expected_doc_id",
+    [
+        ("快递公司", "K053"),
+        ("退换货政策", "K054"),
+        ("七天无理由退货条件", "K054"),
+    ],
+)
+def test_policy_queries_recall_policy_documents(
+    catalog: Catalog,
+    query: str,
+    expected_doc_id: str,
+) -> None:
+    hits = catalog.retrieve_knowledge(
+        query=query,
+        categories=[],
+        product_ids=[],
+        limit=3,
+    )
+
+    assert expected_doc_id in {hit.doc_id for hit in hits}
 
 
 def test_finalize_uses_database_truth_and_sanitizes_copy(catalog: Catalog) -> None:

@@ -19,13 +19,13 @@ FastAPI HTTP 层（`backend/app/api.py`）**。后半条不变——外部数据
 知识检索」，加一张会话表就是给它加第二种职责。演示场景重启丢会话可以接受；真要持久化，
 那时再单独决定。
 
-**`Conversation` 提供一轮入口 `send()`，而不是让 HTTP 层自己拼历史。**
-HTTP 是一轮一个请求；若让 HTTP 层绕开 `Conversation` 直接调 Agent，
+**Chatty Agent 提供一轮入口 `run()`，而不是让 HTTP 层自己拼历史。**
+HTTP 是一轮一个请求；若让 HTTP 层绕开 Chatty Interface 直接调 Model，
 就会把 `{"action":"clarify"}` 协议形状和会话历史拼装分散到多个调用方。
-所以 `send()` 承担一轮，协议仍然只有一份。
+所以 `Chatty.run()` 承担一轮，`ChattyContext` 保存会话状态，协议仍然只有一份。
 
 ## 不变的边界
 
-- Web GUI 是唯一用户交互入口；HTTP 层通过 `Conversation` 进入 Agent/Harness，不复制业务逻辑。
+- Web GUI 是唯一用户交互入口；HTTP 层只把请求交给 `Chatty.run()`，不复制业务逻辑。
 - 前端不引 web font，用系统字体（CJK 为主，web font 体积不划算）。
 - 前端不碰业务事实：商品、价格、库存仍然只从 SQLite 重查后由后端给出。
