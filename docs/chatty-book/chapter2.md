@@ -65,7 +65,7 @@ sequenceDiagram
     participant D as SQLite
 
     U->>F: 自然语言需求
-    F->>A: POST /turns
+    F->>A: POST /api/sessions/{session_id}/turns
     A->>H: Chatty.run(Context In)
     H->>M: 结构化 Task Framing
     M-->>H: 商品需求 + 知识问题

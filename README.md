@@ -94,7 +94,7 @@ sequenceDiagram
     participant D as SQLite
 
     U->>F: 自然语言需求
-    F->>A: POST /turns
+    F->>A: POST /api/sessions/{session_id}/turns
     A->>H: Chatty.run(Context In)
     H->>M: 结构化 Task Framing
     M-->>H: 商品需求 + 知识问题
@@ -235,7 +235,8 @@ chatty/
 
 ## 评估与验证
 
-Chatty 使用两种不同性质的验证，避免把代码测试和 Agent 效果混为一谈。
+Chatty 使用两类执行方式、三个验证层级：确定性测试与 Retrieval Eval 不调用 Model，
+Agent Eval 调用真实 Model。这样既能快速定位代码和检索回归，也能检查完整 Agent 效果。
 
 | 层级 | 是否调用 Model | 当前覆盖 / 指标 | 用途 |
 | --- | --- | --- | --- |
