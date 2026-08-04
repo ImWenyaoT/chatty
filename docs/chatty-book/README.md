@@ -4,6 +4,8 @@ Chatty 是一个中文电商推荐 Agent。用户可以直接说“我要一个 
 
 这本书从一次请求出发，逐步解释 Chatty 如何工作，以及为什么代码被组织成现在的样子。阅读不需要预先了解 AI Agent；涉及的新概念都会在出现时说明。
 
+![Chatty 完成商品推荐与退货政策 mixed-goal 请求](../assets/chatty-conversation.png)
+
 ## 阅读顺序
 
 1. [Agent 与 Harness](chapter1.md)

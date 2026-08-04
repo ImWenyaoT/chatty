@@ -18,6 +18,13 @@ Trace 展示“理解需求、检索知识、生成回答、校验 Evidence”�
 隐藏的 Chain-of-Thought。数据页只读展示 SQLite 中实际查询的商品和演示画像，方便 Demo
 时核对价格与库存；JSON/JSONL 仍只是初始化种子。
 
+下面两张图来自同一次真实 DeepSeek Demo。第一张展示 mixed-goal 对话与运行指标，第二张
+展示运行时 SQLite 数据：
+
+![Chatty mixed-goal 对话与运行指标](../assets/chatty-conversation.png)
+
+![Chatty 只读 SQLite 商品与用户画像](../assets/chatty-catalog.png)
+
 前端不计算推荐分数，也不修正价格和库存。它只调用 HTTP API 并渲染后端返回的结果，
 所有业务规则仍然位于 Chatty Agent（Model + Harness）和 Catalog 中。FastAPI 只是
 Frontend 与 Chatty Agent 之间的 HTTP Adapter。

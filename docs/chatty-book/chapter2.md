@@ -52,6 +52,38 @@ Chatty 的会话最多三轮，并保存在服务端内存中。只有未完成�
 DeepSeek Responses API 不负责保存 Chatty 的业务会话。结构化 history 由服务端内存和
 Harness 管理，因此这里不依赖 `previous_response_id`。
 
+把这些 Context 放回一次完整请求中，可以看到哪些信息进入 Model、哪些事实始终由 Harness
+和 SQLite 掌握：
+
+```mermaid
+sequenceDiagram
+    actor U as User
+    participant F as Frontend
+    participant A as FastAPI
+    participant H as Chatty Harness
+    participant M as DeepSeek Model
+    participant D as SQLite
+
+    U->>F: 自然语言需求
+    F->>A: POST /api/sessions/{session_id}/turns
+    A->>H: Chatty.run(Context In)
+    H->>M: 结构化 Task Framing
+    M-->>H: 商品需求 + 知识问题
+    H->>D: 用户画像 → 商品搜索 → 库存检查
+    D-->>H: RecommendationContext
+    H->>M: 用户原话 + Harness Context
+    M->>H: retrieve_knowledge(general / product)
+    H->>D: FTS5 + BM25 检索
+    D-->>H: 知识命中
+    H-->>M: Model-visible Tool Result
+    M-->>H: 结构化 AgentDraft
+    H->>H: Evidence 校验
+    H->>D: 商品、价格、库存重查
+    H-->>A: Context Out + Reply
+    A-->>F: 稳定 JSON
+    F-->>U: 推荐卡片 + 政策答案
+```
+
 不同 Context 的位置和生命周期如下：
 
 | Context | 所在位置 | 生命周期 |
