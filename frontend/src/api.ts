@@ -1,8 +1,7 @@
 /**
  * 后端接口的类型与调用。
  *
- * 这些类型和运行时 Decoder 手写维护，因为当前 API 很小；引入代码生成工具链的成本
- * 高于这里的显式校验。端点契约变化时，Decoder 会让不完整的响应直接失败。
+ * 前后端在同一个 Demo 仓库中，共享一份人工维护的接口约定。
  */
 
 /** 商品的全部字段都由后端从 SQLite 重查后给出，前端不做任何业务计算。 */
@@ -100,156 +99,11 @@ export class ApiError extends Error {
   }
 }
 
-type Decoder<T> = (value: unknown) => T
-
 const isRecord = (value: unknown): value is Record<string, unknown> => {
-  // JavaScript 会把 null 也归类为 object，所以这里要单独排除。
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-const isStringArray = (value: unknown): value is string[] => {
-  if (!Array.isArray(value)) return false
-  return value.every((item) => typeof item === 'string')
-}
-
-const invalidResponse = (): never => {
-  throw new ApiError('invalid_response')
-}
-
-const decodeProduct = (value: unknown): Product => {
-  if (!isRecord(value)) return invalidResponse()
-
-  const hasIdentity =
-    typeof value.product_id === 'string' &&
-    typeof value.name === 'string' &&
-    typeof value.category === 'string' &&
-    typeof value.brand === 'string'
-  if (!hasIdentity) return invalidResponse()
-
-  const hasInventory =
-    typeof value.price_cents === 'number' &&
-    typeof value.stock === 'number' &&
-    typeof value.low_stock === 'boolean'
-  if (!hasInventory) return invalidResponse()
-
-  const hasCopy =
-    isStringArray(value.tags) &&
-    typeof value.reason === 'string' &&
-    typeof value.marketing_copy === 'string'
-  if (!hasCopy) return invalidResponse()
-
-  return value as unknown as Product
-}
-
-const decodeCatalogUser = (value: unknown): CatalogUser => {
-  if (!isRecord(value)) return invalidResponse()
-  if (typeof value.id !== 'string') return invalidResponse()
-  if (typeof value.label !== 'string') return invalidResponse()
-  return { id: value.id, label: value.label }
-}
-
-const decodeCatalog = (value: unknown): CatalogInfo => {
-  if (!isRecord(value)) return invalidResponse()
-  if (!isStringArray(value.categories)) return invalidResponse()
-  if (!Array.isArray(value.users)) return invalidResponse()
-  if (typeof value.product_count !== 'number') return invalidResponse()
-  if (typeof value.model_id !== 'string') return invalidResponse()
-
-  const users = value.users.map(decodeCatalogUser)
-  return {
-    categories: value.categories,
-    users,
-    product_count: value.product_count,
-    model_id: value.model_id,
-  }
-}
-
-const decodeCatalogProduct = (value: unknown): CatalogProduct => {
-  if (!isRecord(value)) return invalidResponse()
-  if (typeof value.product_id !== 'string') return invalidResponse()
-  if (typeof value.name !== 'string') return invalidResponse()
-  if (typeof value.category !== 'string') return invalidResponse()
-  if (typeof value.price_cents !== 'number') return invalidResponse()
-  if (typeof value.description !== 'string') return invalidResponse()
-  if (typeof value.brand !== 'string') return invalidResponse()
-  if (typeof value.seller_id !== 'string') return invalidResponse()
-  if (typeof value.stock !== 'number') return invalidResponse()
-  if (!isStringArray(value.tags)) return invalidResponse()
-  if (typeof value.popularity_score !== 'number') return invalidResponse()
-  if (typeof value.source !== 'string') return invalidResponse()
-  return value as unknown as CatalogProduct
-}
-
-const decodeCatalogProfile = (value: unknown): CatalogProfile => {
-  if (!isRecord(value)) return invalidResponse()
-  if (typeof value.user_id !== 'string') return invalidResponse()
-  if (typeof value.segment !== 'string') return invalidResponse()
-  if (typeof value.display_name !== 'string') return invalidResponse()
-  if (typeof value.profile_label !== 'string') return invalidResponse()
-  if (!isStringArray(value.preferred_categories)) return invalidResponse()
-  if (typeof value.min_price_cents !== 'number') return invalidResponse()
-  if (typeof value.max_price_cents !== 'number') return invalidResponse()
-  if (!isStringArray(value.recent_views)) return invalidResponse()
-  if (!isStringArray(value.recent_purchases)) return invalidResponse()
-  return value as unknown as CatalogProfile
-}
-
-const decodeCatalogData = (value: unknown): CatalogData => {
-  if (!isRecord(value)) return invalidResponse()
-  if (!Array.isArray(value.products)) return invalidResponse()
-  if (!Array.isArray(value.profiles)) return invalidResponse()
-  return {
-    products: value.products.map(decodeCatalogProduct),
-    profiles: value.profiles.map(decodeCatalogProfile),
-  }
-}
-
-const decodeSession = (value: unknown): { session_id: string } => {
-  if (!isRecord(value)) return invalidResponse()
-  if (typeof value.session_id !== 'string') return invalidResponse()
-  return { session_id: value.session_id }
-}
-
-const decodeTurn = (value: unknown): Turn => {
-  if (!isRecord(value)) return invalidResponse()
-
-  const validKinds = ['answer', 'recommend', 'clarify', 'exhausted']
-  if (!validKinds.includes(String(value.kind))) return invalidResponse()
-  if (typeof value.understood_as !== 'string') return invalidResponse()
-  if (typeof value.answer !== 'string' && value.answer !== null) return invalidResponse()
-  if (typeof value.question !== 'string' && value.question !== null) return invalidResponse()
-  if (!Array.isArray(value.products)) return invalidResponse()
-  if (typeof value.latency_ms !== 'number') return invalidResponse()
-  if (typeof value.turns_left !== 'number') return invalidResponse()
-  if (!isStringArray(value.trace)) return invalidResponse()
-  if (!isRecord(value.usage)) return invalidResponse()
-  if (typeof value.usage.model_requests !== 'number') return invalidResponse()
-  if (typeof value.usage.input_tokens !== 'number') return invalidResponse()
-  if (typeof value.usage.output_tokens !== 'number') return invalidResponse()
-  if (typeof value.usage.total_tokens !== 'number') return invalidResponse()
-  if ((value.kind === 'clarify' || value.kind === 'exhausted') && !value.question) {
-    return invalidResponse()
-  }
-  if (value.kind === 'answer' && !value.answer) return invalidResponse()
-  return {
-    kind: value.kind as Turn['kind'],
-    understood_as: value.understood_as,
-    answer: value.answer,
-    question: value.question,
-    products: value.products.map(decodeProduct),
-    latency_ms: value.latency_ms,
-    turns_left: value.turns_left,
-    trace: value.trace,
-    usage: {
-      model_requests: value.usage.model_requests,
-      input_tokens: value.usage.input_tokens,
-      output_tokens: value.usage.output_tokens,
-      total_tokens: value.usage.total_tokens,
-    },
-  }
-}
-
-async function request<T>(path: string, decode: Decoder<T>, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // 第一类失败：浏览器根本没有收到 HTTP 响应。
   let response: Response
   try {
@@ -275,32 +129,31 @@ async function request<T>(path: string, decode: Decoder<T>, init?: RequestInit):
     }
     throw new ApiError(code)
   }
-  // 第三类失败：请求成功，但响应形状和前端约定不一致。
+  // JSON 损坏仍明确报错；字段契约由同仓的 FastAPI 与 TypeScript 类型共同维护。
   try {
-    return decode(await response.json())
-  } catch (error: unknown) {
-    if (error instanceof ApiError) throw error
+    return (await response.json()) as T
+  } catch {
     throw new ApiError('invalid_response')
   }
 }
 
 export const fetchCatalog = () => {
-  return request('/api/catalog', decodeCatalog)
+  return request<CatalogInfo>('/api/catalog')
 }
 
 export const fetchCatalogData = () => {
-  return request('/api/catalog/data', decodeCatalogData)
+  return request<CatalogData>('/api/catalog/data')
 }
 
 export const createSession = (userId: string) => {
-  return request('/api/sessions', decodeSession, {
+  return request<{ session_id: string }>('/api/sessions', {
     method: 'POST',
     body: JSON.stringify({ user_id: userId }),
   })
 }
 
 export const takeTurn = (sessionId: string, text: string) => {
-  return request(`/api/sessions/${sessionId}/turns`, decodeTurn, {
+  return request<Turn>(`/api/sessions/${sessionId}/turns`, {
     method: 'POST',
     body: JSON.stringify({ text }),
   })

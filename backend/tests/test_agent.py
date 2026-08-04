@@ -177,3 +177,35 @@ async def test_mixed_task_cannot_finish_as_a_knowledge_only_answer(
     finally:
         await provider.close()
         catalog.close()
+
+
+@pytest.mark.asyncio
+async def test_unexpected_error_diagnostics_include_exception_type(
+    tmp_path, monkeypatch
+) -> None:
+    provider = ResponsesModelProvider(Settings(api_key="test-key"))
+    catalog = Catalog(tmp_path / "chatty.db")
+    executor = ChattyExecutor(catalog, provider)
+    evidence = RecommendationEvidence()
+    task_context = prepare_task_context(
+        TaskFrame(knowledge_query="退货政策"),
+        "user_active",
+        catalog,
+        evidence,
+    )
+
+    async def fail_without_message(*args, **kwargs):
+        raise RuntimeError
+
+    monkeypatch.setattr(executor, "_generate_draft", fail_without_message)
+
+    try:
+        with pytest.raises(RecommendationError) as caught:
+            await executor.respond(task_context, evidence, "退货政策")
+    finally:
+        await provider.close()
+        catalog.close()
+
+    assert caught.value.code == "recommendation_failed"
+    assert caught.value.diagnostics["cause_type"] == "RuntimeError"
+    assert caught.value.diagnostics["cause"] == ""

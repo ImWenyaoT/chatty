@@ -1,3 +1,5 @@
+"""运行主 Agent Loop，并用 Harness Evidence 校验模型草稿。"""
+
 from __future__ import annotations
 
 from typing import Any, cast
@@ -366,7 +368,10 @@ def _validate_knowledge_answer(
 
 
 def _diagnostics(evidence: RecommendationEvidence, error: Exception) -> dict[str, Any]:
+    """保留异常类型与消息，避免空消息异常在日志中变成无声失败。"""
+
     return {
         "evidence": snapshot_evidence(evidence).model_dump(),
+        "cause_type": type(error).__name__,
         "cause": str(error),
     }

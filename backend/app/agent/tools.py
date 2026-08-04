@@ -1,3 +1,5 @@
+"""主 Agent 可调用的知识检索与营销策略 Tool。"""
+
 from __future__ import annotations
 
 import json

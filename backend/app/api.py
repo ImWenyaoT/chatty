@@ -146,7 +146,7 @@ def create_app(
         session = sessions.get(session_id)
         if session is None:
             raise HTTPException(status_code=404, detail="session_not_found")
-        # 同一 session 串行处理，避免两个请求同时覆盖 history 和 turns。
+        # 同一 session 串行处理，避免并发请求覆盖彼此的 context。
         async with session.lock:
             try:
                 turn = await app_chatty.run(

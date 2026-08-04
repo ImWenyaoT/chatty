@@ -1,3 +1,5 @@
+"""把用户原话转换为简单、可校验的 TaskFrame。"""
+
 from __future__ import annotations
 
 import json
