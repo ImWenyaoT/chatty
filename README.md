@@ -7,7 +7,7 @@
 <sub>Model 负责理解需求、主动检索与生成表达；Harness + SQLite 负责流程、事实与可信输出。</sub>
 
 [![CI](https://github.com/ImWenyaoT/chatty/actions/workflows/ci.yml/badge.svg)](https://github.com/ImWenyaoT/chatty/actions/workflows/ci.yml)
-[![TypeScript](https://img.shields.io/badge/TypeScript-Node%2024%2B-3178C6?logo=typescript&logoColor=white)](server/package.json)
+[![TypeScript](https://img.shields.io/badge/TypeScript-Node%2024%2B-3178C6?logo=typescript&logoColor=white)](apps/api/package.json)
 [![Agents SDK](https://img.shields.io/badge/OpenAI-Agents%20SDK-000000)](https://openai.github.io/openai-agents-js/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -209,15 +209,17 @@ pnpm dev
 
 ```text
 chatty/
-├── server/
-│   ├── src/agent/       # Chatty Agent：Framing、Loop、Tool、Evidence、Workflow
-│   ├── src/data/        # SQLite、Catalog 与领域模型
-│   ├── src/evals/       # Retrieval Eval 与真实 DeepSeek Agent Eval
-│   ├── src/api.ts       # Hono HTTP Adapter
-│   ├── src/paths.ts     # 仓库布局的唯一定义
-│   └── tests/           # node:test 确定性测试与 golden 基线
-├── frontend/            # React + Vite 桌面 Demo
-├── data/                # SQLite 初始化种子，不是运行时查询接口
+├── apps/
+│   ├── api/
+│   │   ├── src/agent/   # Chatty Agent：Framing、Loop、Tool、Evidence、Workflow
+│   │   ├── src/data/    # SQLite、Catalog 与领域模型
+│   │   ├── src/evals/   # Retrieval Eval 与真实 DeepSeek Agent Eval
+│   │   ├── src/api.ts   # Hono HTTP Adapter
+│   │   ├── src/paths.ts # 仓库根位置，供仓库级 .env 使用
+│   │   └── tests/       # node:test 确定性测试与 golden 基线
+│   └── web/             # React + Vite 桌面 Demo，自身导出 DIST_DIR
+├── packages/
+│   └── seed-data/       # SQLite 初始化种子，自身导出 DATA_DIR，不是运行时查询接口
 └── docs/
     ├── chatty-book/     # 从请求到架构的十章说明
     └── adr/             # 架构决策记录
@@ -225,12 +227,12 @@ chatty/
 
 建议代码阅读顺序：
 
-1. [`server/src/agent/chatty.ts`](server/src/agent/chatty.ts)：单一 `run()` Interface 与 Context In/Out。
-2. [`server/src/agent/framing.ts`](server/src/agent/framing.ts)：把自然语言映射为 `TaskFrame`。
-3. [`server/src/agent/executor.ts`](server/src/agent/executor.ts)：生成 Draft，再以 Evidence 收敛为 Reply。
-4. [`server/src/agent/workflow.ts`](server/src/agent/workflow.ts)：状态栏、批次裁决与 Tool Guardrail。
-5. [`server/src/agent/evidence.ts`](server/src/agent/evidence.ts)：Harness-owned Evidence 与确定性校验。
-6. [`server/src/data/catalog.ts`](server/src/data/catalog.ts)：SQLite 查询、BM25 检索与最终事实重查。
+1. [`apps/api/src/agent/chatty.ts`](apps/api/src/agent/chatty.ts)：单一 `run()` Interface 与 Context In/Out。
+2. [`apps/api/src/agent/framing.ts`](apps/api/src/agent/framing.ts)：把自然语言映射为 `TaskFrame`。
+3. [`apps/api/src/agent/executor.ts`](apps/api/src/agent/executor.ts)：生成 Draft，再以 Evidence 收敛为 Reply。
+4. [`apps/api/src/agent/workflow.ts`](apps/api/src/agent/workflow.ts)：状态栏、批次裁决与 Tool Guardrail。
+5. [`apps/api/src/agent/evidence.ts`](apps/api/src/agent/evidence.ts)：Harness-owned Evidence 与确定性校验。
+6. [`apps/api/src/data/catalog.ts`](apps/api/src/data/catalog.ts)：SQLite 查询、BM25 检索与最终事实重查。
 
 ## 评估与验证
 

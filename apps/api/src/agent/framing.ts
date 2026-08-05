@@ -8,6 +8,7 @@
 
 import {
   Agent,
+  extractAllTextOutput,
   type RunErrorHandlerInput,
   type RunErrorHandlerResult,
 } from "@openai/agents";
@@ -21,7 +22,6 @@ import {
 } from "../data/models.ts";
 import type { ModelProvider } from "../model-provider.ts";
 import { round } from "../data/round.ts";
-import { extractResponseText } from "./response-text.ts";
 
 /**
  * DeepSeek Responses API 可接受的扁平 structured output。
@@ -80,7 +80,7 @@ export function recoverInvalidTaskFrame(
   data: RunErrorHandlerInput<unknown, TaskFrameAgent>,
 ): RunErrorHandlerResult<TaskFrameAgent> {
   const wire = parseTaskFrameWireOutput(
-    extractResponseText(data.runData.rawResponses),
+    extractAllTextOutput(data.runData.newItems),
   );
   return { finalOutput: wire };
 }

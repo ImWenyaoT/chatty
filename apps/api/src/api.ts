@@ -8,6 +8,7 @@ import { existsSync } from "node:fs";
 import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { DIST_DIR } from "@chatty/web/paths";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -19,7 +20,6 @@ import {
   ResponsesModelProvider,
   type ModelProvider,
 } from "./model-provider.ts";
-import { FRONTEND_DIST } from "./paths.ts";
 import { SessionStore } from "./session-store.ts";
 
 const createSessionSchema = z.object({
@@ -151,12 +151,12 @@ export function createApp(dependencies: AppDependencies = {}) {
 
 /** 必须最后挂载，避免静态页面遮住 /api 和 /health。 */
 export function mountFrontend(app: Hono): void {
-  if (!existsSync(FRONTEND_DIST)) {
-    console.warn("frontend_dist_missing:", fileURLToPath(FRONTEND_DIST));
+  if (!existsSync(DIST_DIR)) {
+    console.warn("frontend_dist_missing:", fileURLToPath(DIST_DIR));
     return;
   }
   // serveStatic 的 root 相对 process.cwd()。
-  const root = relative(process.cwd(), fileURLToPath(FRONTEND_DIST));
+  const root = relative(process.cwd(), fileURLToPath(DIST_DIR));
   app.use("/*", serveStatic({ root }));
   app.get("/*", serveStatic({ root, path: "index.html" }));
 }

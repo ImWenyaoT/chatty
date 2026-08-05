@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { z } from "zod";
 
-import { DATA_DIR } from "../paths.ts";
+import { DATA_DIR } from "@chatty/seed-data";
 import {
   USER_SEGMENTS,
   knowledgeDocumentSchema,

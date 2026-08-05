@@ -1,5 +1,5 @@
 {
-  "name": "@chatty/server",
+  "name": "@chatty/api",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -14,6 +14,8 @@
     "lint": "oxlint"
   },
   "dependencies": {
+    "@chatty/seed-data": "workspace:*",
+    "@chatty/web": "workspace:*",
     "@hono/node-server": "^2.1.0",
     "@openai/agents": "^0.14.2",
     "hono": "^4.10.6",

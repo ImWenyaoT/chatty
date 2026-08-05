@@ -11,6 +11,7 @@
 
 import {
   Agent,
+  extractAllTextOutput,
   run,
   type AgentInputItem,
   type RunErrorHandlerInput,
@@ -40,7 +41,6 @@ import {
   type RecommendationEvidence,
 } from "./evidence.ts";
 import { productContext } from "./framing.ts";
-import { extractResponseText } from "./response-text.ts";
 import { createRunContext, type ChattyRunContext } from "./context.ts";
 import { CHATTY_TOOLS, stableStringify } from "./tools.ts";
 import { appendAgentStatus } from "./workflow.ts";
@@ -188,7 +188,7 @@ async function correctInvalidDraft(
 ): Promise<RunErrorHandlerResult<ChattyAgentType>> {
   const corrected = await run(
     buildDraftCorrectionAgent(provider),
-    extractResponseText(data.runData.rawResponses),
+    extractAllTextOutput(data.runData.newItems),
     { maxTurns: 1 },
   );
   // 纠正过程也调用了 Model，不能在统计里悄悄漏掉这次费用。

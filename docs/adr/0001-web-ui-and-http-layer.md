@@ -7,8 +7,8 @@ status: accepted
 原先的项目边界写着「不增加前端、外部数据库或向量数据库」，理由是一个月的 MVP 要控重量。
 随着项目转为简历展示，交互入口改为 Web GUI；不再维护 CLI/TUI 作为第二套产品形态。
 
-现在反转前半条：**加一个 Web 对话界面（`frontend/`，Vite + React + TypeScript）和一个
-FastAPI HTTP 层（`backend/app/api.py`，现为 `server/src/api.ts`，见 [ADR 0003](0003-typescript-migration.md)）**。后半条不变——外部数据库和向量数据库仍然不加。
+现在反转前半条：**加一个 Web 对话界面（`frontend/`，现为 `apps/web/`，Vite + React + TypeScript）和一个
+FastAPI HTTP 层（`backend/app/api.py`，现为 `apps/api/src/api.ts`，见 [ADR 0003](0003-typescript-migration.md)）**。后半条不变——外部数据库和向量数据库仍然不加。
 
 反转的理由是受众。Web GUI 能直接展示多轮澄清、推荐卡片和错误状态，避免要求体验者理解
 命令行协议。这对一个用来展示工程判断的项目是有分量的差别，不是「好看一点」。

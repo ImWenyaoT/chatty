@@ -9,7 +9,7 @@ superseded-by: 0003-typescript-migration
 > Hono。本文档中关于 Agent Loop、Tool 边界、Evidence 与配置契约的结论仍然有效。
 
 Chatty 使用 Python 后端与 TypeScript 前端。`backend/app/` 承担 Agent、Tool、Harness、
-SQLite 和 FastAPI HTTP，`frontend/` 使用 React + Vite。
+SQLite 和 FastAPI HTTP，`frontend/`（现为 `apps/web/`）使用 React + Vite。
 
 这套技术栈接近 FastAPI 官方全栈模板，也与 Luup 的目录习惯一致，但只保留 Chatty 需要的部分。
 Chatty 仍然是 Single Agent，五项能力仍然是 Tool，SQLite 仍然是商品、库存和知识检索的运行时事实源。

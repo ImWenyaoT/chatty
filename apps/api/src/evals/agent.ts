@@ -96,25 +96,29 @@ function productsValid(
   if (reply.kind !== "recommend") return true;
   if (reply.products.length === 0) return false;
 
-  return reply.products.every((product) => {
+  for (const product of reply.products) {
     const stored = productsById.get(product.product_id);
     if (stored === undefined) return false;
-    return (
-      product.name === stored.name &&
-      product.category === stored.category &&
-      product.price_cents === stored.price_cents &&
-      product.brand === stored.brand &&
-      product.stock === stored.stock &&
-      product.tags.length === stored.tags.length &&
-      product.tags.every((tag, index) => tag === stored.tags[index]) &&
-      product.stock > 0 &&
-      (testCase.maxPriceCents === undefined ||
-        product.price_cents <= testCase.maxPriceCents) &&
-      !(testCase.forbiddenProductIds ?? []).includes(product.product_id) &&
-      (testCase.expectedCategory === undefined ||
-        product.category === testCase.expectedCategory)
-    );
-  });
+
+    // 逐字段比对，模型不能改写任何一个来自 SQLite 的事实。
+    if (product.name !== stored.name) return false;
+    if (product.category !== stored.category) return false;
+    if (product.price_cents !== stored.price_cents) return false;
+    if (product.brand !== stored.brand) return false;
+    if (product.stock !== stored.stock) return false;
+    if (product.tags.join() !== stored.tags.join()) return false;
+
+    if (product.stock <= 0) return false;
+    if (testCase.maxPriceCents !== undefined) {
+      if (product.price_cents > testCase.maxPriceCents) return false;
+    }
+    if (testCase.expectedCategory !== undefined) {
+      if (product.category !== testCase.expectedCategory) return false;
+    }
+    if (testCase.forbiddenProductIds?.includes(product.product_id))
+      return false;
+  }
+  return true;
 }
 
 export function caseSucceeds(
