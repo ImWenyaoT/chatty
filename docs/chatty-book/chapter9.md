@@ -33,3 +33,7 @@ React GUI 是产品界面，不是多模态 Agent。Model 不会观察屏幕、�
 
 前端入口位于 `frontend/src/App.tsx`，数据页位于 `frontend/src/CatalogBrowser.tsx`，HTTP 类型
 位于 `frontend/src/api.ts`，后端接口位于 `backend/app/api.py`。
+
+---
+
+[← 上一章：用户画像如何逐步更新](chapter8.md) · [返回目录](README.md) · [下一章：为什么 Chatty 只有一个 Agent →](chapter10.md)

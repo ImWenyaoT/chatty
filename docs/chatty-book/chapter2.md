@@ -103,3 +103,7 @@ sequenceDiagram
 | Harness / 控制 | `backend/app/agent/workflow.py` | Evidence、整批 Tool calls | 阶段裁决、`agent_status` |
 | Harness / Tool | `backend/app/agent/tools.py` | Tool 参数、RunContext | Model-visible Result 与 Harness-owned Evidence |
 | 数据与检索 | `backend/app/data/catalog.py` | 结构化查询 | SQLite 事实与知识命中 |
+
+---
+
+[← 上一章：Agent 与 Harness](chapter1.md) · [返回目录](README.md) · [下一章：用户画像与知识检索 →](chapter3.md)

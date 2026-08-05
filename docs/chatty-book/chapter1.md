@@ -56,3 +56,7 @@ Chatty 因此既保留了 Agent 处理开放问题的能力，也让关键业务
 
 Agents SDK 负责循环和 Tool 调用，Chatty 自己的 Harness 负责业务约束、Evidence
 与最终裁决。这样标准运行循环不用重复实现，电商事实规则也不会被藏进 SDK adapter。
+
+---
+
+[返回目录](README.md) · [下一章：Context 如何流动 →](chapter2.md)

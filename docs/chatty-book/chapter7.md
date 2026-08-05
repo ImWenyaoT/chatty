@@ -14,3 +14,7 @@ Chatty 当前的事实来自 SQLite 和 RAG，输出协议由 Tool Schema 与 In
 找到可重复的失败，再判断问题来自 Model，还是 Harness 内的 Context、Tool 或控制逻辑。
 
 不训练并不表示拒绝模型能力，而是避免用昂贵且难验证的方法修复本可以由数据或代码明确解决的问题。
+
+---
+
+[← 上一章：如何评估 Chatty](chapter6.md) · [返回目录](README.md) · [下一章：用户画像如何逐步更新 →](chapter8.md)

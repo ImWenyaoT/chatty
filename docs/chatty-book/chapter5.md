@@ -53,3 +53,7 @@ flowchart LR
 - `catalog.py` 隔离 Tool 与 SQL。Tool 只表达业务查询，测试可以给 Catalog 使用独立 SQLite。
 
 这两个位置让模型接入、业务数据和 Agent Loop 各自集中，但没有再增加一层只负责转发的抽象。
+
+---
+
+[← 上一章：五个 Tool](chapter4.md) · [返回目录](README.md) · [下一章：如何评估 Chatty →](chapter6.md)
