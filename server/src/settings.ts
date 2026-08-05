@@ -9,8 +9,7 @@ import { parseEnv } from "node:util";
 
 import { z } from "zod";
 
-export const ROOT = new URL("../../", import.meta.url);
-export const FRONTEND_DIST = new URL("frontend/dist/", ROOT);
+import { REPO_ROOT } from "./paths.ts";
 
 const settingsSchema = z.object({
   apiKey: z.string().default(""),
@@ -39,7 +38,7 @@ function pick(values: Record<string, string | undefined>, ...names: string[]) {
   return undefined;
 }
 
-export function loadSettings(root: URL = ROOT): Settings {
+export function loadSettings(root: URL = REPO_ROOT): Settings {
   // 后读取的文件覆盖前面的值，所以最终优先级是
   // .env.local > .env > 系统环境变量。
   const values: Record<string, string | undefined> = {

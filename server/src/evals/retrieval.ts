@@ -4,7 +4,7 @@
  */
 
 import { Catalog } from "../data/catalog.ts";
-import { round } from "../round.ts";
+import { round } from "../data/round.ts";
 
 export type RetrievalCase = {
   query: string;

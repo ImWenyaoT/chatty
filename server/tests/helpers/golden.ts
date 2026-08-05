@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const GOLDEN_DIR = new URL("../../tests/golden/", import.meta.url);
+const GOLDEN_DIR = new URL("../fixtures/golden/", import.meta.url);
 
 export type GoldenCase = {
   name: string;

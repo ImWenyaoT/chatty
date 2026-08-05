@@ -16,7 +16,7 @@ import { z } from "zod";
 import type { ProductNeed, TaskFrame, UserContext } from "../data/models.ts";
 import { emptyUserContext, productNeedSchema, taskFrameSchema } from "../data/models.ts";
 import type { ModelProvider } from "../model-provider.ts";
-import { round } from "../round.ts";
+import { round } from "../data/round.ts";
 import { extractResponseText } from "./response-text.ts";
 
 /**

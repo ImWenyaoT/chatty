@@ -11,10 +11,10 @@ import {
   prepareTaskContext,
 } from "../src/agent/executor.ts";
 import { Catalog } from "../src/data/catalog.ts";
-import { DATA_DIR } from "../src/data/database.ts";
+import { DATA_DIR } from "../src/paths.ts";
 import { emptyUserContext } from "../src/data/models.ts";
 import type { ModelProvider } from "../src/model-provider.ts";
-import { ScriptedModel, textOutput, toolCalls } from "./scripted-model.ts";
+import { ScriptedModel, textOutput, toolCalls } from "./helpers/scripted-model.ts";
 
 async function withCatalog<T>(body: (catalog: Catalog) => T | Promise<T>): Promise<T> {
   const catalog = new Catalog(":memory:", DATA_DIR);

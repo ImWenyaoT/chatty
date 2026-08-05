@@ -5,15 +5,13 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { z } from "zod";
 
+import { DATA_DIR } from "../paths.ts";
 import {
   USER_SEGMENTS,
   knowledgeDocumentSchema,
   productSchema,
   userProfileSchema,
 } from "./models.ts";
-
-export const PROJECT_ROOT = new URL("../../../", import.meta.url);
-export const DATA_DIR = new URL("data/", PROJECT_ROOT);
 
 const CHINESE_CHARACTER = /[\u4e00-\u9fff]/gu;
 const SENTENCE_END = /(?<=[。！？；])/u;
