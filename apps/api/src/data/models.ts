@@ -3,7 +3,7 @@
  *
  * 模型只描述数据形状，不包含数据库查询或 Agent 流程。
  *
- * 对应 Python 侧的 Pydantic Model：schema 负责运行时校验，`z.infer` 提供静态类型。
+ * schema 负责运行时校验，`z.infer` 提供静态类型。
  * 字段名保持 snake_case，因为它们同时是 SQLite 列名、种子数据键名和 HTTP 契约字段。
  */
 
@@ -205,5 +205,5 @@ export type KnowledgeReply = {
   answer: string;
 };
 
-/** Python 用 isinstance 区分三种 Reply；TS 用 `kind` 判别联合。 */
+/** 三种 Reply 通过 `kind` 组成判别联合。 */
 export type Reply = RecommendationResponse | ClarifyReply | KnowledgeReply;

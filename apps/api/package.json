@@ -4,6 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "packageManager": "pnpm@11.20.0",
+  "exports": {
+    "./app": "./src/api.ts"
+  },
   "scripts": {
     "dev": "node --watch src/main.ts",
     "start": "node src/main.ts",
@@ -15,10 +18,10 @@
   },
   "dependencies": {
     "@chatty/seed-data": "workspace:*",
-    "@chatty/web": "workspace:*",
     "@hono/node-server": "^2.1.0",
+    "@hono/zod-validator": "^0.9.0",
     "@openai/agents": "^0.14.2",
-    "hono": "^4.10.6",
+    "hono": "^4.13.0",
     "openai": "^6.49.0",
     "zod": "^4.4.3"
   },

@@ -1,85 +1,8 @@
-/**
- * 后端接口的类型与调用。
- *
- * 前后端在同一个 Demo 仓库中，共享一份人工维护的接口约定。
- */
+/** Hono 从服务端路由推导请求与响应类型；前端不再维护第二份 HTTP 契约。 */
+import type { AppType } from "@chatty/api/app";
+import { hc, parseResponse, type ClientResponse } from "hono/client";
 
-/** 商品的全部字段都由后端从 SQLite 重查后给出，前端不做任何业务计算。 */
-export interface Product {
-  product_id: string;
-  name: string;
-  category: string;
-  price_cents: number;
-  brand: string;
-  stock: number;
-  tags: string[];
-  low_stock: boolean;
-  reason: string;
-  marketing_copy: string;
-}
-
-/** 一轮的结果。四种互斥情况，UI 按 kind 分支。 */
-export interface Turn {
-  kind: "answer" | "recommend" | "clarify" | "exhausted";
-  understood_as: string;
-  answer: string | null;
-  question: string | null;
-  products: Product[];
-  latency_ms: number;
-  turns_left: number;
-  trace: string[];
-  usage: RunUsage;
-}
-
-export interface RunUsage {
-  model_requests: number;
-  input_tokens: number;
-  output_tokens: number;
-  total_tokens: number;
-}
-
-export interface CatalogInfo {
-  categories: string[];
-  users: CatalogUser[];
-  product_count: number;
-  model_id: string;
-}
-
-export interface CatalogProduct {
-  product_id: string;
-  name: string;
-  category: string;
-  price_cents: number;
-  description: string;
-  brand: string;
-  seller_id: string;
-  stock: number;
-  tags: string[];
-  popularity_score: number;
-  source: string;
-}
-
-export interface CatalogProfile {
-  user_id: string;
-  segment: string;
-  display_name: string;
-  profile_label: string;
-  preferred_categories: string[];
-  min_price_cents: number;
-  max_price_cents: number;
-  recent_views: string[];
-  recent_purchases: string[];
-}
-
-export interface CatalogData {
-  products: CatalogProduct[];
-  profiles: CatalogProfile[];
-}
-
-interface CatalogUser {
-  id: string;
-  label: string;
-}
+const client = hc<AppType>("/");
 
 /**
  * 带稳定错误码的失败。
@@ -103,14 +26,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 };
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  // 第一类失败：浏览器根本没有收到 HTTP 响应。
-  let response: Response;
+async function request<T extends ClientResponse<unknown>>(pending: Promise<T>) {
+  let response: T;
   try {
-    response = await fetch(path, {
-      ...init,
-      headers: { "content-type": "application/json", ...init?.headers },
-    });
+    response = await pending;
   } catch (error: unknown) {
     if (error instanceof TypeError) throw new ApiError("network_error");
     throw error;
@@ -129,35 +48,41 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new ApiError(code);
   }
-  // JSON 损坏仍明确报错；字段契约由同仓的 FastAPI 与 TypeScript 类型共同维护。
   try {
-    return (await response.json()) as T;
+    return await parseResponse(response);
   } catch {
     throw new ApiError("invalid_response");
   }
 }
 
 export const fetchCatalog = () => {
-  return request<CatalogInfo>("/api/catalog");
+  return request(client.api.catalog.$get());
 };
 
 export const fetchCatalogData = () => {
-  return request<CatalogData>("/api/catalog/data");
+  return request(client.api.catalog.data.$get());
 };
 
 export const createSession = (userId: string) => {
-  return request<{ session_id: string }>("/api/sessions", {
-    method: "POST",
-    body: JSON.stringify({ user_id: userId }),
-  });
+  return request(client.api.sessions.$post({ json: { user_id: userId } }));
 };
 
 export const takeTurn = (sessionId: string, text: string) => {
-  return request<Turn>(`/api/sessions/${sessionId}/turns`, {
-    method: "POST",
-    body: JSON.stringify({ text }),
-  });
+  return request(
+    client.api.sessions[":sessionId"].turns.$post({
+      param: { sessionId },
+      json: { text },
+    }),
+  );
 };
+
+export type CatalogInfo = Awaited<ReturnType<typeof fetchCatalog>>;
+export type CatalogData = Awaited<ReturnType<typeof fetchCatalogData>>;
+export type CatalogProduct = CatalogData["products"][number];
+export type CatalogProfile = CatalogData["profiles"][number];
+export type Turn = Awaited<ReturnType<typeof takeTurn>>;
+export type Product = Turn["products"][number];
+export type RunUsage = Turn["usage"];
 
 /** 错误码 → 人话。没收录的码原样显示，总比吞掉强。 */
 const MESSAGES: Record<string, string> = {

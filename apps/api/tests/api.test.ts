@@ -104,6 +104,16 @@ describe("HTTP 契约", () => {
           detail: "invalid_request",
         });
 
+        const malformed = await request("/api/sessions", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: "{",
+        });
+        assert.equal(malformed.status, 422);
+        assert.deepStrictEqual(await malformed.json(), {
+          detail: "invalid_request",
+        });
+
         const missing = await request(
           "/api/sessions/session_missing/turns",
           postJson({ text: "你好" }),
