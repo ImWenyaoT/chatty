@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState } from "react";
 import {
   ApiError,
   explain,
@@ -6,81 +6,89 @@ import {
   type CatalogData,
   type CatalogProduct,
   type CatalogProfile,
-} from './api'
+} from "./api";
 
-const yuan = (cents: number) => (cents / 100).toFixed(2)
+const yuan = (cents: number) => (cents / 100).toFixed(2);
 
 export default function CatalogBrowser() {
-  const [data, setData] = useState<CatalogData | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [section, setSection] = useState<'products' | 'profiles'>('products')
-  const [query, setQuery] = useState('')
+  const [data, setData] = useState<CatalogData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [section, setSection] = useState<"products" | "profiles">("products");
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     const load = async () => {
       try {
-        setData(await fetchCatalogData())
+        setData(await fetchCatalogData());
       } catch (caught: unknown) {
         if (caught instanceof ApiError) {
-          setError(explain(caught.code))
+          setError(explain(caught.code));
         } else {
-          console.error('unexpected catalog data error', caught)
-          setError(explain('invalid_response'))
+          console.error("unexpected catalog data error", caught);
+          setError(explain("invalid_response"));
         }
       }
-    }
+    };
 
-    void load()
-  }, [])
+    void load();
+  }, []);
 
-  if (error) return <p className="bubble error">{error}</p>
-  if (!data) return <p className="thinking">正在读取 SQLite…</p>
+  if (error) return <p className="bubble error">{error}</p>;
+  if (!data) return <p className="thinking">正在读取 SQLite…</p>;
 
-  const normalizedQuery = query.trim().toLowerCase()
+  const normalizedQuery = query.trim().toLowerCase();
   const visibleProducts = data.products.filter((product) => {
-    if (!normalizedQuery) return true
+    if (!normalizedQuery) return true;
     const searchable = [
       product.product_id,
       product.name,
       product.category,
       product.brand,
       ...product.tags,
-    ]
-    return searchable.some((value) => value.toLowerCase().includes(normalizedQuery))
-  })
+    ];
+    return searchable.some((value) =>
+      value.toLowerCase().includes(normalizedQuery),
+    );
+  });
 
   return (
     <section className="catalog-browser" aria-label="SQLite 数据浏览">
       <div className="catalog-heading">
         <div>
           <h2>SQLite 数据</h2>
-          <p className="hint">只读展示运行时实际查询的数据，不直接读取 JSONL。</p>
+          <p className="hint">
+            只读展示运行时实际查询的数据，不直接读取 JSONL。
+          </p>
         </div>
         <div className="section-tabs" aria-label="数据类型">
           <button
             type="button"
-            className={section === 'products' ? 'tab active' : 'tab'}
-            onClick={() => setSection('products')}
+            className={section === "products" ? "tab active" : "tab"}
+            onClick={() => setSection("products")}
           >
             商品 {data.products.length}
           </button>
           <button
             type="button"
-            className={section === 'profiles' ? 'tab active' : 'tab'}
-            onClick={() => setSection('profiles')}
+            className={section === "profiles" ? "tab active" : "tab"}
+            onClick={() => setSection("profiles")}
           >
             用户画像 {data.profiles.length}
           </button>
         </div>
       </div>
 
-      {section === 'products' ? (
-        <ProductTable products={visibleProducts} query={query} onQueryChange={setQuery} />
+      {section === "products" ? (
+        <ProductTable
+          products={visibleProducts}
+          query={query}
+          onQueryChange={setQuery}
+        />
       ) : (
         <ProfileTable profiles={data.profiles} />
       )}
     </section>
-  )
+  );
 }
 
 function ProductTable({
@@ -88,9 +96,9 @@ function ProductTable({
   query,
   onQueryChange,
 }: {
-  products: CatalogProduct[]
-  query: string
-  onQueryChange: (value: string) => void
+  products: CatalogProduct[];
+  query: string;
+  onQueryChange: (value: string) => void;
 }) {
   return (
     <>
@@ -126,10 +134,14 @@ function ProductTable({
                 </td>
                 <td>{product.category}</td>
                 <td className="numeric">¥{yuan(product.price_cents)}</td>
-                <td className={product.stock === 0 ? 'out-of-stock numeric' : 'numeric'}>
+                <td
+                  className={
+                    product.stock === 0 ? "out-of-stock numeric" : "numeric"
+                  }
+                >
                   {product.stock}
                 </td>
-                <td>{product.tags.join(' · ')}</td>
+                <td>{product.tags.join(" · ")}</td>
               </tr>
             ))}
           </tbody>
@@ -137,7 +149,7 @@ function ProductTable({
       </div>
       {products.length === 0 ? <p className="empty">没有匹配的商品。</p> : null}
     </>
-  )
+  );
 }
 
 function ProfileTable({ profiles }: { profiles: CatalogProfile[] }) {
@@ -161,15 +173,16 @@ function ProfileTable({ profiles }: { profiles: CatalogProfile[] }) {
                 <span className="cell-detail id">{profile.user_id}</span>
               </td>
               <td>{profile.profile_label}</td>
-              <td>{profile.preferred_categories.join(' · ') || '—'}</td>
+              <td>{profile.preferred_categories.join(" · ") || "—"}</td>
               <td className="numeric">
-                ¥{yuan(profile.min_price_cents)}–¥{yuan(profile.max_price_cents)}
+                ¥{yuan(profile.min_price_cents)}–¥
+                {yuan(profile.max_price_cents)}
               </td>
-              <td>{profile.recent_views.join(' · ') || '—'}</td>
+              <td>{profile.recent_views.join(" · ") || "—"}</td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
-  )
+  );
 }

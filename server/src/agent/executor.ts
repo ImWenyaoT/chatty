@@ -128,7 +128,8 @@ export function prepareTaskContext(
   }
 
   // 纯知识问答不需要营销策略，只需要知识检索。
-  if (recommendation === null) evidence.required_support_tools = ["retrieve_knowledge"];
+  if (recommendation === null)
+    evidence.required_support_tools = ["retrieve_knowledge"];
 
   // scope 告诉 Evidence：本轮必须完成通用知识、商品知识，或者两者都完成。
   const scopes: string[] = [];
@@ -217,7 +218,12 @@ export class ChattyExecutor {
   ): Promise<Reply> {
     try {
       // draft 仍然只是 Model 的提议，不能直接返回给用户。
-      const draft = await this.#generateDraft(taskContext, evidence, userText, history);
+      const draft = await this.#generateDraft(
+        taskContext,
+        evidence,
+        userText,
+        history,
+      );
       // finalize 是信任边界：只有通过 Evidence 和 SQLite 校验才能成为 Reply。
       return this.#finalizeReply(taskContext, evidence, draft);
     } catch (error) {
@@ -238,7 +244,10 @@ export class ChattyExecutor {
       }
       // CatalogError 的消息本身就是稳定业务错误码。
       if (error instanceof CatalogError) {
-        throw new RecommendationError(error.message, diagnostics(evidence, error));
+        throw new RecommendationError(
+          error.message,
+          diagnostics(evidence, error),
+        );
       }
       // Tool 或 SDK 的未知异常不能穿透 HTTP 层成为无结构的 500。
       throw new RecommendationError(
@@ -274,12 +283,14 @@ export class ChattyExecutor {
         toolExecution: { maxFunctionToolConcurrency: 1 },
         // 如果最终 JSON 不符合 AgentDraft，SDK 会调用这个纠正函数一次。
         errorHandlers: {
-          invalidFinalOutput: (data) => correctInvalidDraft(data, this.#provider),
+          invalidFinalOutput: (data) =>
+            correctInvalidDraft(data, this.#provider),
         },
       },
     );
     recordRunUsage(evidence, result.state.usage);
-    if (result.finalOutput === undefined) throw new RecommendationError("invalid_draft");
+    if (result.finalOutput === undefined)
+      throw new RecommendationError("invalid_draft");
     return result.finalOutput;
   }
 
@@ -310,7 +321,11 @@ export class ChattyExecutor {
         throw new RecommendationError("invalid_draft");
       }
       validateClarificationEvidence(evidence);
-      return { kind: "clarify", question: draft.question, answer: draft.answer };
+      return {
+        kind: "clarify",
+        question: draft.question,
+        answer: draft.answer,
+      };
     }
 
     // 路径 3：剩下的是 recommend。必须同时有 Harness Context 和 Model 推荐项。
@@ -318,7 +333,8 @@ export class ChattyExecutor {
       throw new RecommendationError("invalid_draft");
     }
     validateRecommendationEvidence(evidence, draft.recommendations);
-    if (evidence.profile === null) throw new RecommendationError("profile_not_loaded");
+    if (evidence.profile === null)
+      throw new RecommendationError("profile_not_loaded");
 
     // Evidence 校验集合关系，Catalog.finalize 再从 SQLite 读取最终价格和库存。
     const request = recommendation.request;

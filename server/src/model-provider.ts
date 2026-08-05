@@ -1,4 +1,8 @@
-import { type Model, OpenAIResponsesModel, setTracingDisabled } from "@openai/agents";
+import {
+  type Model,
+  OpenAIResponsesModel,
+  setTracingDisabled,
+} from "@openai/agents";
 import OpenAI from "openai";
 
 import { loadSettings, type Settings } from "./settings.ts";

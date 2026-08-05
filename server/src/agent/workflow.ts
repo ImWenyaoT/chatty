@@ -27,7 +27,9 @@ export type ToolBatch = {
 };
 
 /** 在任何 Tool 执行前读取一次 Evidence，作为整批调用的唯一判断依据。 */
-export function openToolBatch(evidence: RecommendationEvidence): ToolBatchState {
+export function openToolBatch(
+  evidence: RecommendationEvidence,
+): ToolBatchState {
   return {
     stage: stageFor(evidence),
     allowed: new Set(allowedTools(evidence)),
@@ -36,7 +38,10 @@ export function openToolBatch(evidence: RecommendationEvidence): ToolBatchState 
 }
 
 /** 按冻结快照裁决单个 Tool call，并把放行结果记入批次。 */
-export function gateToolCall(batch: ToolBatchState, toolName: string): GateDecision {
+export function gateToolCall(
+  batch: ToolBatchState,
+  toolName: string,
+): GateDecision {
   if (!batch.allowed.has(toolName)) {
     return { allowed: false, reason: "tool_not_allowed_in_stage" };
   }
@@ -106,7 +111,8 @@ export function planToolBatch(
 export function renderAgentStatus(evidence: RecommendationEvidence): string {
   const stage = stageFor(evidence);
   const completed = [...new Set(evidence.used_tools)].join(", ") || "none";
-  const requiredScopes = evidence.required_knowledge_scopes.join(", ") || "none";
+  const requiredScopes =
+    evidence.required_knowledge_scopes.join(", ") || "none";
   const completedScopes =
     [...evidence.completed_knowledge_scopes].sort().join(", ") || "none";
   const nextSteps = allowedTools(evidence);
@@ -157,7 +163,9 @@ export const stageGuardrail = defineToolInputGuardrail<ChattyRunContext>({
 
     if (decision.allowed) {
       // allow 的 outputInfo 只用于观察，不会成为 Tool 的业务参数。
-      return ToolGuardrailFunctionOutputFactory.allow({ stage_snapshot: batch.stage });
+      return ToolGuardrailFunctionOutputFactory.allow({
+        stage_snapshot: batch.stage,
+      });
     }
 
     // 被拒绝的调用没有执行，但仍记录原因，方便 Trace 和下一轮状态显示。

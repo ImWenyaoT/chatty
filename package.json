@@ -15,15 +15,17 @@
     "start": "pnpm build && pnpm --filter @chatty/server start",
     "test": "pnpm --filter @chatty/server test",
     "typecheck": "pnpm --filter @chatty/frontend typecheck && pnpm --filter @chatty/server typecheck",
-    "lint": "pnpm lint:frontend && pnpm lint:server",
+    "lint": "pnpm lint:frontend && pnpm lint:server && pnpm format:check",
     "lint:frontend": "pnpm --filter @chatty/frontend lint",
     "lint:server": "pnpm --filter @chatty/server lint",
-    "format": "pnpm --filter @chatty/frontend format && pnpm --filter @chatty/server format",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "eval:retrieval": "pnpm --filter @chatty/server eval:retrieval",
     "eval:agent": "pnpm --filter @chatty/server eval:agent",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
-    "concurrently": "^10.0.4"
+    "concurrently": "^10.0.4",
+    "prettier": "^3.9.6"
   }
 }

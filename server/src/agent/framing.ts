@@ -14,7 +14,11 @@ import {
 import { z } from "zod";
 
 import type { ProductNeed, TaskFrame, UserContext } from "../data/models.ts";
-import { emptyUserContext, productNeedSchema, taskFrameSchema } from "../data/models.ts";
+import {
+  emptyUserContext,
+  productNeedSchema,
+  taskFrameSchema,
+} from "../data/models.ts";
 import type { ModelProvider } from "../model-provider.ts";
 import { round } from "../data/round.ts";
 import { extractResponseText } from "./response-text.ts";
@@ -75,7 +79,9 @@ export type TaskFrameAgent = ReturnType<typeof buildTaskFrameAgent>;
 export function recoverInvalidTaskFrame(
   data: RunErrorHandlerInput<unknown, TaskFrameAgent>,
 ): RunErrorHandlerResult<TaskFrameAgent> {
-  const wire = parseTaskFrameWireOutput(extractResponseText(data.runData.rawResponses));
+  const wire = parseTaskFrameWireOutput(
+    extractResponseText(data.runData.rawResponses),
+  );
   return { finalOutput: wire };
 }
 
@@ -101,7 +107,8 @@ export function parseTaskFrameWireOutput(raw: string): TaskFrameWire {
   }
   // parse 在运行时检查 boolean、数组以及长度和最小值。
   const parsed = taskFrameWireSchema.safeParse(properties);
-  if (!parsed.success) throw new TaskFrameParseError("invalid_task_frame_output");
+  if (!parsed.success)
+    throw new TaskFrameParseError("invalid_task_frame_output");
   return parsed.data;
 }
 
@@ -111,7 +118,8 @@ export function parseTaskFrame(
   categories: readonly string[],
 ): TaskFrame {
   // Wire 用空数组表示“没有值”；领域对象统一改成更直接的 null。
-  const category = frame.category.length > 0 ? frame.category[0]!.trim() || null : null;
+  const category =
+    frame.category.length > 0 ? frame.category[0]!.trim() || null : null;
   const minYuan = frame.min_yuan.length > 0 ? frame.min_yuan[0]! : null;
   const maxYuan = frame.max_yuan.length > 0 ? frame.max_yuan[0]! : null;
 
@@ -129,7 +137,8 @@ export function parseTaskFrame(
       min_yuan: minYuan,
       max_yuan: maxYuan,
     });
-    if (!need.success) throw new TaskFrameParseError("invalid_product_price_range");
+    if (!need.success)
+      throw new TaskFrameParseError("invalid_product_price_range");
     productNeed = need.data;
   } else {
     // Model 说“不需要商品”时，不允许同时偷偷带上类目或价格。
@@ -141,7 +150,9 @@ export function parseTaskFrame(
 
   // 空字符串也归一化成 null，后续只需要判断 `!== null`。
   const knowledgeQuery =
-    frame.knowledge_query.length > 0 ? frame.knowledge_query[0]!.trim() || null : null;
+    frame.knowledge_query.length > 0
+      ? frame.knowledge_query[0]!.trim() || null
+      : null;
   const parsed = taskFrameSchema.safeParse({
     product_need: productNeed,
     knowledge_query: knowledgeQuery,
@@ -156,8 +167,10 @@ export function productContext(need: ProductNeed): UserContext {
   const context = emptyUserContext();
   if (need.category !== null) context.preferred_categories = [need.category];
   // 对外展示使用“元”，SQLite 整数价格使用“分”，避免浮点金额误差。
-  if (need.min_yuan !== null) context.min_price_cents = round(need.min_yuan * 100);
-  if (need.max_yuan !== null) context.max_price_cents = round(need.max_yuan * 100);
+  if (need.min_yuan !== null)
+    context.min_price_cents = round(need.min_yuan * 100);
+  if (need.max_yuan !== null)
+    context.max_price_cents = round(need.max_yuan * 100);
   return context;
 }
 

@@ -12,7 +12,9 @@ export type GoldenCase = {
 export type GoldenOutcome = { ok: unknown } | { error: string };
 
 function read(name: string): unknown {
-  return JSON.parse(readFileSync(fileURLToPath(new URL(name, GOLDEN_DIR)), "utf8"));
+  return JSON.parse(
+    readFileSync(fileURLToPath(new URL(name, GOLDEN_DIR)), "utf8"),
+  );
 }
 
 export function loadCases(): GoldenCase[] {

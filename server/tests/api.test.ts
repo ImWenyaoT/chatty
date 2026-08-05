@@ -44,18 +44,26 @@ describe("HTTP 契约", () => {
     await withApp(
       (catalog) => createApp({ catalog, provider: providerOf(true) }),
       async (request) => {
-        assert.deepStrictEqual(await (await request("/health")).json(), { status: "ok" });
+        assert.deepStrictEqual(await (await request("/health")).json(), {
+          status: "ok",
+        });
 
         const catalogResponse = await request("/api/catalog");
         assert.equal(catalogResponse.status, 200);
-        const info = (await catalogResponse.json()) as { product_count: number };
+        const info = (await catalogResponse.json()) as {
+          product_count: number;
+        };
         assert.ok(info.product_count > 0);
 
         const dataResponse = await request("/api/catalog/data");
         assert.equal(dataResponse.status, 200);
         const data = (await dataResponse.json()) as {
           products: { product_id: string }[];
-          profiles: { user_id: string; display_name: string; profile_label: string }[];
+          profiles: {
+            user_id: string;
+            display_name: string;
+            profile_label: string;
+          }[];
         };
         assert.equal(data.products.length, info.product_count);
         assert.equal(data.products[0]?.product_id, "P001");
@@ -74,7 +82,9 @@ describe("HTTP 契约", () => {
           postJson({ user_id: "missing" }),
         );
         assert.equal(invalidUser.status, 422);
-        assert.deepStrictEqual(await invalidUser.json(), { detail: "unknown_user" });
+        assert.deepStrictEqual(await invalidUser.json(), {
+          detail: "unknown_user",
+        });
 
         const session = await request(
           "/api/sessions",
@@ -90,14 +100,18 @@ describe("HTTP 契约", () => {
           postJson({ text: "   " }),
         );
         assert.equal(blank.status, 422);
-        assert.deepStrictEqual(await blank.json(), { detail: "invalid_request" });
+        assert.deepStrictEqual(await blank.json(), {
+          detail: "invalid_request",
+        });
 
         const missing = await request(
           "/api/sessions/session_missing/turns",
           postJson({ text: "你好" }),
         );
         assert.equal(missing.status, 404);
-        assert.deepStrictEqual(await missing.json(), { detail: "session_not_found" });
+        assert.deepStrictEqual(await missing.json(), {
+          detail: "session_not_found",
+        });
       },
     );
   });
@@ -115,7 +129,9 @@ describe("HTTP 契约", () => {
           postJson({ text: "我要一个 200 元的蓝牙耳机" }),
         );
         assert.equal(response.status, 422);
-        assert.deepStrictEqual(await response.json(), { detail: "llm_not_configured" });
+        assert.deepStrictEqual(await response.json(), {
+          detail: "llm_not_configured",
+        });
       },
     );
   });
@@ -130,7 +146,11 @@ describe("HTTP 契约", () => {
       ): Promise<ChattyTurn> {
         calls.push([userId, text, structuredClone(context)]);
         return {
-          reply: { kind: "clarify", question: "预算可以提高吗？", answer: null },
+          reply: {
+            kind: "clarify",
+            question: "预算可以提高吗？",
+            answer: null,
+          },
           understoodAs: "耳机 · ≤200 元",
           context: { pendingUserMessages: [text], history: [], turns: 1 },
           turnsLeft: 2,
@@ -142,7 +162,8 @@ describe("HTTP 契约", () => {
     };
 
     await withApp(
-      (catalog) => createApp({ catalog, provider: providerOf(true), chatty: fakeChatty }),
+      (catalog) =>
+        createApp({ catalog, provider: providerOf(true), chatty: fakeChatty }),
       async (request) => {
         const { session_id: sessionId } = (await (
           await request("/api/sessions", postJson({ user_id: "user_active" }))
@@ -154,7 +175,10 @@ describe("HTTP 契约", () => {
         );
 
         assert.equal(response.status, 200);
-        const turn = (await response.json()) as { kind: string; question: string };
+        const turn = (await response.json()) as {
+          kind: string;
+          question: string;
+        };
         assert.equal(turn.kind, "clarify");
         assert.equal(turn.question, "预算可以提高吗？");
         assert.deepStrictEqual(calls, [
@@ -194,7 +218,8 @@ describe("HTTP 契约", () => {
     };
 
     await withApp(
-      (catalog) => createApp({ catalog, provider: providerOf(true), chatty: fakeChatty }),
+      (catalog) =>
+        createApp({ catalog, provider: providerOf(true), chatty: fakeChatty }),
       async (request) => {
         const { session_id: sessionId } = (await (
           await request("/api/sessions", postJson({ user_id: "user_active" }))

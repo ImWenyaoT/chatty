@@ -21,7 +21,11 @@ import {
   validateToolSequence,
   type RecommendationEvidence,
 } from "../src/agent/evidence.ts";
-import { allowedTools, planToolBatch, renderAgentStatus } from "../src/agent/workflow.ts";
+import {
+  allowedTools,
+  planToolBatch,
+  renderAgentStatus,
+} from "../src/agent/workflow.ts";
 import { Catalog, CatalogError } from "../src/data/catalog.ts";
 import { segmentForIndex, splitIntoChunks } from "../src/data/database.ts";
 import { DATA_DIR } from "../src/paths.ts";
@@ -31,12 +35,19 @@ import {
   recommendationRequestSchema,
   userContextSchema,
 } from "../src/data/models.ts";
-import { caseKey, loadCases, loadExpected, type GoldenCase } from "./helpers/golden.ts";
+import {
+  caseKey,
+  loadCases,
+  loadExpected,
+  type GoldenCase,
+} from "./helpers/golden.ts";
 
 /** 把 JSON 里的 evidence 规格还原成 Harness 使用的可变 Evidence。 */
 function buildEvidence(spec: Record<string, unknown>): RecommendationEvidence {
   const evidence = createEvidence();
-  evidence.used_tools = [...((spec["used_tools"] as string[] | undefined) ?? [])];
+  evidence.used_tools = [
+    ...((spec["used_tools"] as string[] | undefined) ?? []),
+  ];
   evidence.blocked_attempts = [
     ...((spec["blocked_attempts"] as string[] | undefined) ?? []),
   ];
@@ -47,7 +58,9 @@ function buildEvidence(spec: Record<string, unknown>): RecommendationEvidence {
     ...((spec["required_knowledge_scopes"] as string[] | undefined) ?? []),
   ];
   if ("required_support_tools" in spec) {
-    evidence.required_support_tools = [...(spec["required_support_tools"] as string[])];
+    evidence.required_support_tools = [
+      ...(spec["required_support_tools"] as string[]),
+    ];
   }
   return evidence;
 }
@@ -100,7 +113,9 @@ function run(goldenCase: GoldenCase, catalog: Catalog): unknown {
       );
     }
     case "inventory":
-      return catalog.inventory(data["product_ids"]).map((product) => product.product_id);
+      return catalog
+        .inventory(data["product_ids"])
+        .map((product) => product.product_id);
     case "retrieve_knowledge":
       return catalog
         .retrieveKnowledge({
@@ -138,7 +153,10 @@ function run(goldenCase: GoldenCase, catalog: Catalog): unknown {
     }
 
     case "parse_task_frame":
-      return parseTaskFrame(taskFrameWireSchema.parse(data["wire"]), catalog.categories);
+      return parseTaskFrame(
+        taskFrameWireSchema.parse(data["wire"]),
+        catalog.categories,
+      );
     case "product_context":
       return productContext(productNeedSchema.parse(data["need"]));
     case "describe_task_frame": {
@@ -170,7 +188,10 @@ function run(goldenCase: GoldenCase, catalog: Catalog): unknown {
         ([callId, name]) => [callId, name] as const,
       );
       const batch = planToolBatch(evidence, calls);
-      return { stage: batch.stage, decisions: Object.fromEntries(batch.decisions) };
+      return {
+        stage: batch.stage,
+        decisions: Object.fromEntries(batch.decisions),
+      };
     }
 
     default:
@@ -196,7 +217,10 @@ describe("golden 基线", () => {
     const expected = loadExpected();
 
     assert.ok(cases.length > 0);
-    assert.deepStrictEqual(cases.map(caseKey).sort(), Object.keys(expected).sort());
+    assert.deepStrictEqual(
+      cases.map(caseKey).sort(),
+      Object.keys(expected).sort(),
+    );
   });
 
   it("数据层输出与 golden 基线一致", () => {
@@ -209,7 +233,9 @@ describe("golden 基线", () => {
       for (const goldenCase of cases) {
         const key = caseKey(goldenCase);
         // 先过一遍 JSON，把 undefined 字段与 Map 归一成与基线相同的形状。
-        const actual: unknown = JSON.parse(JSON.stringify(outcome(goldenCase, catalog)));
+        const actual: unknown = JSON.parse(
+          JSON.stringify(outcome(goldenCase, catalog)),
+        );
         assert.deepStrictEqual(actual, expected[key], key);
       }
     } finally {

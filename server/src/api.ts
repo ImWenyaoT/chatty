@@ -15,7 +15,10 @@ import { z } from "zod";
 import { Chatty, ChattyError, type ChattyAgent } from "./agent/chatty.ts";
 import { Catalog } from "./data/catalog.ts";
 import { DEMO_USERS, DEMO_USER_IDS } from "./data/demo-users.ts";
-import { ResponsesModelProvider, type ModelProvider } from "./model-provider.ts";
+import {
+  ResponsesModelProvider,
+  type ModelProvider,
+} from "./model-provider.ts";
 import { FRONTEND_DIST } from "./paths.ts";
 import { SessionStore } from "./session-store.ts";
 
@@ -81,7 +84,8 @@ export function createApp(dependencies: AppDependencies = {}) {
 
   app.post("/api/sessions/:sessionId/turns", async (c) => {
     const session = sessions.get(c.req.param("sessionId"));
-    if (session === undefined) return c.json({ detail: "session_not_found" }, 404);
+    if (session === undefined)
+      return c.json({ detail: "session_not_found" }, 404);
 
     const body = turnSchema.safeParse(await readJson(c.req.raw));
     if (!body.success) return c.json({ detail: "invalid_request" }, 422);
@@ -89,7 +93,11 @@ export function createApp(dependencies: AppDependencies = {}) {
     return sessions.runExclusive(session, async () => {
       let turn;
       try {
-        turn = await chatty.run(session.userId, body.data.text, session.context);
+        turn = await chatty.run(
+          session.userId,
+          body.data.text,
+          session.context,
+        );
       } catch (error) {
         if (!(error instanceof ChattyError)) throw error;
         console.error(error.code, error.diagnostics);
@@ -114,7 +122,12 @@ export function createApp(dependencies: AppDependencies = {}) {
       };
 
       if (turn.reply.kind === "answer") {
-        return c.json({ ...common, kind: "answer", question: null, products: [] });
+        return c.json({
+          ...common,
+          kind: "answer",
+          question: null,
+          products: [],
+        });
       }
       if (turn.reply.kind === "clarify") {
         return c.json({

@@ -80,7 +80,9 @@ function profileFromRow(row: ProfileRow): UserProfile {
 
 function normalize(values: string[]): Set<string> {
   return new Set(
-    values.filter((value) => value.trim()).map((value) => value.trim().toLowerCase()),
+    values
+      .filter((value) => value.trim())
+      .map((value) => value.trim().toLowerCase()),
   );
 }
 
@@ -103,14 +105,19 @@ export class Catalog {
     this.categories = [
       ...new Set(this.products.map((product) => product.category)),
     ].sort();
-    this.#synonyms = Catalog.#loadSynonyms(new URL("query_synonyms.json", dataDir));
+    this.#synonyms = Catalog.#loadSynonyms(
+      new URL("query_synonyms.json", dataDir),
+    );
   }
 
   close(): void {
     this.#database.close();
   }
 
-  userProfile(userId: string, overrides: UserContext = emptyUserContext()): UserProfile {
+  userProfile(
+    userId: string,
+    overrides: UserContext = emptyUserContext(),
+  ): UserProfile {
     const base = this.profiles.get(userId);
     if (base === undefined) throw new CatalogError("unknown_user");
 
@@ -122,13 +129,16 @@ export class Catalog {
     // 单边价格约束代表本轮新区间，另一端应开放，不能继承冲突的历史区间。
     let minPriceCents = overrides.min_price_cents;
     if (minPriceCents === null) {
-      minPriceCents = overrides.max_price_cents === null ? base.min_price_cents : 0;
+      minPriceCents =
+        overrides.max_price_cents === null ? base.min_price_cents : 0;
     }
 
     let maxPriceCents = overrides.max_price_cents;
     if (maxPriceCents === null) {
       maxPriceCents =
-        overrides.min_price_cents === null ? base.max_price_cents : MAX_PRICE_CENTS;
+        overrides.min_price_cents === null
+          ? base.max_price_cents
+          : MAX_PRICE_CENTS;
     }
 
     return {
@@ -153,8 +163,13 @@ export class Catalog {
     maxPriceCents: number;
     limit: number;
   }): Product[] {
-    const { profile, categories, minPriceCents, maxPriceCents, limit } = options;
-    if (minPriceCents < 0 || maxPriceCents <= 0 || minPriceCents > maxPriceCents) {
+    const { profile, categories, minPriceCents, maxPriceCents, limit } =
+      options;
+    if (
+      minPriceCents < 0 ||
+      maxPriceCents <= 0 ||
+      minPriceCents > maxPriceCents
+    ) {
       throw new CatalogError("invalid_product_search_price_range");
     }
     if (limit < 1 || limit > 20) {
@@ -167,7 +182,10 @@ export class Catalog {
     }
 
     const matches = this.products.filter((product) => {
-      if (product.price_cents < minPriceCents || product.price_cents > maxPriceCents) {
+      if (
+        product.price_cents < minPriceCents ||
+        product.price_cents > maxPriceCents
+      ) {
         return false;
       }
       return (
@@ -187,7 +205,9 @@ export class Catalog {
     const current = new Map(
       this.#listProducts().map((product) => [product.product_id, product]),
     );
-    const unknown = [...new Set(productIds)].filter((id) => !current.has(id)).sort();
+    const unknown = [...new Set(productIds)]
+      .filter((id) => !current.has(id))
+      .sort();
     if (unknown.length > 0) {
       throw new CatalogError(`unknown_inventory_product:${unknown.join(",")}`);
     }
@@ -210,11 +230,14 @@ export class Catalog {
     limit: number;
   }): KnowledgeHit[] {
     const { query, categories, productIds, limit } = options;
-    if (limit < 1 || limit > 8) throw new CatalogError("invalid_knowledge_limit");
+    if (limit < 1 || limit > 8)
+      throw new CatalogError("invalid_knowledge_limit");
 
     // Harness 已知的类目放在 query 前，避免长商品名挤掉稳定检索词。
     const combinedQuery = [...categories, query].join(" ");
-    const expression = Catalog.#matchExpression(this.#rewriteQuery(combinedQuery));
+    const expression = Catalog.#matchExpression(
+      this.#rewriteQuery(combinedQuery),
+    );
     if (!expression) throw new CatalogError("empty_knowledge_query");
 
     const filters: string[] = [];
@@ -271,7 +294,8 @@ export class Catalog {
 
   marketingStrategy(segment: string): MarketingStrategy {
     const strategy = this.#templates.get(segment);
-    if (strategy === undefined) throw new CatalogError("unknown_marketing_segment");
+    if (strategy === undefined)
+      throw new CatalogError("unknown_marketing_segment");
     return strategy;
   }
 
@@ -291,10 +315,12 @@ export class Catalog {
         throw new CatalogError("duplicate_recommended_product");
       }
       const product = current.get(item.product_id);
-      if (product === undefined) throw new CatalogError("unknown_recommended_product");
+      if (product === undefined)
+        throw new CatalogError("unknown_recommended_product");
       seen.add(item.product_id);
 
-      if (product.stock <= 0) throw new CatalogError("recommended_product_out_of_stock");
+      if (product.stock <= 0)
+        throw new CatalogError("recommended_product_out_of_stock");
       const insidePriceRange =
         product.price_cents >= profile.min_price_cents &&
         product.price_cents <= profile.max_price_cents;
@@ -385,8 +411,15 @@ export class Catalog {
 
   #score(product: Product, profile: UserProfile): number {
     const preferred = normalize(profile.preferred_categories);
-    const signals = normalize([...profile.recent_views, ...profile.recent_purchases]);
-    const searchable = normalize([product.name, product.category, ...product.tags]);
+    const signals = normalize([
+      ...profile.recent_views,
+      ...profile.recent_purchases,
+    ]);
+    const searchable = normalize([
+      product.name,
+      product.category,
+      ...product.tags,
+    ]);
 
     let score = product.popularity_score * 0.55;
     if (preferred.has(product.category.toLowerCase())) score += 0.25;
@@ -402,7 +435,8 @@ export class Catalog {
 
   #sanitize(text: string): string {
     let sanitized = text;
-    for (const word of this.forbiddenWords) sanitized = sanitized.replaceAll(word, "***");
+    for (const word of this.forbiddenWords)
+      sanitized = sanitized.replaceAll(word, "***");
     return sanitized;
   }
 
@@ -433,7 +467,8 @@ export class Catalog {
     for (const [variant, canonicalTerms] of this.#synonyms) {
       if (!query.includes(variant)) continue;
       for (const term of canonicalTerms) {
-        if (!query.includes(term) && !extraTerms.includes(term)) extraTerms.push(term);
+        if (!query.includes(term) && !extraTerms.includes(term))
+          extraTerms.push(term);
       }
     }
     if (extraTerms.length === 0) return query;
@@ -442,9 +477,14 @@ export class Catalog {
 
   static #matchExpression(query: string): string {
     // Python 的 `\w` 在 re.UNICODE 下匹配中文，JS 的 `\w` 只有 ASCII，必须用属性转义。
-    const tokens = (query.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? []).slice(0, 8);
+    const tokens = (query.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? []).slice(
+      0,
+      8,
+    );
     return tokens
-      .map((token) => `"${segmentForIndex(token).trim().replaceAll('"', '""')}"`)
+      .map(
+        (token) => `"${segmentForIndex(token).trim().replaceAll('"', '""')}"`,
+      )
       .join(" OR ");
   }
 

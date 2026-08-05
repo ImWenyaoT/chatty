@@ -79,7 +79,10 @@ export const CASES: AgentCase[] = [
   },
 ];
 
-export function answerContains(reply: Reply, expectedTerms: string[] = []): boolean {
+export function answerContains(
+  reply: Reply,
+  expectedTerms: string[] = [],
+): boolean {
   const answer = reply.answer ?? "";
   return expectedTerms.every((term) => answer.includes(term));
 }
@@ -175,7 +178,11 @@ async function main(): Promise<void> {
   }
 
   console.log(
-    JSON.stringify({ cases: CASES.length, passed, pass_rate: passed / CASES.length }),
+    JSON.stringify({
+      cases: CASES.length,
+      passed,
+      pass_rate: passed / CASES.length,
+    }),
   );
   if (passed !== CASES.length) process.exitCode = 1;
 }
