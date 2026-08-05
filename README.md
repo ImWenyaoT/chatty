@@ -214,10 +214,10 @@ chatty/
 │   ├── src/data/        # SQLite、Catalog 与领域模型
 │   ├── src/evals/       # Retrieval Eval 与真实 DeepSeek Agent Eval
 │   ├── src/api.ts       # Hono HTTP Adapter
-│   └── tests/           # node:test 确定性测试
+│   ├── src/paths.ts     # 仓库布局的唯一定义
+│   └── tests/           # node:test 确定性测试与 golden 基线
 ├── frontend/            # React + Vite 桌面 Demo
 ├── data/                # SQLite 初始化种子，不是运行时查询接口
-├── tests/golden/        # 跨语言数据层 golden 基线
 └── docs/
     ├── chatty-book/     # 从请求到架构的十章说明
     └── adr/             # 架构决策记录

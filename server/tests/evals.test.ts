@@ -13,7 +13,7 @@ import {
   type KnowledgeSource,
 } from "../src/evals/retrieval.ts";
 import { Catalog } from "../src/data/catalog.ts";
-import { DATA_DIR } from "../src/data/database.ts";
+import { DATA_DIR } from "../src/paths.ts";
 
 const emptySource: KnowledgeSource = { retrieveKnowledge: () => [] };
 

@@ -29,11 +29,7 @@
         "product_id": "P003",
         "reason": "理由一",
         "stock": 1000,
-        "tags": [
-          "降噪",
-          "无线",
-          "便携"
-        ]
+        "tags": ["降噪", "无线", "便携"]
       }
     ]
   },
@@ -49,18 +45,12 @@
         "product_id": "P003",
         "reason": "这是***的选择",
         "stock": 1000,
-        "tags": [
-          "降噪",
-          "无线",
-          "便携"
-        ]
+        "tags": ["降噪", "无线", "便携"]
       }
     ]
   },
   "inventory::库存过滤并按传入顺序去重": {
-    "ok": [
-      "P003"
-    ]
+    "ok": ["P003"]
   },
   "inventory::未知商品": {
     "error": "unknown_inventory_product:UNKNOWN"
@@ -250,9 +240,7 @@
     "ok": {
       "max_price_cents": 29999,
       "min_price_cents": null,
-      "preferred_categories": [
-        "耳机"
-      ],
+      "preferred_categories": ["耳机"],
       "recent_purchases": null,
       "recent_views": null
     }
@@ -400,33 +388,19 @@
     "error": "invalid_product_search_limit"
   },
   "search::价格敏感用户的默认排序": {
-    "ok": [
-      "P012",
-      "P007",
-      "P010",
-      "P006",
-      "P029"
-    ]
+    "ok": ["P012", "P007", "P010", "P006", "P029"]
   },
   "search::空白类目视为非法": {
     "error": "invalid_product_search_categories"
   },
   "search::限定类目与预算的候选": {
-    "ok": [
-      "P023"
-    ]
+    "ok": ["P023"]
   },
   "search::预算过低时没有候选": {
     "ok": []
   },
   "search::高价值用户的默认排序": {
-    "ok": [
-      "P001",
-      "P002",
-      "P022",
-      "P034",
-      "P021"
-    ]
+    "ok": ["P001", "P002", "P022", "P034", "P021"]
   },
   "segment_for_index::中文逐字加空格，ASCII 词不拆开": {
     "ok": " 降  噪  iPhone 15"
@@ -443,31 +417,18 @@
     ]
   },
   "split_into_chunks::按中文句末切块": {
-    "ok": [
-      "第一句。第二句。",
-      "第三句。"
-    ]
+    "ok": ["第一句。第二句。", "第三句。"]
   },
   "split_into_chunks::短文本不切块": {
-    "ok": [
-      "只有一句。"
-    ]
+    "ok": ["只有一句。"]
   },
   "user_profile::只给上限时下限开放为 0": {
     "ok": {
       "max_price_cents": 30000,
       "min_price_cents": 0,
-      "preferred_categories": [
-        "手机",
-        "耳机"
-      ],
-      "recent_purchases": [
-        "配件"
-      ],
-      "recent_views": [
-        "手机",
-        "降噪"
-      ],
+      "preferred_categories": ["手机", "耳机"],
+      "recent_purchases": ["配件"],
+      "recent_views": ["手机", "降噪"],
       "segment": "active",
       "user_id": "user_active"
     }
@@ -476,17 +437,9 @@
     "ok": {
       "max_price_cents": 1000000,
       "min_price_cents": 200000,
-      "preferred_categories": [
-        "配件",
-        "平板"
-      ],
-      "recent_purchases": [
-        "配件"
-      ],
-      "recent_views": [
-        "性价比",
-        "快充"
-      ],
+      "preferred_categories": ["配件", "平板"],
+      "recent_purchases": ["配件"],
+      "recent_views": ["性价比", "快充"],
       "segment": "price_sensitive",
       "user_id": "user_budget"
     }
@@ -495,17 +448,9 @@
     "ok": {
       "max_price_cents": 800000,
       "min_price_cents": 50000,
-      "preferred_categories": [
-        "手机",
-        "耳机"
-      ],
-      "recent_purchases": [
-        "配件"
-      ],
-      "recent_views": [
-        "手机",
-        "降噪"
-      ],
+      "preferred_categories": ["手机", "耳机"],
+      "recent_purchases": ["配件"],
+      "recent_views": ["手机", "降噪"],
       "segment": "active",
       "user_id": "user_active"
     }
@@ -517,17 +462,9 @@
     "ok": {
       "max_price_cents": 50000,
       "min_price_cents": 10000,
-      "preferred_categories": [
-        "耳机"
-      ],
-      "recent_purchases": [
-        "手机",
-        "平板"
-      ],
-      "recent_views": [
-        "旗舰",
-        "影像"
-      ],
+      "preferred_categories": ["耳机"],
+      "recent_purchases": ["手机", "平板"],
+      "recent_views": ["旗舰", "影像"],
       "segment": "high_value",
       "user_id": "user_vip"
     }
@@ -547,18 +484,13 @@
   "workflow_state::可以生成草稿": {
     "ok": {
       "agent_status": "<agent_status version=\"5\">\nstage: ready_to_draft\ncompleted_steps: get_user_profile, search_products, check_inventory, retrieve_knowledge, get_marketing_strategy\nrequired_knowledge_scopes: product\ncompleted_knowledge_scopes: product\nallowed_next: retrieve_knowledge, final_output\nblocked_attempts: 0\n</agent_status>",
-      "allowed_next": [
-        "retrieve_knowledge"
-      ]
+      "allowed_next": ["retrieve_knowledge"]
     }
   },
   "workflow_state::支撑材料未补齐": {
     "ok": {
       "agent_status": "<agent_status version=\"3\">\nstage: need_support\ncompleted_steps: get_user_profile, search_products, check_inventory\nrequired_knowledge_scopes: product\ncompleted_knowledge_scopes: none\nallowed_next: retrieve_knowledge, get_marketing_strategy\nblocked_attempts: 0\n</agent_status>",
-      "allowed_next": [
-        "retrieve_knowledge",
-        "get_marketing_strategy"
-      ]
+      "allowed_next": ["retrieve_knowledge", "get_marketing_strategy"]
     }
   },
   "workflow_state::知识检索已达三次上限": {
@@ -570,17 +502,13 @@
   "workflow_state::知识范围未覆盖完": {
     "ok": {
       "agent_status": "<agent_status version=\"5\">\nstage: need_support\ncompleted_steps: get_user_profile, search_products, check_inventory, retrieve_knowledge, get_marketing_strategy\nrequired_knowledge_scopes: general, product\ncompleted_knowledge_scopes: general\nallowed_next: retrieve_knowledge\nblocked_attempts: 0\n</agent_status>",
-      "allowed_next": [
-        "retrieve_knowledge"
-      ]
+      "allowed_next": ["retrieve_knowledge"]
     }
   },
   "workflow_state::纯知识问答不需要营销策略": {
     "ok": {
       "agent_status": "<agent_status version=\"1\">\nstage: ready_to_draft\ncompleted_steps: retrieve_knowledge\nrequired_knowledge_scopes: general\ncompleted_knowledge_scopes: general\nallowed_next: retrieve_knowledge, final_output\nblocked_attempts: 0\n</agent_status>",
-      "allowed_next": [
-        "retrieve_knowledge"
-      ]
+      "allowed_next": ["retrieve_knowledge"]
     }
   }
 }

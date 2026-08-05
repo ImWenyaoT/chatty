@@ -12,38 +12,18 @@ import {
   ToolGuardrailFunctionOutputFactory,
 } from "@openai/agents";
 
+import {
+  WorkflowStage,
+  type ChattyRunContext,
+  type GateDecision,
+  type ToolBatchState,
+} from "./context.ts";
 import type { RecommendationEvidence } from "./evidence.ts";
-import type { ChattyRunContext } from "./tools.ts";
-
-/** Agent Loop 只有两个阶段：补齐支撑材料，或者已经可以生成草稿。 */
-export const WorkflowStage = {
-  NEED_SUPPORT: "need_support",
-  READY_TO_DRAFT: "ready_to_draft",
-} as const;
-export type WorkflowStage = (typeof WorkflowStage)[keyof typeof WorkflowStage];
-
-/** 单个 Tool call 的门禁结果。 */
-export type GateDecision = {
-  allowed: boolean;
-  reason: string | null;
-};
 
 /** 同一次 Model 响应中全部 Tool call 的冻结决策。 */
 export type ToolBatch = {
   stage: WorkflowStage;
   decisions: Map<string, GateDecision>;
-};
-
-/**
- * 一批 Tool call 共享的冻结状态。
- *
- * stage 与 allowed 在批次开始时定格，因此同批调用不会因为彼此的执行顺序拿到不同结论；
- * accepted 随批次推进增长，用来拦截同批重复 Tool。
- */
-export type ToolBatchState = {
-  stage: WorkflowStage;
-  allowed: Set<string>;
-  accepted: Set<string>;
 };
 
 /** 在任何 Tool 执行前读取一次 Evidence，作为整批调用的唯一判断依据。 */

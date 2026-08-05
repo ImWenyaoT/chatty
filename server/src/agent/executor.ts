@@ -41,12 +41,8 @@ import {
 } from "./evidence.ts";
 import { productContext } from "./framing.ts";
 import { extractResponseText } from "./response-text.ts";
-import {
-  CHATTY_TOOLS,
-  createRunContext,
-  stableStringify,
-  type ChattyRunContext,
-} from "./tools.ts";
+import { createRunContext, type ChattyRunContext } from "./context.ts";
+import { CHATTY_TOOLS, stableStringify } from "./tools.ts";
 import { appendAgentStatus } from "./workflow.ts";
 
 const INSTRUCTIONS = `你是 Chatty，一个电商推荐与知识问答 Single Agent。

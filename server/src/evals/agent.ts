@@ -7,7 +7,7 @@ import { Chatty, createChattyContext, ChattyError } from "../agent/chatty.ts";
 import { Catalog } from "../data/catalog.ts";
 import type { Product, Reply } from "../data/models.ts";
 import { ResponsesModelProvider } from "../model-provider.ts";
-import { round } from "../round.ts";
+import { round } from "../data/round.ts";
 
 export type AgentCase = {
   name: string;

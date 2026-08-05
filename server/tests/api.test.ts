@@ -6,9 +6,9 @@ import { Usage } from "@openai/agents";
 import type { ChattyContext, ChattyTurn } from "../src/agent/chatty.ts";
 import { createApp } from "../src/api.ts";
 import { Catalog } from "../src/data/catalog.ts";
-import { DATA_DIR } from "../src/data/database.ts";
+import { DATA_DIR } from "../src/paths.ts";
 import type { ModelProvider } from "../src/model-provider.ts";
-import { ScriptedModel } from "./scripted-model.ts";
+import { ScriptedModel } from "./helpers/scripted-model.ts";
 
 const BASE = "http://localhost";
 

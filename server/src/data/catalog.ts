@@ -3,7 +3,8 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { DATA_DIR, Database, SeedDataError, segmentForIndex } from "./database.ts";
+import { Database, SeedDataError, segmentForIndex } from "./database.ts";
+import { DATA_DIR } from "../paths.ts";
 import {
   emptyUserContext,
   type KnowledgeHit,
@@ -16,7 +17,7 @@ import {
   type UserProfile,
   type UserSegment,
 } from "./models.ts";
-import { round } from "../round.ts";
+import { round } from "./round.ts";
 
 export const MAX_PRICE_CENTS = 1_000_000;
 

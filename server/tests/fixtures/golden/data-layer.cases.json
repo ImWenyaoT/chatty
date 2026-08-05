@@ -81,7 +81,11 @@
       "op": "user_profile",
       "input": {
         "user_id": "user_vip",
-        "overrides": { "preferred_categories": ["耳机"], "min_price_cents": 10000, "max_price_cents": 50000 }
+        "overrides": {
+          "preferred_categories": ["耳机"],
+          "min_price_cents": 10000,
+          "max_price_cents": 50000
+        }
       }
     },
     {
@@ -123,12 +127,22 @@
     {
       "name": "limit 超出上界",
       "op": "search",
-      "input": { "user_id": "user_active", "overrides": {}, "categories": [], "limit": 21 }
+      "input": {
+        "user_id": "user_active",
+        "overrides": {},
+        "categories": [],
+        "limit": 21
+      }
     },
     {
       "name": "空白类目视为非法",
       "op": "search",
-      "input": { "user_id": "user_active", "overrides": {}, "categories": ["  "], "limit": 5 }
+      "input": {
+        "user_id": "user_active",
+        "overrides": {},
+        "categories": ["  "],
+        "limit": 5
+      }
     },
 
     {
@@ -161,17 +175,32 @@
     {
       "name": "检索前先经过同义词改写",
       "op": "retrieve_knowledge",
-      "input": { "query": "挤地铁想安静点", "categories": [], "product_ids": [], "limit": 5 }
+      "input": {
+        "query": "挤地铁想安静点",
+        "categories": [],
+        "product_ids": [],
+        "limit": 5
+      }
     },
     {
       "name": "通用政策检索：七天无理由退货",
       "op": "retrieve_knowledge",
-      "input": { "query": "七天无理由退货条件", "categories": [], "product_ids": [], "limit": 3 }
+      "input": {
+        "query": "七天无理由退货条件",
+        "categories": [],
+        "product_ids": [],
+        "limit": 3
+      }
     },
     {
       "name": "商品范围检索受类目与商品 ID 约束",
       "op": "retrieve_knowledge",
-      "input": { "query": "降噪 通勤", "categories": ["耳机"], "product_ids": ["P003"], "limit": 5 }
+      "input": {
+        "query": "降噪 通勤",
+        "categories": ["耳机"],
+        "product_ids": ["P003"],
+        "limit": 5
+      }
     },
     {
       "name": "空查询",
@@ -187,7 +216,9 @@
     {
       "name": "营销策略随分群变化",
       "op": "marketing_strategy",
-      "input": { "segments": ["new_user", "active", "high_value", "price_sensitive", "churn_risk"] }
+      "input": {
+        "segments": ["new_user", "active", "high_value", "price_sensitive", "churn_risk"]
+      }
     },
     {
       "name": "未知分群",
@@ -202,7 +233,13 @@
         "user_id": "user_active",
         "overrides": { "preferred_categories": ["耳机"] },
         "num_items": 1,
-        "draft": [{ "product_id": "P003", "reason": "这是最好的选择", "marketing_copy": "100%最好" }]
+        "draft": [
+          {
+            "product_id": "P003",
+            "reason": "这是最好的选择",
+            "marketing_copy": "100%最好"
+          }
+        ]
       }
     },
     {
@@ -238,7 +275,9 @@
         "user_id": "user_active",
         "overrides": {},
         "num_items": 3,
-        "draft": [{ "product_id": "UNKNOWN", "reason": "不存在", "marketing_copy": "不存在" }]
+        "draft": [
+          { "product_id": "UNKNOWN", "reason": "不存在", "marketing_copy": "不存在" }
+        ]
       }
     },
     {
@@ -501,7 +540,9 @@
           ],
           "required_knowledge_scopes": ["product"],
           "completed_knowledge_scopes": ["product"],
-          "blocked_attempts": ["need_support:retrieve_knowledge:tool_not_allowed_in_stage"]
+          "blocked_attempts": [
+            "need_support:retrieve_knowledge:tool_not_allowed_in_stage"
+          ]
         }
       }
     },

@@ -9,34 +9,9 @@
 import { type RunContext, tool } from "@openai/agents";
 import { z } from "zod";
 
-import type { Catalog } from "../data/catalog.ts";
-import type { RecommendationRequest } from "../data/models.ts";
-import {
-  guardRepeatedCall,
-  recordKnowledge,
-  type RecommendationEvidence,
-} from "./evidence.ts";
-import { stageGuardrail, type ToolBatchState } from "./workflow.ts";
-
-/** 一次 Agent Loop 内 Tool 共享的对象，不会写入用户会话。 */
-export type ChattyRunContext = {
-  // 纯知识问答没有商品请求，因此 request 可以是 null。
-  request: RecommendationRequest | null;
-  // catalog 是 SQLite 查询入口；Tool 不直接写 SQL。
-  catalog: Catalog;
-  // evidence 是 Harness 账本，只能由确定性 Tool 代码更新。
-  evidence: RecommendationEvidence;
-  // batch 由 workflow 为“当前这批 Tool 调用”临时冻结。
-  batch: ToolBatchState | null;
-};
-
-export function createRunContext(
-  request: RecommendationRequest | null,
-  catalog: Catalog,
-  evidence: RecommendationEvidence,
-): ChattyRunContext {
-  return { request, catalog, evidence, batch: null };
-}
+import type { ChattyRunContext } from "./context.ts";
+import { guardRepeatedCall, recordKnowledge } from "./evidence.ts";
+import { stageGuardrail } from "./workflow.ts";
 
 /** 递归排序 key，让同一组参数总是得到同一个签名。 */
 function stableStringify(value: unknown): string {
