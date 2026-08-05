@@ -1,10 +1,6 @@
 # ============================================================
 # 运行时产物
 # ============================================================
-.venv/
-__pycache__/
-*.py[cod]
-*.so
 
 # data/ 下的 JSON、JSONL 是可读种子，要进版本库；
 # 由种子生成的 SQLite 库是派生产物，不进。
@@ -20,16 +16,9 @@ __pycache__/
 .cache/
 .pnpm-store/
 node_modules/
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
-.ty/
-.coverage
 coverage/
-htmlcov/
 build/
 dist/
-*.egg-info/
 
 # ============================================================
 # 密钥与本地配置

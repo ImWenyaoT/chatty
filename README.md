@@ -7,8 +7,8 @@
 <sub>Model 负责理解需求、主动检索与生成表达；Harness + SQLite 负责流程、事实与可信输出。</sub>
 
 [![CI](https://github.com/ImWenyaoT/chatty/actions/workflows/ci.yml/badge.svg)](https://github.com/ImWenyaoT/chatty/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](backend/pyproject.toml)
-[![Agents SDK](https://img.shields.io/badge/OpenAI-Agents%20SDK-000000)](https://openai.github.io/openai-agents-python/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-Node%2024%2B-3178C6?logo=typescript&logoColor=white)](server/package.json)
+[![Agents SDK](https://img.shields.io/badge/OpenAI-Agents%20SDK-000000)](https://openai.github.io/openai-agents-js/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 [快速开始](#快速开始) · [看一次请求](#一次请求如何完成) · [理解架构](#系统架构) · [查看评估](#评估与验证) · [阅读 Chatty Book](docs/chatty-book/README.md)
@@ -53,13 +53,13 @@ Chatty 用一条最小闭环解决它们：
 
 ## 系统架构
 
-Frontend、FastAPI 与 Agent 的关系保持简单：FastAPI 是 HTTP Adapter，Chatty Agent 才拥有
+Frontend、Hono 与 Agent 的关系保持简单：Hono 是 HTTP Adapter，Chatty Agent 才拥有
 Model + Harness；SQLite 只保存演示业务数据和 FTS5 知识索引。
 
 ```mermaid
 flowchart LR
     User["用户"] --> Frontend["Frontend<br/>React + Vite"]
-    Frontend -->|"HTTP JSON"| API["FastAPI<br/>HTTP Adapter"]
+    Frontend -->|"HTTP JSON"| API["Hono<br/>HTTP Adapter"]
     API -->|"Context In"| Agent["Chatty Agent<br/>Model + Harness"]
     Agent -->|"Responses API"| DeepSeek["DeepSeek Model"]
     Agent -->|"业务查询 / FTS5"| SQLite[("SQLite")]
@@ -75,7 +75,7 @@ flowchart LR
 | Module | 负责 | 不负责 |
 | --- | --- | --- |
 | Frontend | 收集输入，展示对话、Trace、Token 与只读数据 | 推导推荐事实 |
-| FastAPI | HTTP 校验、Session、错误码、Reply 序列化 | 调用 Tool 或决定推荐逻辑 |
+| Hono | HTTP 校验、Session、错误码、Reply 序列化 | 调用 Tool 或决定推荐逻辑 |
 | Chatty Agent | Task Framing、Agent Loop、Evidence、Context In/Out | HTTP 和页面渲染 |
 | Model | 语义理解、主动检索、Query 改写、理由与文案 | 决定真实价格和库存 |
 | SQLite | 商品、库存、画像、营销策略与知识索引 | 会话状态和模型生成 |
@@ -88,7 +88,7 @@ flowchart LR
 sequenceDiagram
     actor U as User
     participant F as Frontend
-    participant A as FastAPI
+    participant A as Hono
     participant H as Chatty Harness
     participant M as DeepSeek Model
     participant D as SQLite
@@ -172,10 +172,8 @@ flowchart LR
 
 | 依赖 | 版本 |
 | --- | --- |
-| Python | 3.12+ |
 | Node.js | 24+ |
 | pnpm | 11.20+ |
-| uv | 当前稳定版 |
 | Model API | DeepSeek Responses API key |
 
 ```bash
@@ -192,7 +190,7 @@ pnpm dev
 打开 [http://localhost:5173](http://localhost:5173)。`pnpm dev` 会同时启动：
 
 - Web GUI：`http://localhost:5173`
-- FastAPI：`http://127.0.0.1:8000`
+- Chatty API：`http://127.0.0.1:8000`
 
 配置优先级为 `.env.local > .env > 系统环境变量`。默认使用 DeepSeek；同时保留
 `OPENAI_API_KEY`、`OPENAI_BASE_URL` 和 `MODEL_ID` 兼容变量。
@@ -211,27 +209,28 @@ pnpm dev
 
 ```text
 chatty/
-├── backend/app/
-│   ├── agent/          # Chatty Agent：Framing、Loop、Tool、Evidence、Workflow
-│   ├── data/           # SQLite、Catalog 与领域模型
-│   ├── evals/          # Retrieval Eval 与真实 DeepSeek Agent Eval
-│   ├── api.py          # FastAPI HTTP Adapter
-│   └── model_provider.py
-├── frontend/           # React + Vite 桌面 Demo
-├── data/               # SQLite 初始化种子，不是运行时查询接口
+├── server/
+│   ├── src/agent/       # Chatty Agent：Framing、Loop、Tool、Evidence、Workflow
+│   ├── src/data/        # SQLite、Catalog 与领域模型
+│   ├── src/evals/       # Retrieval Eval 与真实 DeepSeek Agent Eval
+│   ├── src/api.ts       # Hono HTTP Adapter
+│   └── tests/           # node:test 确定性测试
+├── frontend/            # React + Vite 桌面 Demo
+├── data/                # SQLite 初始化种子，不是运行时查询接口
+├── tests/golden/        # 跨语言数据层 golden 基线
 └── docs/
-    ├── chatty-book/    # 从请求到架构的十章说明
-    └── adr/            # 架构决策记录
+    ├── chatty-book/     # 从请求到架构的十章说明
+    └── adr/             # 架构决策记录
 ```
 
 建议代码阅读顺序：
 
-1. [`backend/app/agent/chatty.py`](backend/app/agent/chatty.py)：单一 `run()` Interface 与 Context In/Out。
-2. [`backend/app/agent/framing.py`](backend/app/agent/framing.py)：把自然语言映射为 `TaskFrame`。
-3. [`backend/app/agent/executor.py`](backend/app/agent/executor.py)：生成 Draft，再以 Evidence 收敛为 Reply。
-4. [`backend/app/agent/workflow.py`](backend/app/agent/workflow.py)：状态栏、批次裁决与 Tool Guardrail。
-5. [`backend/app/agent/evidence.py`](backend/app/agent/evidence.py)：Harness-owned Evidence 与确定性校验。
-6. [`backend/app/data/catalog.py`](backend/app/data/catalog.py)：SQLite 查询、BM25 检索与最终事实重查。
+1. [`server/src/agent/chatty.ts`](server/src/agent/chatty.ts)：单一 `run()` Interface 与 Context In/Out。
+2. [`server/src/agent/framing.ts`](server/src/agent/framing.ts)：把自然语言映射为 `TaskFrame`。
+3. [`server/src/agent/executor.ts`](server/src/agent/executor.ts)：生成 Draft，再以 Evidence 收敛为 Reply。
+4. [`server/src/agent/workflow.ts`](server/src/agent/workflow.ts)：状态栏、批次裁决与 Tool Guardrail。
+5. [`server/src/agent/evidence.ts`](server/src/agent/evidence.ts)：Harness-owned Evidence 与确定性校验。
+6. [`server/src/data/catalog.ts`](server/src/data/catalog.ts)：SQLite 查询、BM25 检索与最终事实重查。
 
 ## 评估与验证
 
@@ -240,7 +239,7 @@ Agent Eval 调用真实 Model。这样既能快速定位代码和检索回归，
 
 | 层级 | 是否调用 Model | 当前覆盖 / 指标 | 用途 |
 | --- | --- | --- | --- |
-| 确定性测试 | 否 | 62 项测试 | Tool 顺序、Evidence、SQLite、HTTP、会话状态 |
+| 确定性测试 | 否 | 19 项测试（含 63 条 golden 基线对拉） | Tool 顺序、Evidence、SQLite、HTTP、会话状态 |
 | Retrieval Eval | 否 | 10 条标注 Query；HitRate@5 100%，MRR@5 0.8083 | FTS5 + BM25 检索质量 |
 | Agent Eval | 是，真实 DeepSeek | 7 条端到端 Case；最近一次通过率 85.7%（6/7） | 推荐、澄清、政策问答、mixed-goal |
 
@@ -259,7 +258,7 @@ Agent Eval 还记录 Action、端到端耗时、Model 请求数与 Token。真�
 Chatty 有意保持在最小可实现范围：
 
 - 一个 Agent，不引入 Multi-Agent、Handoff、LangChain 或 LangGraph。
-- SQLite 保存演示业务数据与 FTS5 知识索引；会话只存在 FastAPI 进程内存。
+- SQLite 保存演示业务数据与 FTS5 知识索引；会话只存在服务端进程内存。
 - JSON/JSONL 只负责初始化 SQLite，不作为运行时业务查询接口。
 - 不使用外部数据库、向量数据库、Dense Retrieval 或 LLM-as-Judge。
 - 不处理支付、下单、真实库存扣减或生产级鉴权。
@@ -268,8 +267,9 @@ Chatty 有意保持在最小可实现范围：
 ## 文档
 
 - [Chatty Book](docs/chatty-book/README.md)：十章解释 Agent、Harness、Context、Tool、RAG、Evidence、Eval 与 Web GUI。
-- [ADR 0001](docs/adr/0001-web-ui-and-http-layer.md)：为什么增加 React Frontend 与 FastAPI HTTP Adapter。
-- [ADR 0002](docs/adr/0002-python-fastapi-agents-sdk.md)：为什么使用 Python、OpenAI Agents SDK 与 DeepSeek Responses API。
+- [ADR 0001](docs/adr/0001-web-ui-and-http-layer.md)：为什么增加 React Frontend 与 HTTP Adapter。
+- [ADR 0002](docs/adr/0002-python-fastapi-agents-sdk.md)：为什么使用 OpenAI Agents SDK 与 DeepSeek Responses API。
+- [ADR 0003](docs/adr/0003-typescript-migration.md)：为什么从 Python 迁移到 TypeScript 全栈。
 - [CONTEXT.md](CONTEXT.md)：项目唯一领域词汇入口。
 
 ## License

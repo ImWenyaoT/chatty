@@ -49,8 +49,8 @@ flowchart LR
 
 代码里还有两个值得注意的接口位置：
 
-- `model_provider.py` 隔离 DeepSeek Responses 接入。Task Framer 和主 Agent Loop 共用同一份模型配置。
-- `catalog.py` 隔离 Tool 与 SQL。Tool 只表达业务查询，测试可以给 Catalog 使用独立 SQLite。
+- `model-provider.ts` 隔离 DeepSeek Responses 接入。Task Framer 和主 Agent Loop 共用同一份模型配置。
+- `catalog.ts` 隔离 Tool 与 SQL。Tool 只表达业务查询，测试可以给 Catalog 使用独立 SQLite。
 
 这两个位置让模型接入、业务数据和 Agent Loop 各自集中，但没有再增加一层只负责转发的抽象。
 

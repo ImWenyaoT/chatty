@@ -5,13 +5,15 @@ Model、包含 Tool Loop 的 Harness，以及 SQLite 组成的完整系统。
 
 项目保留三层评估。
 
-第一层是确定性测试：
+第一层是确定性测试，由 `node:test` 运行：
 
 ```bash
 pnpm test
 ```
 
-它不调用网络模型，主要检查 Tool 调用顺序、Evidence、SQLite 查询、HTTP 边界和画像更新规则。这些测试速度快，适合每次改代码后运行。
+它不调用网络模型：测试通过 `ModelProvider` 接口注入一个实现了 SDK `Model` 接口的
+`ScriptedModel`，因此仍然走完整的真实 Runner，guardrail 与 input filter 都会被执行。
+这一层主要检查 Tool 调用顺序、Evidence、SQLite 查询、HTTP 边界和画像更新规则。这些测试速度快，适合每次改代码后运行。
 
 第二层是知识检索评估：
 

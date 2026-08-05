@@ -8,6 +8,8 @@
     "dev": "node --watch src/main.ts",
     "start": "node src/main.ts",
     "test": "node --test \"tests/**/*.test.ts\"",
+    "eval:retrieval": "node src/evals/retrieval.ts",
+    "eval:agent": "node src/evals/agent.ts",
     "typecheck": "tsc --noEmit --pretty false",
     "lint": "oxlint && prettier --check .",
     "format": "prettier --write ."

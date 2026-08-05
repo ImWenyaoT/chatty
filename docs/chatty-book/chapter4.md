@@ -1,7 +1,7 @@
 # 第 4 章：五个 Tool
 
 Tool 属于 Harness。Chatty 有五项 Tool 能力：其中三个由 Harness 固定执行，两个通过
-Agents SDK `function_tool` 开放给 Model。每个 Tool 只回答一个明确的问题。
+Agents SDK 的 `tool()` 开放给 Model。每个 Tool 只回答一个明确的问题。
 
 | Tool                     | 要回答的问题               | 代码中的 Context Out                  |
 | ------------------------ | -------------------------- | ------------------------------------- |
@@ -23,7 +23,8 @@ get_user_profile → search_products → check_inventory
 
 没有画像就无法确定完整搜索条件；没有候选商品也不知道应该检查哪些库存。因此 Harness
 在调用 Model 前直接顺序执行这三个确定步骤。知识检索和营销策略分别依赖商品与画像，但
-彼此没有先后依赖；当前本地 Tool 执行并发上限仍设为 1，避免批次状态发生竞态。
+彼此没有先后依赖；当前本地 Tool 执行并发上限（`maxFunctionToolConcurrency`）仍设为 1，
+避免批次状态发生竞态。
 
 Model 始终只看到稳定的两个开放 Tool Schema，以便复用请求前缀。知识 Tool 用 `general` 与
 `product` 两个 scope 区分通用问答和商品依据；纯知识请求只要求前者，混合请求两者都需要。

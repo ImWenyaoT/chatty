@@ -15,12 +15,12 @@ Model 每次只能根据当前收到的 Context 作出判断。对 Chatty 来说
 Task Framer 对 Model 使用无 `anyOf` 的扁平 `TaskFrameWire`，再由 Harness 映射为领域
 `TaskFrame(product_need?, knowledge_query?)`。Wire 中可缺省的 scalar 用 0/1 元素数组表达，
 以兼容 DeepSeek Responses API 的 JSON Schema 子集。两者都仍通过 Agents SDK 的
-`output_type` 管理；DeepSeek 偶尔把实例包在 `properties` 时，只在 SDK
-`invalid_final_output` handler 中确定性解包和校验，不再次调用 Model。
+`outputType` 管理；DeepSeek 偶尔把实例包在 `properties` 时，只在 SDK
+`invalidFinalOutput` handler 中确定性解包和校验，不再次调用 Model。
 
-最终 `AgentDraft` 同样通过 Agents SDK 的 `output_type` 声明 Pydantic Schema，
+最终 `AgentDraft` 同样通过 Agents SDK 的 `outputType` 声明 zod Schema，
 由 Responses API 的 `text.format` 承载；不再从自由文本里手动截取 JSON。DeepSeek 偶尔仍可能
-返回 Schema 外文字，此时 SDK 的 `invalid_final_output` error handler 最多调用一次无 Tool 的
+返回 Schema 外文字，此时 SDK 的 `invalidFinalOutput` error handler 最多调用一次无 Tool 的
 结构化 correction Agent，不重复执行业务 Tool。
 
 随后，Chatty 的 `run()` 只把尚未完成的澄清请求保存成 Agents SDK 使用的结构化
@@ -38,7 +38,9 @@ Model 可以看到商品列表、库存状态和知识内容，从而继续推�
 
 每次调用 Model 前，Harness 还会把 Evidence 投影成简短的 `<agent_status>`，追加在 Context
 末尾。它只告诉 Model 当前阶段、已完成步骤和允许的下一步；既不改写前面的静态 Tool Schema，
-也不把 Evidence 原文暴露给 Model。状态栏是导航，`workflow.py` 的 Tool guardrail 才是硬门禁。
+也不把 Evidence 原文暴露给 Model。这一步由 Agents SDK 的 `callModelInputFilter` 完成；
+它在每次调用 Model 前触发，恰好说明上一批 Tool 已经全部结束，因此同时用作批次边界。
+状态栏是导航，`workflow.ts` 的 Tool guardrail 才是硬门禁。
 
 进入 Agent Loop 前，Harness 只同步完成确定性的画像、搜索和库存，并将结果组成
 `RecommendationContext`；知识不提前检索。进入循环后，Model 根据 `knowledge_query` 与
@@ -59,7 +61,7 @@ Harness 管理，因此这里不依赖 `previous_response_id`。
 sequenceDiagram
     actor U as User
     participant F as Frontend
-    participant A as FastAPI
+    participant A as Hono
     participant H as Chatty Harness
     participant M as DeepSeek Model
     participant D as SQLite
@@ -88,7 +90,7 @@ sequenceDiagram
 
 | Context | 所在位置 | 生命周期 |
 | --- | --- | --- |
-| `ChattyContext(pending_user_messages / history / turns)` | FastAPI 进程内存中的不透明会话值 | 待澄清任务与轮次；任务完成后清空内容 |
+| `ChattyContext(pendingUserMessages / history / turns)` | Hono 进程内存中的不透明会话值 | 待澄清任务与轮次；任务完成后清空内容 |
 | Evidence 与 Tool trace | Agents SDK RunContext | 每轮重新创建，不跨轮复用 |
 | 商品、库存、知识与画像 | SQLite | 运行时业务事实 |
 
@@ -96,13 +98,13 @@ sequenceDiagram
 
 | 层 | 文件 | Context In | Context Out |
 | --- | --- | --- | --- |
-| HTTP | `backend/app/api.py` | 用户原话、会话 ID | answer / recommend / clarify / exhausted |
-| Agent Interface | `backend/app/agent/chatty.py` | 用户、原话、`ChattyContext` | `ChattyTurn` |
-| Harness / 输入适配 | `backend/app/agent/framing.py` | 当前原话、待澄清上下文、可选类目 | `TaskFrame` |
-| Harness / Agent Loop | `backend/app/agent/executor.py` | 原始用户输入、`TaskContext` | 可信回答或稳定错误码 |
-| Harness / 控制 | `backend/app/agent/workflow.py` | Evidence、整批 Tool calls | 阶段裁决、`agent_status` |
-| Harness / Tool | `backend/app/agent/tools.py` | Tool 参数、RunContext | Model-visible Result 与 Harness-owned Evidence |
-| 数据与检索 | `backend/app/data/catalog.py` | 结构化查询 | SQLite 事实与知识命中 |
+| HTTP | `server/src/api.ts` | 用户原话、会话 ID | answer / recommend / clarify / exhausted |
+| Agent Interface | `server/src/agent/chatty.ts` | 用户、原话、`ChattyContext` | `ChattyTurn` |
+| Harness / 输入适配 | `server/src/agent/framing.ts` | 当前原话、待澄清上下文、可选类目 | `TaskFrame` |
+| Harness / Agent Loop | `server/src/agent/executor.ts` | 原始用户输入、`TaskContext` | 可信回答或稳定错误码 |
+| Harness / 控制 | `server/src/agent/workflow.ts` | Evidence、整批 Tool calls | 阶段裁决、`agent_status` |
+| Harness / Tool | `server/src/agent/tools.ts` | Tool 参数、RunContext | Model-visible Result 与 Harness-owned Evidence |
+| 数据与检索 | `server/src/data/catalog.ts` | 结构化查询 | SQLite 事实与知识命中 |
 
 ---
 
