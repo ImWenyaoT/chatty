@@ -4,6 +4,28 @@
 
 Chatty 是面向电商推荐与营销场景的单 Agent。它根据用户画像选择有库存的商品，检索相关知识，并生成个性化推荐理由和营销文案。
 
+## Agent
+
+Chatty 的概念定义是 `Agent = Model + Harness`。Model 负责开放式判断；Harness 是 Model
+之外的运行环境，负责准备 Context、提供并执行 Tool、运行 Agent Loop、实施 Control 并保存
+Evidence。Context 和 Tool 属于 Harness 管理的运行时内容，不是与 Model、Harness 并列的
+Agent 一级组成部分。
+
+## Model
+
+Agent 中负责理解自然语言、选择开放 Tool 和生成表达的部分。当前 Model 通过 OpenAI Agents SDK
+调用 DeepSeek Responses API；Model 不拥有商品价格、库存或最终事实裁决权。
+
+## Harness
+
+Agent 中位于 Model 外部的确定性运行环境。Harness 准备 Context，提供并执行 Tool，控制循环、
+会话与调用上限，保存 Model 不可见的 Evidence，并在输出前依据 SQLite 重查和校验事实。
+
+## Tool
+
+Harness 向 Model 提供或替 Model 执行的能力。Tool 接收明确输入并返回结果，本身没有独立目标、
+Context 或决策循环，因此不是 Agent。
+
 ## 用户
 
 发起一次推荐请求的人。用户由稳定的 `user_id` 标识；请求可以携带近期浏览、近期购买、偏好类目和价格区间。

@@ -61,15 +61,18 @@ flowchart LR
     User["用户"] --> Frontend["Frontend<br/>React + Vite"]
     Frontend -->|"HTTP JSON"| API
     subgraph Backend["Backend"]
-        API["Hono<br/>HTTP Adapter"] -->|"Context In"| Agent["Chatty Agent<br/>Model + Harness"]
-        Agent -->|"业务查询 / FTS5"| SQLite[("SQLite")]
-        Agent -->|"Context Out"| API
+        API["Hono<br/>HTTP Adapter"] -->|"Context In"| Harness
+        subgraph Agent["Chatty Agent = Model + Harness"]
+            Model["Model"] <--> Harness["Harness<br/>Context / Tools / Loop / Control / Evidence"]
+        end
+        Harness -->|"业务查询 / FTS5"| SQLite[("SQLite")]
+        Harness -->|"Context Out"| API
     end
-    Agent -->|"Responses API"| DeepSeek["DeepSeek Model"]
+    Model -->|"Responses API"| DeepSeek["DeepSeek"]
     API --> Frontend
 
     classDef agent fill:#111827,color:#fff,stroke:#111827;
-    class Agent agent;
+    class Model,Harness agent;
 ```
 
 ### 职责划分
@@ -79,7 +82,8 @@ flowchart LR
 | Frontend | 收集输入，展示对话、Trace、Token 与只读数据 | 推导推荐事实 |
 | Backend · Hono | HTTP 校验、Session、错误码、Reply 序列化与前端类型推导 | 调用 Tool 或决定推荐逻辑 |
 | Backend · Chatty Agent | Task Framing、Agent Loop、Evidence、Context In/Out | HTTP 和页面渲染 |
-| Backend · Model | 语义理解、主动检索、Query 改写、理由与文案 | 决定真实价格和库存 |
+| Backend · Chatty Agent · Model | 语义理解、主动检索、Query 改写、理由与文案 | 决定真实价格和库存 |
+| Backend · Chatty Agent · Harness | Context、Tool、Agent Loop、Control、Evidence 与事实裁决 | 开放式语言判断 |
 | Backend · SQLite | 商品、库存、画像、营销策略与知识索引 | 会话状态和模型生成 |
 
 ## 一次请求如何完成

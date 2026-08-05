@@ -1,6 +1,13 @@
 # 第 10 章：为什么 Chatty 只有一个 Agent
 
-Chatty 有五个 Tool，但只有一个 Agent。Tool 和 Agent 的区别不在于名字，而在于它是否拥有独立目标、Context 和决策循环。
+Chatty 有五个 Tool，但只有一个 Agent。这里始终采用同一个概念层级：
+
+```text
+Agent = Model + Harness
+Harness 管理 Context、Tool、Agent Loop、Control 与 Evidence
+```
+
+Tool 和 Agent 的区别也不在于名字，而在于它是否拥有独立目标和决策循环。
 
 商品搜索 Tool 接收查询参数并返回候选商品；库存 Tool 接收商品 ID 并返回库存。它们不会自行规划下一步，也不会与其他 Tool 协商，因此不是 Agent。
 
@@ -8,11 +15,13 @@ Chatty 有五个 Tool，但只有一个 Agent。Tool 和 Agent 的区别不在�
 
 ```text
 一个 Chatty Agent
-  ├→ get_user_profile
-  ├→ search_products
-  ├→ check_inventory
-  ├→ retrieve_knowledge
-  └→ get_marketing_strategy
+  ├── Model
+  └── Harness
+      ├→ get_user_profile
+      ├→ search_products
+      ├→ check_inventory
+      ├→ retrieve_knowledge
+      └→ get_marketing_strategy
 ```
 
 多 Agent 的价值通常来自真实的信息隔离、不同权限、外部反馈或可以并行完成的独立任务。Chatty 当前没有这些条件，所以 Single Agent 是更直接的实现。

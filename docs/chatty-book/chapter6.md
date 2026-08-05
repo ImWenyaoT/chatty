@@ -1,7 +1,7 @@
 # 第 6 章：如何评估 Chatty
 
 只测试某个函数是否返回预期值，还不足以说明一个 Agent 可以工作。Chatty 的评估需要覆盖
-Model、包含 Tool Loop 的 Harness，以及 SQLite 组成的完整系统。
+完整 Agent（Model + Harness），以及 Agent 使用的 SQLite 事实源。
 
 项目保留三层评估。
 
