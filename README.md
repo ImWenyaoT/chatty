@@ -53,17 +53,19 @@ Chatty 用一条最小闭环解决它们：
 
 ## 系统架构
 
-Frontend、Hono 与 Agent 的关系保持简单：Hono 是 HTTP Adapter，Chatty Agent 才拥有
-Model + Harness；SQLite 只保存演示业务数据和 FTS5 知识索引。
+系统顶层只分为 Frontend 与 Backend。Frontend 是完整的 React 用户界面；Backend 内部再展开
+Hono、Chatty Agent 与 SQLite，其中 Chatty Agent 才拥有 Model + Harness。
 
 ```mermaid
 flowchart LR
     User["用户"] --> Frontend["Frontend<br/>React + Vite"]
-    Frontend -->|"HTTP JSON"| API["Hono<br/>HTTP Adapter"]
-    API -->|"Context In"| Agent["Chatty Agent<br/>Model + Harness"]
+    Frontend -->|"HTTP JSON"| API
+    subgraph Backend["Backend"]
+        API["Hono<br/>HTTP Adapter"] -->|"Context In"| Agent["Chatty Agent<br/>Model + Harness"]
+        Agent -->|"业务查询 / FTS5"| SQLite[("SQLite")]
+        Agent -->|"Context Out"| API
+    end
     Agent -->|"Responses API"| DeepSeek["DeepSeek Model"]
-    Agent -->|"业务查询 / FTS5"| SQLite[("SQLite")]
-    Agent -->|"Context Out"| API
     API --> Frontend
 
     classDef agent fill:#111827,color:#fff,stroke:#111827;
@@ -75,10 +77,10 @@ flowchart LR
 | Module | 负责 | 不负责 |
 | --- | --- | --- |
 | Frontend | 收集输入，展示对话、Trace、Token 与只读数据 | 推导推荐事实 |
-| Hono | HTTP 校验、Session、错误码、Reply 序列化与前端类型推导 | 调用 Tool 或决定推荐逻辑 |
-| Chatty Agent | Task Framing、Agent Loop、Evidence、Context In/Out | HTTP 和页面渲染 |
-| Model | 语义理解、主动检索、Query 改写、理由与文案 | 决定真实价格和库存 |
-| SQLite | 商品、库存、画像、营销策略与知识索引 | 会话状态和模型生成 |
+| Backend · Hono | HTTP 校验、Session、错误码、Reply 序列化与前端类型推导 | 调用 Tool 或决定推荐逻辑 |
+| Backend · Chatty Agent | Task Framing、Agent Loop、Evidence、Context In/Out | HTTP 和页面渲染 |
+| Backend · Model | 语义理解、主动检索、Query 改写、理由与文案 | 决定真实价格和库存 |
+| Backend · SQLite | 商品、库存、画像、营销策略与知识索引 | 会话状态和模型生成 |
 
 ## 一次请求如何完成
 
@@ -88,7 +90,7 @@ flowchart LR
 sequenceDiagram
     actor U as User
     participant F as Frontend
-    participant A as Hono
+    participant A as Backend · Hono
     participant H as Chatty Harness
     participant M as DeepSeek Model
     participant D as SQLite
@@ -210,14 +212,14 @@ pnpm dev
 ```text
 chatty/
 ├── apps/
-│   ├── api/
+│   ├── api/            # Backend
 │   │   ├── src/agent/   # Chatty Agent：Framing、Loop、Tool、Evidence、Workflow
 │   │   ├── src/data/    # SQLite、Catalog 与领域模型
 │   │   ├── src/evals/   # Retrieval Eval 与真实 DeepSeek Agent Eval
 │   │   ├── src/api.ts   # Hono HTTP Adapter
 │   │   ├── src/paths.ts # 仓库根位置，供仓库级 .env 使用
 │   │   └── tests/       # node:test 确定性测试与 golden 基线
-│   └── web/             # React + Vite 桌面 Demo，通过 Hono RPC 使用 HTTP 契约
+│   └── web/             # Frontend：React + Vite 桌面 Demo
 ├── packages/
 │   └── seed-data/       # SQLite 初始化种子，自身导出 DATA_DIR，不是运行时查询接口
 └── docs/

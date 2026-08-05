@@ -5,9 +5,9 @@ supersedes: 0002-python-fastapi-agents-sdk
 
 # 从 Python 迁移到 TypeScript 全栈
 
-Chatty 原本是 Python 后端（FastAPI + uv + pytest + Pydantic + openai-agents-python）
-加 TypeScript 前端。现在整个仓库统一为 TypeScript：`server/`（现为 `apps/api/`）承担 Agent、Tool、Harness、
-SQLite 与 HTTP，`frontend/`（现为 `apps/web/`）保持 React + Vite 不变。
+Chatty 原本是 Python Backend 加 TypeScript Frontend。现在整个仓库统一为 TypeScript：
+`apps/api/` 是 Backend，承担 HTTP、Agent、Tool、Harness 与 SQLite；`apps/web/` 是 Frontend，
+保持 React + Vite。
 
 ADR 0002 中与技术栈无关的结论全部继续有效：Chatty 仍然是 Single Agent，五项能力仍然是
 Tool，SQLite 仍然是商品、库存和知识检索的运行时事实源，配置优先级仍然是
@@ -19,9 +19,9 @@ Tool，SQLite 仍然是商品、库存和知识检索的运行时事实源，配
   类型剥离，仓库要求 Node 24+，因此不需要 `--experimental-strip-types` flag。
   TypeScript 只做类型检查（`tsc --noEmit`），因此 `tsconfig.json` 打开 `erasableSyntaxOnly`，
   代码里不使用 enum、参数属性等需要代码生成的语法。
-- HTTP 层用 Hono 替代 FastAPI，职责完全不变：校验、Session、错误码、Reply 序列化。
-  Wire 格式保持 snake_case，前端代码零改动。
-- 前端通过 Hono RPC 从服务端路由推导请求与响应类型，不再手写第二份 HTTP 契约；Zod
+- Backend 的 HTTP Adapter 用 Hono 替代 FastAPI，职责完全不变：校验、Session、错误码、Reply 序列化。
+  Wire 格式保持 snake_case，Frontend 代码零改动。
+- Frontend 通过 Hono RPC 从 Backend 路由推导请求与响应类型，不再手写第二份 HTTP 契约；Zod
   validator 同时负责请求校验和客户端输入类型推导。
 - Schema 用 zod 替代 Pydantic，同时作为 Agents SDK 的 tool parameters 与 structured output。
 - 数据层用 Node 内置 `node:sqlite` 的 `DatabaseSync` 替代 `sqlite3`；FTS5、`unicode61`
@@ -33,7 +33,7 @@ Tool，SQLite 仍然是商品、库存和知识检索的运行时事实源，配
 
 单语言仓库消除了两套包管理器、两套 lint/format 工具链和两套 CI 依赖缓存。
 更重要的是领域模型只需要定义一次：`apps/api/src/data/models.ts` 保存领域定义，HTTP
-请求与响应类型由 Hono 路由直接推导到前端，不再靠两份手写类型保持同步。
+请求与响应类型由 Hono 路由直接推导到 Frontend，不再靠两份手写类型保持同步。
 
 Node 的内置能力已经覆盖了原先需要第三方依赖的部分（SQLite、测试、类型剥离、env 解析），
 所以这次迁移在减少语言的同时也减少了依赖数量。
@@ -73,6 +73,6 @@ Runner，因此阶段门禁、状态栏注入和 draft correction 都被真正�
 
 ## 影响
 
-- `backend/`、`pyproject.toml`、`uv.lock` 已删除，CI 不再安装 uv 与 Python。
+- 旧 Python Backend、`pyproject.toml`、`uv.lock` 已删除，CI 不再安装 uv 与 Python。
 - 根 `package.json` 的 `dev`/`start`/`test`/`typecheck`/`lint`/`eval:*` 全部指向 `apps/*`。
-- 服务端口、HTTP 路径、错误码与 JSON 字段名保持不变，前端与 `.env.example` 无需改动。
+- 服务端口、HTTP 路径、错误码与 JSON 字段名保持不变，Frontend 与 `.env.example` 无需改动。

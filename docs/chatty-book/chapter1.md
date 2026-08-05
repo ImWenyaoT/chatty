@@ -16,27 +16,32 @@ Model 擅长理解自然语言、选择 Tool、组织推荐理由和营销文案
 
 ```mermaid
 flowchart LR
-    UI["Frontend"] --> API["Hono<br/>HTTP Adapter"]
-    API --> A
-    subgraph A["Chatty Agent = Model + Harness"]
-        M["Model"] <--> H["Harness<br/>Context / Agent Loop / Control"]
-        H --> F["三个固定 Tool<br/>画像 / 搜索 / 库存"]
-        H --> T["两个 function tools<br/>知识 / 营销"]
-        F --> E
-        T --> E[("Harness Evidence<br/>Model 不可见")]
-        M --> D["AgentDraft"]
-        D --> V{"Evidence 校验"}
-        E -.-> V
+    UI["Frontend<br/>React + Vite"] --> API
+    subgraph Backend["Backend"]
+        API["Hono<br/>HTTP Adapter"] --> A
+        subgraph A["Chatty Agent = Model + Harness"]
+            M["Model"] <--> H["Harness<br/>Context / Agent Loop / Control"]
+            H --> F["三个固定 Tool<br/>画像 / 搜索 / 库存"]
+            H --> T["两个 function tools<br/>知识 / 营销"]
+            F --> E
+            T --> E[("Harness Evidence<br/>Model 不可见")]
+            M --> D["AgentDraft"]
+            D --> V{"Evidence 校验"}
+            E -.-> V
+        end
+        T --> CAT["Catalog"]
+        CAT --> DB[("SQLite<br/>商品 / 库存 / 画像")]
+        CAT --> FTS[("SQLite FTS5<br/>知识检索")]
+        V -->|"通过"| FIN["finalize<br/>SQLite 重查"]
+        V -->|"失败"| ERR["RecommendationError"]
+        FIN --> API
+        ERR --> API
     end
-    T --> CAT["Catalog"]
-    CAT --> DB[("SQLite<br/>商品 / 库存 / 画像")]
-    CAT --> FTS[("SQLite FTS5<br/>知识检索")]
-    V -->|"通过"| FIN["finalize<br/>SQLite 重查"]
-    V -->|"失败"| ERR["RecommendationError"]
-    FIN --> API
-    ERR --> API
     API --> UI
 ```
+
+Frontend 在这里作为一个完整 Module，不展开页面与 React 组件；Backend 才展示内部实现，
+因为 Chatty 的核心工程判断集中在 Agent、Harness、Tool、Evidence 与事实源之间的协作。
 
 这是一种混合模式：Harness 直接执行确定性的 `画像 → 搜索 → 库存`，再把类型化
 `RecommendationContext` 交给 Model。Model 只决定知识检索 Query、调用营销策略并生成草稿；
