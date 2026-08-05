@@ -1,8 +1,12 @@
 ---
-status: accepted
+status: superseded
+superseded-by: 0003-typescript-migration
 ---
 
 # 使用 Python、FastAPI 与 OpenAI Agents SDK
+
+> 语言与运行时部分已被 [ADR 0003](0003-typescript-migration.md) 取代：后端现在是 TypeScript +
+> Hono。本文档中关于 Agent Loop、Tool 边界、Evidence 与配置契约的结论仍然有效。
 
 Chatty 使用 Python 后端与 TypeScript 前端。`backend/app/` 承担 Agent、Tool、Harness、
 SQLite 和 FastAPI HTTP，`frontend/` 使用 React + Vite。

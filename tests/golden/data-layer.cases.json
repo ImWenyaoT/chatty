@@ -1,0 +1,564 @@
+{
+  "comment": "跨语言 parity 基线的输入定义。Python 与 TypeScript 后端读同一份 case，输出必须逐字节匹配 data-layer.expected.json。只允许只读操作，不得包含写库行为。",
+  "cases": [
+    {
+      "name": "中文逐字加空格，ASCII 词不拆开",
+      "op": "segment_for_index",
+      "input": { "text": "降噪 iPhone 15" }
+    },
+    {
+      "name": "空文本不产生索引词",
+      "op": "segment_for_index",
+      "input": { "text": "" }
+    },
+    {
+      "name": "短文本不切块",
+      "op": "split_into_chunks",
+      "input": { "text": "只有一句。", "target": 160, "overlap": 40 }
+    },
+    {
+      "name": "按中文句末切块",
+      "op": "split_into_chunks",
+      "input": { "text": "第一句。第二句。第三句。", "target": 8, "overlap": 0 }
+    },
+    {
+      "name": "切块保留重叠上下文",
+      "op": "split_into_chunks",
+      "input": {
+        "text": "配送时效说明。默认使用合作快递发货。偏远地区可能延长。节假日顺延。",
+        "target": 16,
+        "overlap": 6
+      }
+    },
+    {
+      "name": "同义词改写补充规范词",
+      "op": "rewrite_query",
+      "input": { "query": "想要安静一点的，挤地铁用" }
+    },
+    {
+      "name": "已含规范词时不重复补充",
+      "op": "rewrite_query",
+      "input": { "query": "降噪 静音 耳机" }
+    },
+    {
+      "name": "无同义词命中时原样返回",
+      "op": "rewrite_query",
+      "input": { "query": "降噪耳机通勤" }
+    },
+    {
+      "name": "中文查询按字切分为 FTS 表达式",
+      "op": "match_expression",
+      "input": { "query": "退换货" }
+    },
+    {
+      "name": "中英混合查询的 FTS 表达式",
+      "op": "match_expression",
+      "input": { "query": "iPhone 手机 256G" }
+    },
+    {
+      "name": "FTS 表达式最多取八个词",
+      "op": "match_expression",
+      "input": { "query": "a b c d e f g h i j" }
+    },
+
+    {
+      "name": "无覆盖时沿用历史画像",
+      "op": "user_profile",
+      "input": { "user_id": "user_active", "overrides": {} }
+    },
+    {
+      "name": "只给上限时下限开放为 0",
+      "op": "user_profile",
+      "input": { "user_id": "user_active", "overrides": { "max_price_cents": 30000 } }
+    },
+    {
+      "name": "只给下限时上限开放到最大值",
+      "op": "user_profile",
+      "input": { "user_id": "user_budget", "overrides": { "min_price_cents": 200000 } }
+    },
+    {
+      "name": "本轮类目覆盖历史偏好",
+      "op": "user_profile",
+      "input": {
+        "user_id": "user_vip",
+        "overrides": { "preferred_categories": ["耳机"], "min_price_cents": 10000, "max_price_cents": 50000 }
+      }
+    },
+    {
+      "name": "未知用户",
+      "op": "user_profile",
+      "input": { "user_id": "user_missing", "overrides": {} }
+    },
+
+    {
+      "name": "价格敏感用户的默认排序",
+      "op": "search",
+      "input": { "user_id": "user_budget", "overrides": {}, "categories": [], "limit": 5 }
+    },
+    {
+      "name": "高价值用户的默认排序",
+      "op": "search",
+      "input": { "user_id": "user_vip", "overrides": {}, "categories": [], "limit": 5 }
+    },
+    {
+      "name": "限定类目与预算的候选",
+      "op": "search",
+      "input": {
+        "user_id": "user_budget",
+        "overrides": { "preferred_categories": ["耳机"], "max_price_cents": 30000 },
+        "categories": ["耳机"],
+        "limit": 10
+      }
+    },
+    {
+      "name": "预算过低时没有候选",
+      "op": "search",
+      "input": {
+        "user_id": "user_budget",
+        "overrides": { "preferred_categories": ["耳机"], "max_price_cents": 20000 },
+        "categories": ["耳机"],
+        "limit": 10
+      }
+    },
+    {
+      "name": "limit 超出上界",
+      "op": "search",
+      "input": { "user_id": "user_active", "overrides": {}, "categories": [], "limit": 21 }
+    },
+    {
+      "name": "空白类目视为非法",
+      "op": "search",
+      "input": { "user_id": "user_active", "overrides": {}, "categories": ["  "], "limit": 5 }
+    },
+
+    {
+      "name": "画像打分",
+      "op": "score",
+      "input": { "user_id": "user_budget", "product_ids": ["P003", "P015"] }
+    },
+
+    {
+      "name": "库存过滤并按传入顺序去重",
+      "op": "inventory",
+      "input": { "product_ids": ["P015", "P003", "P003"] }
+    },
+    {
+      "name": "空列表",
+      "op": "inventory",
+      "input": { "product_ids": [] }
+    },
+    {
+      "name": "未知商品",
+      "op": "inventory",
+      "input": { "product_ids": ["UNKNOWN"] }
+    },
+
+    {
+      "name": "通用政策检索：快递",
+      "op": "retrieve_knowledge",
+      "input": { "query": "快递公司", "categories": [], "product_ids": [], "limit": 3 }
+    },
+    {
+      "name": "检索前先经过同义词改写",
+      "op": "retrieve_knowledge",
+      "input": { "query": "挤地铁想安静点", "categories": [], "product_ids": [], "limit": 5 }
+    },
+    {
+      "name": "通用政策检索：七天无理由退货",
+      "op": "retrieve_knowledge",
+      "input": { "query": "七天无理由退货条件", "categories": [], "product_ids": [], "limit": 3 }
+    },
+    {
+      "name": "商品范围检索受类目与商品 ID 约束",
+      "op": "retrieve_knowledge",
+      "input": { "query": "降噪 通勤", "categories": ["耳机"], "product_ids": ["P003"], "limit": 5 }
+    },
+    {
+      "name": "空查询",
+      "op": "retrieve_knowledge",
+      "input": { "query": " ", "categories": [], "product_ids": [], "limit": 3 }
+    },
+    {
+      "name": "limit 超出上界",
+      "op": "retrieve_knowledge",
+      "input": { "query": "快递", "categories": [], "product_ids": [], "limit": 9 }
+    },
+
+    {
+      "name": "营销策略随分群变化",
+      "op": "marketing_strategy",
+      "input": { "segments": ["new_user", "active", "high_value", "price_sensitive", "churn_risk"] }
+    },
+    {
+      "name": "未知分群",
+      "op": "marketing_strategy",
+      "input": { "segments": ["unknown_segment"] }
+    },
+
+    {
+      "name": "finalize 采用数据库真值并过滤禁词",
+      "op": "finalize",
+      "input": {
+        "user_id": "user_active",
+        "overrides": { "preferred_categories": ["耳机"] },
+        "num_items": 1,
+        "draft": [{ "product_id": "P003", "reason": "这是最好的选择", "marketing_copy": "100%最好" }]
+      }
+    },
+    {
+      "name": "finalize 按 num_items 截断",
+      "op": "finalize",
+      "input": {
+        "user_id": "user_active",
+        "overrides": {},
+        "num_items": 1,
+        "draft": [
+          { "product_id": "P003", "reason": "理由一", "marketing_copy": "文案一" },
+          { "product_id": "P001", "reason": "理由二", "marketing_copy": "文案二" }
+        ]
+      }
+    },
+    {
+      "name": "finalize 拒绝重复商品",
+      "op": "finalize",
+      "input": {
+        "user_id": "user_active",
+        "overrides": {},
+        "num_items": 3,
+        "draft": [
+          { "product_id": "P003", "reason": "理由", "marketing_copy": "文案" },
+          { "product_id": "P003", "reason": "理由", "marketing_copy": "文案" }
+        ]
+      }
+    },
+    {
+      "name": "finalize 拒绝未知商品",
+      "op": "finalize",
+      "input": {
+        "user_id": "user_active",
+        "overrides": {},
+        "num_items": 3,
+        "draft": [{ "product_id": "UNKNOWN", "reason": "不存在", "marketing_copy": "不存在" }]
+      }
+    },
+    {
+      "name": "finalize 拒绝售罄商品",
+      "op": "finalize",
+      "input": {
+        "user_id": "user_vip",
+        "overrides": {},
+        "num_items": 3,
+        "draft": [{ "product_id": "P015", "reason": "理由", "marketing_copy": "文案" }]
+      }
+    },
+    {
+      "name": "finalize 拒绝超出价格区间的商品",
+      "op": "finalize",
+      "input": {
+        "user_id": "user_budget",
+        "overrides": { "max_price_cents": 10000 },
+        "num_items": 3,
+        "draft": [{ "product_id": "P003", "reason": "理由", "marketing_copy": "文案" }]
+      }
+    },
+
+    {
+      "name": "只有商品需求",
+      "op": "parse_task_frame",
+      "input": {
+        "wire": {
+          "product_requested": true,
+          "category": ["耳机"],
+          "min_yuan": [],
+          "max_yuan": [300],
+          "knowledge_query": []
+        }
+      }
+    },
+    {
+      "name": "只有知识问题",
+      "op": "parse_task_frame",
+      "input": {
+        "wire": {
+          "product_requested": false,
+          "category": [],
+          "min_yuan": [],
+          "max_yuan": [],
+          "knowledge_query": ["退换货政策"]
+        }
+      }
+    },
+    {
+      "name": "混合请求",
+      "op": "parse_task_frame",
+      "input": {
+        "wire": {
+          "product_requested": true,
+          "category": ["耳机"],
+          "min_yuan": [100],
+          "max_yuan": [300],
+          "knowledge_query": ["七天无理由退货"]
+        }
+      }
+    },
+    {
+      "name": "类目不在目录内",
+      "op": "parse_task_frame",
+      "input": {
+        "wire": {
+          "product_requested": true,
+          "category": ["飞机"],
+          "min_yuan": [],
+          "max_yuan": [],
+          "knowledge_query": []
+        }
+      }
+    },
+    {
+      "name": "价格区间颠倒",
+      "op": "parse_task_frame",
+      "input": {
+        "wire": {
+          "product_requested": true,
+          "category": [],
+          "min_yuan": [500],
+          "max_yuan": [100],
+          "knowledge_query": []
+        }
+      }
+    },
+    {
+      "name": "未请求商品却带上商品字段",
+      "op": "parse_task_frame",
+      "input": {
+        "wire": {
+          "product_requested": false,
+          "category": ["耳机"],
+          "min_yuan": [],
+          "max_yuan": [],
+          "knowledge_query": ["退换货"]
+        }
+      }
+    },
+    {
+      "name": "两部分都为空",
+      "op": "parse_task_frame",
+      "input": {
+        "wire": {
+          "product_requested": false,
+          "category": [],
+          "min_yuan": [],
+          "max_yuan": [],
+          "knowledge_query": ["   "]
+        }
+      }
+    },
+
+    {
+      "name": "元转分并保留单边约束",
+      "op": "product_context",
+      "input": { "need": { "category": "耳机", "min_yuan": null, "max_yuan": 299.99 } }
+    },
+    {
+      "name": "无约束的商品需求",
+      "op": "product_context",
+      "input": { "need": { "category": null, "min_yuan": null, "max_yuan": null } }
+    },
+    {
+      "name": "分位四舍五入",
+      "op": "product_context",
+      "input": { "need": { "category": null, "min_yuan": 0.125, "max_yuan": 12.345 } }
+    },
+
+    {
+      "name": "商品加知识的展示文本",
+      "op": "describe_task_frame",
+      "input": {
+        "frame": {
+          "product_need": { "category": "耳机", "min_yuan": 100, "max_yuan": 300 },
+          "knowledge_query": "退换货政策"
+        }
+      }
+    },
+    {
+      "name": "不限类目的展示文本",
+      "op": "describe_task_frame",
+      "input": {
+        "frame": {
+          "product_need": { "category": null, "min_yuan": null, "max_yuan": null },
+          "knowledge_query": null
+        }
+      }
+    },
+
+    {
+      "name": "工具齐全且顺序正确",
+      "op": "validate_tool_sequence",
+      "input": {
+        "used_tools": [
+          "get_user_profile",
+          "search_products",
+          "check_inventory",
+          "retrieve_knowledge",
+          "get_marketing_strategy"
+        ]
+      }
+    },
+    {
+      "name": "缺少工具",
+      "op": "validate_tool_sequence",
+      "input": { "used_tools": ["get_user_profile", "search_products"] }
+    },
+    {
+      "name": "依赖顺序颠倒",
+      "op": "validate_tool_sequence",
+      "input": {
+        "used_tools": [
+          "check_inventory",
+          "get_user_profile",
+          "search_products",
+          "retrieve_knowledge",
+          "get_marketing_strategy"
+        ]
+      }
+    },
+    {
+      "name": "调用了未注册工具",
+      "op": "validate_tool_sequence",
+      "input": {
+        "used_tools": [
+          "get_user_profile",
+          "search_products",
+          "check_inventory",
+          "retrieve_knowledge",
+          "get_marketing_strategy",
+          "unknown_tool"
+        ]
+      }
+    },
+
+    {
+      "name": "支撑材料未补齐",
+      "op": "workflow_state",
+      "input": {
+        "evidence": {
+          "used_tools": ["get_user_profile", "search_products", "check_inventory"],
+          "required_knowledge_scopes": ["product"],
+          "completed_knowledge_scopes": [],
+          "blocked_attempts": []
+        }
+      }
+    },
+    {
+      "name": "知识范围未覆盖完",
+      "op": "workflow_state",
+      "input": {
+        "evidence": {
+          "used_tools": [
+            "get_user_profile",
+            "search_products",
+            "check_inventory",
+            "retrieve_knowledge",
+            "get_marketing_strategy"
+          ],
+          "required_knowledge_scopes": ["general", "product"],
+          "completed_knowledge_scopes": ["general"],
+          "blocked_attempts": []
+        }
+      }
+    },
+    {
+      "name": "可以生成草稿",
+      "op": "workflow_state",
+      "input": {
+        "evidence": {
+          "used_tools": [
+            "get_user_profile",
+            "search_products",
+            "check_inventory",
+            "retrieve_knowledge",
+            "get_marketing_strategy"
+          ],
+          "required_knowledge_scopes": ["product"],
+          "completed_knowledge_scopes": ["product"],
+          "blocked_attempts": []
+        }
+      }
+    },
+    {
+      "name": "知识检索已达三次上限",
+      "op": "workflow_state",
+      "input": {
+        "evidence": {
+          "used_tools": [
+            "get_user_profile",
+            "search_products",
+            "check_inventory",
+            "retrieve_knowledge",
+            "retrieve_knowledge",
+            "retrieve_knowledge",
+            "get_marketing_strategy"
+          ],
+          "required_knowledge_scopes": ["product"],
+          "completed_knowledge_scopes": ["product"],
+          "blocked_attempts": ["need_support:retrieve_knowledge:tool_not_allowed_in_stage"]
+        }
+      }
+    },
+    {
+      "name": "纯知识问答不需要营销策略",
+      "op": "workflow_state",
+      "input": {
+        "evidence": {
+          "used_tools": ["retrieve_knowledge"],
+          "required_support_tools": ["retrieve_knowledge"],
+          "required_knowledge_scopes": ["general"],
+          "completed_knowledge_scopes": ["general"],
+          "blocked_attempts": []
+        }
+      }
+    },
+
+    {
+      "name": "同批重复工具只放行第一个",
+      "op": "plan_tool_batch",
+      "input": {
+        "evidence": {
+          "used_tools": ["get_user_profile", "search_products", "check_inventory"],
+          "required_knowledge_scopes": ["product"],
+          "completed_knowledge_scopes": [],
+          "blocked_attempts": []
+        },
+        "calls": [
+          ["call_1", "retrieve_knowledge"],
+          ["call_2", "retrieve_knowledge"],
+          ["call_3", "get_marketing_strategy"]
+        ]
+      }
+    },
+    {
+      "name": "阶段不允许的工具被拦截",
+      "op": "plan_tool_batch",
+      "input": {
+        "evidence": {
+          "used_tools": [
+            "get_user_profile",
+            "search_products",
+            "check_inventory",
+            "retrieve_knowledge",
+            "retrieve_knowledge",
+            "retrieve_knowledge",
+            "get_marketing_strategy"
+          ],
+          "required_knowledge_scopes": ["product"],
+          "completed_knowledge_scopes": ["product"],
+          "blocked_attempts": []
+        },
+        "calls": [
+          ["call_1", "retrieve_knowledge"],
+          ["call_2", "get_marketing_strategy"]
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,586 @@
+{
+  "describe_task_frame::不限类目的展示文本": {
+    "ok": "不限类目"
+  },
+  "describe_task_frame::商品加知识的展示文本": {
+    "ok": "耳机 · ≥100 元 · ≤300 元 · 知识 · 退换货政策"
+  },
+  "finalize::finalize 拒绝售罄商品": {
+    "error": "recommended_product_out_of_stock"
+  },
+  "finalize::finalize 拒绝未知商品": {
+    "error": "unknown_recommended_product"
+  },
+  "finalize::finalize 拒绝超出价格区间的商品": {
+    "error": "recommended_product_outside_price_range"
+  },
+  "finalize::finalize 拒绝重复商品": {
+    "error": "duplicate_recommended_product"
+  },
+  "finalize::finalize 按 num_items 截断": {
+    "ok": [
+      {
+        "brand": "Apple",
+        "category": "耳机",
+        "low_stock": false,
+        "marketing_copy": "文案一",
+        "name": "AirPods Pro 3",
+        "price_cents": 189900,
+        "product_id": "P003",
+        "reason": "理由一",
+        "stock": 1000,
+        "tags": [
+          "降噪",
+          "无线",
+          "便携"
+        ]
+      }
+    ]
+  },
+  "finalize::finalize 采用数据库真值并过滤禁词": {
+    "ok": [
+      {
+        "brand": "Apple",
+        "category": "耳机",
+        "low_stock": false,
+        "marketing_copy": "******",
+        "name": "AirPods Pro 3",
+        "price_cents": 189900,
+        "product_id": "P003",
+        "reason": "这是***的选择",
+        "stock": 1000,
+        "tags": [
+          "降噪",
+          "无线",
+          "便携"
+        ]
+      }
+    ]
+  },
+  "inventory::库存过滤并按传入顺序去重": {
+    "ok": [
+      "P003"
+    ]
+  },
+  "inventory::未知商品": {
+    "error": "unknown_inventory_product:UNKNOWN"
+  },
+  "inventory::空列表": {
+    "ok": []
+  },
+  "marketing_strategy::未知分群": {
+    "error": "unknown_marketing_segment"
+  },
+  "marketing_strategy::营销策略随分群变化": {
+    "ok": {
+      "active": {
+        "forbidden_words": [
+          "最好",
+          "第一",
+          "国家级",
+          "全球首",
+          "绝对",
+          "100%",
+          "永久",
+          "万能",
+          "祖传",
+          "纯天然",
+          "历史最低"
+        ],
+        "instructions": "结合浏览偏好突出商品亮点和使用场景。",
+        "segment": "active",
+        "tone": "自然有活力"
+      },
+      "churn_risk": {
+        "forbidden_words": [
+          "最好",
+          "第一",
+          "国家级",
+          "全球首",
+          "绝对",
+          "100%",
+          "永久",
+          "万能",
+          "祖传",
+          "纯天然",
+          "历史最低"
+        ],
+        "instructions": "强调与既有兴趣的关联，不制造虚假稀缺和限时压力。",
+        "segment": "churn_risk",
+        "tone": "温和召回"
+      },
+      "high_value": {
+        "forbidden_words": [
+          "最好",
+          "第一",
+          "国家级",
+          "全球首",
+          "绝对",
+          "100%",
+          "永久",
+          "万能",
+          "祖传",
+          "纯天然",
+          "历史最低"
+        ],
+        "instructions": "强调材质、性能和长期使用价值，不虚构会员权益。",
+        "segment": "high_value",
+        "tone": "克制有品质感"
+      },
+      "new_user": {
+        "forbidden_words": [
+          "最好",
+          "第一",
+          "国家级",
+          "全球首",
+          "绝对",
+          "100%",
+          "永久",
+          "万能",
+          "祖传",
+          "纯天然",
+          "历史最低"
+        ],
+        "instructions": "突出易上手和选择成本低，不编造新人优惠。",
+        "segment": "new_user",
+        "tone": "热情友好"
+      },
+      "price_sensitive": {
+        "forbidden_words": [
+          "最好",
+          "第一",
+          "国家级",
+          "全球首",
+          "绝对",
+          "100%",
+          "永久",
+          "万能",
+          "祖传",
+          "纯天然",
+          "历史最低"
+        ],
+        "instructions": "突出售价与性价比，不使用历史最低等无依据表述。",
+        "segment": "price_sensitive",
+        "tone": "直接务实"
+      }
+    }
+  },
+  "match_expression::FTS 表达式最多取八个词": {
+    "ok": "\"a\" OR \"b\" OR \"c\" OR \"d\" OR \"e\" OR \"f\" OR \"g\" OR \"h\""
+  },
+  "match_expression::中文查询按字切分为 FTS 表达式": {
+    "ok": "\"退  换  货\""
+  },
+  "match_expression::中英混合查询的 FTS 表达式": {
+    "ok": "\"iphone\" OR \"手  机\" OR \"256g\""
+  },
+  "parse_task_frame::两部分都为空": {
+    "error": "empty_task_frame"
+  },
+  "parse_task_frame::价格区间颠倒": {
+    "error": "invalid_product_price_range"
+  },
+  "parse_task_frame::只有商品需求": {
+    "ok": {
+      "knowledge_query": null,
+      "product_need": {
+        "category": "耳机",
+        "max_yuan": 300.0,
+        "min_yuan": null
+      }
+    }
+  },
+  "parse_task_frame::只有知识问题": {
+    "ok": {
+      "knowledge_query": "退换货政策",
+      "product_need": null
+    }
+  },
+  "parse_task_frame::未请求商品却带上商品字段": {
+    "error": "product_fields_without_request"
+  },
+  "parse_task_frame::混合请求": {
+    "ok": {
+      "knowledge_query": "七天无理由退货",
+      "product_need": {
+        "category": "耳机",
+        "max_yuan": 300.0,
+        "min_yuan": 100.0
+      }
+    }
+  },
+  "parse_task_frame::类目不在目录内": {
+    "error": "invalid_product_category"
+  },
+  "plan_tool_batch::同批重复工具只放行第一个": {
+    "ok": {
+      "decisions": {
+        "call_1": {
+          "allowed": true,
+          "reason": null
+        },
+        "call_2": {
+          "allowed": false,
+          "reason": "duplicate_tool_in_batch"
+        },
+        "call_3": {
+          "allowed": true,
+          "reason": null
+        }
+      },
+      "stage": "need_support"
+    }
+  },
+  "plan_tool_batch::阶段不允许的工具被拦截": {
+    "ok": {
+      "decisions": {
+        "call_1": {
+          "allowed": false,
+          "reason": "tool_not_allowed_in_stage"
+        },
+        "call_2": {
+          "allowed": false,
+          "reason": "tool_not_allowed_in_stage"
+        }
+      },
+      "stage": "ready_to_draft"
+    }
+  },
+  "product_context::元转分并保留单边约束": {
+    "ok": {
+      "max_price_cents": 29999,
+      "min_price_cents": null,
+      "preferred_categories": [
+        "耳机"
+      ],
+      "recent_purchases": null,
+      "recent_views": null
+    }
+  },
+  "product_context::分位四舍五入": {
+    "ok": {
+      "max_price_cents": 1234,
+      "min_price_cents": 12,
+      "preferred_categories": null,
+      "recent_purchases": null,
+      "recent_views": null
+    }
+  },
+  "product_context::无约束的商品需求": {
+    "ok": {
+      "max_price_cents": null,
+      "min_price_cents": null,
+      "preferred_categories": null,
+      "recent_purchases": null,
+      "recent_views": null
+    }
+  },
+  "retrieve_knowledge::limit 超出上界": {
+    "error": "invalid_knowledge_limit"
+  },
+  "retrieve_knowledge::商品范围检索受类目与商品 ID 约束": {
+    "ok": [
+      {
+        "category": "耳机",
+        "chunk_ordinal": 0,
+        "doc_id": "K001",
+        "product_id": null,
+        "relevance_score": 0.0932
+      },
+      {
+        "category": "耳机",
+        "chunk_ordinal": 3,
+        "doc_id": "K037",
+        "product_id": null,
+        "relevance_score": 0.1281
+      },
+      {
+        "category": "耳机",
+        "chunk_ordinal": 0,
+        "doc_id": "K037",
+        "product_id": null,
+        "relevance_score": 0.1347
+      },
+      {
+        "category": "耳机",
+        "chunk_ordinal": 1,
+        "doc_id": "K037",
+        "product_id": null,
+        "relevance_score": 0.1402
+      },
+      {
+        "category": "耳机",
+        "chunk_ordinal": 1,
+        "doc_id": "K038",
+        "product_id": null,
+        "relevance_score": 0.148
+      }
+    ]
+  },
+  "retrieve_knowledge::检索前先经过同义词改写": {
+    "ok": [
+      {
+        "category": "耳机",
+        "chunk_ordinal": 0,
+        "doc_id": "K001",
+        "product_id": null,
+        "relevance_score": 0.1314
+      },
+      {
+        "category": "耳机",
+        "chunk_ordinal": 0,
+        "doc_id": "K002",
+        "product_id": "P003",
+        "relevance_score": 0.164
+      },
+      {
+        "category": "耳机",
+        "chunk_ordinal": 3,
+        "doc_id": "K037",
+        "product_id": null,
+        "relevance_score": 0.1654
+      },
+      {
+        "category": "耳机",
+        "chunk_ordinal": 0,
+        "doc_id": "K037",
+        "product_id": null,
+        "relevance_score": 0.1724
+      },
+      {
+        "category": "耳机",
+        "chunk_ordinal": 1,
+        "doc_id": "K037",
+        "product_id": null,
+        "relevance_score": 0.1817
+      }
+    ]
+  },
+  "retrieve_knowledge::空查询": {
+    "error": "empty_knowledge_query"
+  },
+  "retrieve_knowledge::通用政策检索：七天无理由退货": {
+    "ok": [
+      {
+        "category": "政策",
+        "chunk_ordinal": 0,
+        "doc_id": "K054",
+        "product_id": null,
+        "relevance_score": 0.159
+      }
+    ]
+  },
+  "retrieve_knowledge::通用政策检索：快递": {
+    "ok": [
+      {
+        "category": "政策",
+        "chunk_ordinal": 0,
+        "doc_id": "K053",
+        "product_id": null,
+        "relevance_score": 0.1392
+      }
+    ]
+  },
+  "rewrite_query::同义词改写补充规范词": {
+    "ok": "想要安静一点的，挤地铁用 降噪 通勤"
+  },
+  "rewrite_query::已含规范词时不重复补充": {
+    "ok": "降噪 静音 耳机"
+  },
+  "rewrite_query::无同义词命中时原样返回": {
+    "ok": "降噪耳机通勤"
+  },
+  "score::画像打分": {
+    "ok": {
+      "P003": 0.5725,
+      "P015": 0.556
+    }
+  },
+  "search::limit 超出上界": {
+    "error": "invalid_product_search_limit"
+  },
+  "search::价格敏感用户的默认排序": {
+    "ok": [
+      "P012",
+      "P007",
+      "P010",
+      "P006",
+      "P029"
+    ]
+  },
+  "search::空白类目视为非法": {
+    "error": "invalid_product_search_categories"
+  },
+  "search::限定类目与预算的候选": {
+    "ok": [
+      "P023"
+    ]
+  },
+  "search::预算过低时没有候选": {
+    "ok": []
+  },
+  "search::高价值用户的默认排序": {
+    "ok": [
+      "P001",
+      "P002",
+      "P022",
+      "P034",
+      "P021"
+    ]
+  },
+  "segment_for_index::中文逐字加空格，ASCII 词不拆开": {
+    "ok": " 降  噪  iPhone 15"
+  },
+  "segment_for_index::空文本不产生索引词": {
+    "ok": ""
+  },
+  "split_into_chunks::切块保留重叠上下文": {
+    "ok": [
+      "配送时效说明。",
+      "送时效说明。默认使用合作快递发货。",
+      "作快递发货。偏远地区可能延长。",
+      "区可能延长。节假日顺延。"
+    ]
+  },
+  "split_into_chunks::按中文句末切块": {
+    "ok": [
+      "第一句。第二句。",
+      "第三句。"
+    ]
+  },
+  "split_into_chunks::短文本不切块": {
+    "ok": [
+      "只有一句。"
+    ]
+  },
+  "user_profile::只给上限时下限开放为 0": {
+    "ok": {
+      "max_price_cents": 30000,
+      "min_price_cents": 0,
+      "preferred_categories": [
+        "手机",
+        "耳机"
+      ],
+      "recent_purchases": [
+        "配件"
+      ],
+      "recent_views": [
+        "手机",
+        "降噪"
+      ],
+      "segment": "active",
+      "user_id": "user_active"
+    }
+  },
+  "user_profile::只给下限时上限开放到最大值": {
+    "ok": {
+      "max_price_cents": 1000000,
+      "min_price_cents": 200000,
+      "preferred_categories": [
+        "配件",
+        "平板"
+      ],
+      "recent_purchases": [
+        "配件"
+      ],
+      "recent_views": [
+        "性价比",
+        "快充"
+      ],
+      "segment": "price_sensitive",
+      "user_id": "user_budget"
+    }
+  },
+  "user_profile::无覆盖时沿用历史画像": {
+    "ok": {
+      "max_price_cents": 800000,
+      "min_price_cents": 50000,
+      "preferred_categories": [
+        "手机",
+        "耳机"
+      ],
+      "recent_purchases": [
+        "配件"
+      ],
+      "recent_views": [
+        "手机",
+        "降噪"
+      ],
+      "segment": "active",
+      "user_id": "user_active"
+    }
+  },
+  "user_profile::未知用户": {
+    "error": "unknown_user"
+  },
+  "user_profile::本轮类目覆盖历史偏好": {
+    "ok": {
+      "max_price_cents": 50000,
+      "min_price_cents": 10000,
+      "preferred_categories": [
+        "耳机"
+      ],
+      "recent_purchases": [
+        "手机",
+        "平板"
+      ],
+      "recent_views": [
+        "旗舰",
+        "影像"
+      ],
+      "segment": "high_value",
+      "user_id": "user_vip"
+    }
+  },
+  "validate_tool_sequence::依赖顺序颠倒": {
+    "ok": "依赖顺序错误，应为 get_user_profile -> search_products -> check_inventory"
+  },
+  "validate_tool_sequence::工具齐全且顺序正确": {
+    "ok": null
+  },
+  "validate_tool_sequence::缺少工具": {
+    "ok": "未调用的工具：check_inventory, get_marketing_strategy, retrieve_knowledge"
+  },
+  "validate_tool_sequence::调用了未注册工具": {
+    "ok": "调用了未注册的工具：unknown_tool"
+  },
+  "workflow_state::可以生成草稿": {
+    "ok": {
+      "agent_status": "<agent_status version=\"5\">\nstage: ready_to_draft\ncompleted_steps: get_user_profile, search_products, check_inventory, retrieve_knowledge, get_marketing_strategy\nrequired_knowledge_scopes: product\ncompleted_knowledge_scopes: product\nallowed_next: retrieve_knowledge, final_output\nblocked_attempts: 0\n</agent_status>",
+      "allowed_next": [
+        "retrieve_knowledge"
+      ]
+    }
+  },
+  "workflow_state::支撑材料未补齐": {
+    "ok": {
+      "agent_status": "<agent_status version=\"3\">\nstage: need_support\ncompleted_steps: get_user_profile, search_products, check_inventory\nrequired_knowledge_scopes: product\ncompleted_knowledge_scopes: none\nallowed_next: retrieve_knowledge, get_marketing_strategy\nblocked_attempts: 0\n</agent_status>",
+      "allowed_next": [
+        "retrieve_knowledge",
+        "get_marketing_strategy"
+      ]
+    }
+  },
+  "workflow_state::知识检索已达三次上限": {
+    "ok": {
+      "agent_status": "<agent_status version=\"8\">\nstage: ready_to_draft\ncompleted_steps: get_user_profile, search_products, check_inventory, retrieve_knowledge, get_marketing_strategy\nrequired_knowledge_scopes: product\ncompleted_knowledge_scopes: product\nallowed_next: final_output\nblocked_attempts: 1\n</agent_status>",
+      "allowed_next": []
+    }
+  },
+  "workflow_state::知识范围未覆盖完": {
+    "ok": {
+      "agent_status": "<agent_status version=\"5\">\nstage: need_support\ncompleted_steps: get_user_profile, search_products, check_inventory, retrieve_knowledge, get_marketing_strategy\nrequired_knowledge_scopes: general, product\ncompleted_knowledge_scopes: general\nallowed_next: retrieve_knowledge\nblocked_attempts: 0\n</agent_status>",
+      "allowed_next": [
+        "retrieve_knowledge"
+      ]
+    }
+  },
+  "workflow_state::纯知识问答不需要营销策略": {
+    "ok": {
+      "agent_status": "<agent_status version=\"1\">\nstage: ready_to_draft\ncompleted_steps: retrieve_knowledge\nrequired_knowledge_scopes: general\ncompleted_knowledge_scopes: general\nallowed_next: retrieve_knowledge, final_output\nblocked_attempts: 0\n</agent_status>",
+      "allowed_next": [
+        "retrieve_knowledge"
+      ]
+    }
+  }
+}

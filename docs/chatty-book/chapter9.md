@@ -26,13 +26,13 @@ Trace 展示“理解需求、检索知识、生成回答、校验 Evidence”�
 ![Chatty 只读 SQLite 商品与用户画像](../assets/chatty-catalog.png)
 
 前端不计算推荐分数，也不修正价格和库存。它只调用 HTTP API 并渲染后端返回的结果，
-所有业务规则仍然位于 Chatty Agent（Model + Harness）和 Catalog 中。FastAPI 只是
+所有业务规则仍然位于 Chatty Agent（Model + Harness）和 Catalog 中。Hono 只是
 Frontend 与 Chatty Agent 之间的 HTTP Adapter。
 
 React GUI 是产品界面，不是多模态 Agent。Model 不会观察屏幕、点击按钮或理解图片；Chatty 当前处理的输入和输出都是文字与结构化数据。只有未来确实需要语音、图片或屏幕操作时，才需要扩展新的观察与行动空间。
 
 前端入口位于 `frontend/src/App.tsx`，数据页位于 `frontend/src/CatalogBrowser.tsx`，HTTP 类型
-位于 `frontend/src/api.ts`，后端接口位于 `backend/app/api.py`。
+位于 `frontend/src/api.ts`，后端接口位于 `server/src/api.ts`。
 
 ---
 
