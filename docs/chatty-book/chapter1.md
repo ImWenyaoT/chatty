@@ -40,16 +40,15 @@ flowchart LR
 
 这是一种混合模式：Harness 直接执行确定性的 `画像 → 搜索 → 库存`，再把类型化
 `RecommendationContext` 交给 Model。Model 只决定知识检索 Query、调用营销策略并生成草稿；
-两个支撑 Tool 可以并行。价格、库存、调用上限和最终裁决始终由 Harness 掌握。
+两个支撑 Tool 由 Harness 串行执行，确保后一步看见最新 Evidence。价格、库存、调用上限和最终裁决始终由 Harness 掌握。
 
 Chatty 因此既保留了 Agent 处理开放问题的能力，也让关键业务规则保持确定性。模型可以发挥判断力，但不能越过程序拥有的事实。
 
 主要代码位于：
 
 - `apps/api/src/agent/chatty.ts`：Chatty Agent 对外唯一的一轮接口 `run()`。
-- `apps/api/src/agent/executor.ts`：定义主 Agent Loop，并让 Agents SDK 执行 Harness 中的 Tool Loop。
+- `apps/api/src/agent/executor.ts`：准备三个确定性步骤的 Context，并让 Agents SDK 执行开放 Tool Loop。
 - `apps/api/src/agent/workflow.ts`：Harness 的阶段机、批次门禁和上下文末尾状态栏。
-- `apps/api/src/agent/executor.ts`：同时准备三个固定 Tool 的 Context，并让 Agents SDK 执行开放 Tool Loop。
 - `apps/api/src/agent/tools.ts`：Harness 暴露给 Model 的知识检索与营销策略 function tools。
 - `apps/api/src/agent/evidence.ts`：Harness 的调用顺序与事实集合校验。
 - `apps/api/src/data/catalog.ts`：隔离 Tool 与 SQLite 查询。

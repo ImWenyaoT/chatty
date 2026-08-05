@@ -4,13 +4,9 @@
  * 字段名保持 snake_case，跟前端和 SQLite 列名一致。
  */
 
-import { existsSync } from "node:fs";
-import { relative } from "node:path";
-import { fileURLToPath } from "node:url";
-
-import { DIST_DIR } from "@chatty/web/paths";
-import { serveStatic } from "@hono/node-server/serve-static";
+import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
+import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 
 import { Chatty, ChattyError, type ChattyAgent } from "./agent/chatty.ts";
@@ -47,125 +43,116 @@ export function createApp(dependencies: AppDependencies = {}) {
   const chatty = dependencies.chatty ?? new Chatty(catalog, provider);
   const sessions = new SessionStore();
 
-  const app = new Hono();
-
-  app.get("/health", (c) => c.json({ status: "ok" }));
-
-  app.get("/api/catalog", (c) =>
-    c.json({
-      categories: catalog.categories,
-      users: DEMO_USERS,
-      product_count: catalog.products.length,
-      model_id: provider.modelId,
-    }),
-  );
-
-  /** 为 Demo 提供只读的 SQLite 商品与画像快照。 */
-  app.get("/api/catalog/data", (c) =>
-    c.json({
-      products: catalog.products,
-      profiles: DEMO_USERS.map((user) => ({
-        ...catalog.profiles.get(user.id),
-        display_name: user.display_name,
-        profile_label: user.profile_label,
-      })),
-    }),
-  );
-
-  app.post("/api/sessions", async (c) => {
-    const body = createSessionSchema.safeParse(await readJson(c.req.raw));
-    if (!body.success) return c.json({ detail: "invalid_request" }, 422);
-    if (!DEMO_USER_IDS.has(body.data.user_id)) {
-      return c.json({ detail: "unknown_user" }, 422);
+  const app = new Hono().onError((error, c) => {
+    // zValidator 在 Schema 前先解析 JSON；解析失败也保持既有的稳定错误契约。
+    if (error instanceof HTTPException && error.status === 400) {
+      return c.json({ detail: "invalid_request" as const }, 422);
     }
-    const sessionId = sessions.create(body.data.user_id);
-    return c.json({ session_id: sessionId });
+    throw error;
   });
 
-  app.post("/api/sessions/:sessionId/turns", async (c) => {
-    const session = sessions.get(c.req.param("sessionId"));
-    if (session === undefined)
-      return c.json({ detail: "session_not_found" }, 404);
+  return app
+    .get("/health", (c) => c.json({ status: "ok" as const }))
+    .get("/api/catalog", (c) =>
+      c.json({
+        categories: catalog.categories,
+        users: DEMO_USERS,
+        product_count: catalog.products.length,
+        model_id: provider.modelId,
+      }),
+    )
+    .get("/api/catalog/data", (c) =>
+      c.json({
+        products: catalog.products,
+        profiles: DEMO_USERS.map((user) => ({
+          ...catalog.userProfile(user.id),
+          display_name: user.display_name,
+          profile_label: user.profile_label,
+        })),
+      }),
+    )
+    .post(
+      "/api/sessions",
+      zValidator("json", createSessionSchema, (result, c) => {
+        if (!result.success)
+          return c.json({ detail: "invalid_request" as const }, 422);
+      }),
+      (c) => {
+        const body = c.req.valid("json");
+        if (!DEMO_USER_IDS.has(body.user_id)) {
+          return c.json({ detail: "unknown_user" as const }, 422);
+        }
+        return c.json({ session_id: sessions.create(body.user_id) });
+      },
+    )
+    .post(
+      "/api/sessions/:sessionId/turns",
+      zValidator("json", turnSchema, (result, c) => {
+        if (!result.success)
+          return c.json({ detail: "invalid_request" as const }, 422);
+      }),
+      async (c) => {
+        const session = sessions.get(c.req.param("sessionId"));
+        if (session === undefined) {
+          return c.json({ detail: "session_not_found" as const }, 404);
+        }
+        const body = c.req.valid("json");
 
-    const body = turnSchema.safeParse(await readJson(c.req.raw));
-    if (!body.success) return c.json({ detail: "invalid_request" }, 422);
+        return sessions.runExclusive(session, async () => {
+          let turn;
+          try {
+            turn = await chatty.run(session.userId, body.text, session.context);
+          } catch (error) {
+            if (!(error instanceof ChattyError)) throw error;
+            console.error(error.code, error.diagnostics);
+            const status = error.code === "conversation_exhausted" ? 409 : 422;
+            return c.json({ detail: error.code }, status);
+          }
+          session.context = turn.context;
 
-    return sessions.runExclusive(session, async () => {
-      let turn;
-      try {
-        turn = await chatty.run(
-          session.userId,
-          body.data.text,
-          session.context,
-        );
-      } catch (error) {
-        if (!(error instanceof ChattyError)) throw error;
-        console.error(error.code, error.diagnostics);
-        const status = error.code === "conversation_exhausted" ? 409 : 422;
-        return c.json({ detail: error.code }, status);
-      }
-      session.context = turn.context;
+          // recommend / clarify / exhausted 共用这些观察字段，前端不再自行推导。
+          const common = {
+            understood_as: turn.understoodAs,
+            answer: turn.reply.answer,
+            latency_ms: turn.latencyMs,
+            turns_left: turn.turnsLeft,
+            trace: turn.trace,
+            usage: {
+              model_requests: turn.usage.requests,
+              input_tokens: turn.usage.inputTokens,
+              output_tokens: turn.usage.outputTokens,
+              total_tokens: turn.usage.totalTokens,
+            },
+          };
 
-      // recommend / clarify / exhausted 共用这些观察字段，前端不再自行推导。
-      const common = {
-        understood_as: turn.understoodAs,
-        answer: turn.reply.answer,
-        latency_ms: turn.latencyMs,
-        turns_left: turn.turnsLeft,
-        trace: turn.trace,
-        usage: {
-          model_requests: turn.usage.requests,
-          input_tokens: turn.usage.inputTokens,
-          output_tokens: turn.usage.outputTokens,
-          total_tokens: turn.usage.totalTokens,
-        },
-      };
-
-      if (turn.reply.kind === "answer") {
-        return c.json({
-          ...common,
-          kind: "answer",
-          question: null,
-          products: [],
+          if (turn.reply.kind === "answer") {
+            return c.json({
+              ...common,
+              kind: "answer" as const,
+              question: null,
+              products: [],
+            });
+          }
+          if (turn.reply.kind === "clarify") {
+            return c.json({
+              ...common,
+              kind:
+                turn.turnsLeft === 0
+                  ? ("exhausted" as const)
+                  : ("clarify" as const),
+              question: turn.reply.question,
+              products: [],
+            });
+          }
+          return c.json({
+            ...common,
+            kind: "recommend" as const,
+            question: null,
+            products: turn.reply.products,
+          });
         });
-      }
-      if (turn.reply.kind === "clarify") {
-        return c.json({
-          ...common,
-          kind: turn.turnsLeft === 0 ? "exhausted" : "clarify",
-          question: turn.reply.question,
-          products: [],
-        });
-      }
-      return c.json({
-        ...common,
-        kind: "recommend",
-        question: null,
-        products: turn.reply.products,
-      });
-    });
-  });
-
-  return app;
+      },
+    );
 }
 
-/** 必须最后挂载，避免静态页面遮住 /api 和 /health。 */
-export function mountFrontend(app: Hono): void {
-  if (!existsSync(DIST_DIR)) {
-    console.warn("frontend_dist_missing:", fileURLToPath(DIST_DIR));
-    return;
-  }
-  // serveStatic 的 root 相对 process.cwd()。
-  const root = relative(process.cwd(), fileURLToPath(DIST_DIR));
-  app.use("/*", serveStatic({ root }));
-  app.get("/*", serveStatic({ root, path: "index.html" }));
-}
-
-/** 请求体不是合法 JSON 时按校验失败处理，而不是 500。 */
-async function readJson(request: Request): Promise<unknown> {
-  try {
-    return await request.json();
-  } catch {
-    return undefined;
-  }
-}
+export type AppType = ReturnType<typeof createApp>;

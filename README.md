@@ -75,7 +75,7 @@ flowchart LR
 | Module | 负责 | 不负责 |
 | --- | --- | --- |
 | Frontend | 收集输入，展示对话、Trace、Token 与只读数据 | 推导推荐事实 |
-| Hono | HTTP 校验、Session、错误码、Reply 序列化 | 调用 Tool 或决定推荐逻辑 |
+| Hono | HTTP 校验、Session、错误码、Reply 序列化与前端类型推导 | 调用 Tool 或决定推荐逻辑 |
 | Chatty Agent | Task Framing、Agent Loop、Evidence、Context In/Out | HTTP 和页面渲染 |
 | Model | 语义理解、主动检索、Query 改写、理由与文案 | 决定真实价格和库存 |
 | SQLite | 商品、库存、画像、营销策略与知识索引 | 会话状态和模型生成 |
@@ -217,7 +217,7 @@ chatty/
 │   │   ├── src/api.ts   # Hono HTTP Adapter
 │   │   ├── src/paths.ts # 仓库根位置，供仓库级 .env 使用
 │   │   └── tests/       # node:test 确定性测试与 golden 基线
-│   └── web/             # React + Vite 桌面 Demo，自身导出 DIST_DIR
+│   └── web/             # React + Vite 桌面 Demo，通过 Hono RPC 使用 HTTP 契约
 ├── packages/
 │   └── seed-data/       # SQLite 初始化种子，自身导出 DATA_DIR，不是运行时查询接口
 └── docs/
@@ -241,7 +241,7 @@ Agent Eval 调用真实 Model。这样既能快速定位代码和检索回归，
 
 | 层级 | 是否调用 Model | 当前覆盖 / 指标 | 用途 |
 | --- | --- | --- | --- |
-| 确定性测试 | 否 | 19 项测试（含 63 条 golden 基线对拉） | Tool 顺序、Evidence、SQLite、HTTP、会话状态 |
+| 确定性测试 | 否 | 23 项测试（含 63 条 golden 基线对拉） | Tool 顺序、Evidence、SQLite、HTTP、会话状态 |
 | Retrieval Eval | 否 | 10 条标注 Query；HitRate@5 100%，MRR@5 0.8083 | FTS5 + BM25 检索质量 |
 | Agent Eval | 是，真实 DeepSeek | 7 条端到端 Case；最近一次通过率 85.7%（6/7） | 推荐、澄清、政策问答、mixed-goal |
 
