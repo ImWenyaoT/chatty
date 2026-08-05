@@ -1,0 +1,28 @@
+{
+  "name": "@chatty/server",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "packageManager": "pnpm@11.20.0",
+  "scripts": {
+    "dev": "node --watch src/main.ts",
+    "start": "node src/main.ts",
+    "test": "node --test \"tests/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit --pretty false",
+    "lint": "oxlint && prettier --check .",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.0",
+    "@openai/agents": "^0.14.2",
+    "hono": "^4.10.6",
+    "openai": "^6.49.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "oxlint": "^1.75.0",
+    "prettier": "^3.9.6",
+    "typescript": "~7.0.2"
+  }
+}
