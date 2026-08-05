@@ -79,9 +79,8 @@ export function recoverInvalidTaskFrame(
   return { finalOutput: wire };
 }
 
-/** 只在 invalidFinalOutput 路径解开 DeepSeek 的 properties 包装。 */ export function parseTaskFrameWireOutput(
-  raw: string,
-): TaskFrameWire {
+/** 只在 invalidFinalOutput 路径解开 DeepSeek 的 properties 包装。 */
+export function parseTaskFrameWireOutput(raw: string): TaskFrameWire {
   let value: unknown;
   try {
     value = JSON.parse(raw);

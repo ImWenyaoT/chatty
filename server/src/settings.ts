@@ -23,9 +23,10 @@ export type Settings = z.infer<typeof settingsSchema>;
 function readEnvFile(path: URL): Record<string, string | undefined> {
   try {
     return parseEnv(readFileSync(path, "utf8"));
-  } catch {
-    // 缺少 .env 是正常状态，配置可以完全来自系统环境变量。
-    return {};
+  } catch (error) {
+    // 缺少 .env 是正常状态；语法或权限错误必须抛出，否则配置会被静默忽略。
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+    throw error;
   }
 }
 

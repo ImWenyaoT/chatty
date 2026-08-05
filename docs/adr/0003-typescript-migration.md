@@ -15,7 +15,8 @@ Tool，SQLite 仍然是商品、库存和知识检索的运行时事实源，配
 
 ## 决策
 
-- 运行方式是 `node --experimental-strip-types` 直跑 `.ts`，没有构建步骤、没有 dist 目录。
+- 运行方式是 `node` 直跑 `.ts`，没有构建步骤、没有 dist 目录。Node 从 22.18 起默认启用
+  类型剥离，仓库要求 Node 24+，因此不需要 `--experimental-strip-types` flag。
   TypeScript 只做类型检查（`tsc --noEmit`），因此 `tsconfig.json` 打开 `erasableSyntaxOnly`，
   代码里不使用 enum、参数属性等需要代码生成的语法。
 - HTTP 层用 Hono 替代 FastAPI，职责完全不变：校验、Session、错误码、Reply 序列化。

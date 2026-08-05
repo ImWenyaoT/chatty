@@ -7,7 +7,7 @@
     "types": ["node"],
     "skipLibCheck": true,
 
-    /* node --experimental-strip-types 只擦除类型，不做语法转换 */
+    /* Node 原生类型剥离只擦除类型，不做语法转换 */
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
