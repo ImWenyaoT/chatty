@@ -90,7 +90,7 @@ flowchart LR
 sequenceDiagram
     actor U as User
     participant F as Frontend
-    participant A as Backend / Hono
+    participant A as Backend · Hono
     participant H as Chatty Harness
     participant M as DeepSeek Model
     participant D as SQLite

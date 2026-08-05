@@ -26,7 +26,7 @@ Trace 展示“理解需求、检索知识、生成回答、校验 Evidence”�
 ![Chatty 只读 SQLite 商品与用户画像](../assets/chatty-catalog.png)
 
 文档把界面整体视为 Frontend，不继续展开 React 组件。Frontend 不计算推荐分数，也不修正
-价格和库存，只调用 HTTP Interface 并渲染 Backend 返回的结果。Backend 则可以继续展开：
+价格和库存，只调用 HTTP API 并渲染 Backend 返回的结果。Backend 则可以继续展开：
 Hono 是 HTTP Adapter，核心业务规则位于 Chatty Agent（Model + Harness）和 Catalog 中。
 
 React GUI 是产品界面，不是多模态 Agent。Model 不会观察屏幕、点击按钮或理解图片；Chatty 当前处理的输入和输出都是文字与结构化数据。只有未来确实需要语音、图片或屏幕操作时，才需要扩展新的观察与行动空间。

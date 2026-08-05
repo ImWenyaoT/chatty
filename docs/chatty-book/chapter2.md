@@ -61,7 +61,7 @@ Harness 管理，因此这里不依赖 `previous_response_id`。
 sequenceDiagram
     actor U as User
     participant F as Frontend
-    participant A as Backend / Hono
+    participant A as Backend · Hono
     participant H as Chatty Harness
     participant M as DeepSeek Model
     participant D as SQLite
