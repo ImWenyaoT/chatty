@@ -6,7 +6,14 @@
  * 可以自行纠正；Harness 不依靠 Model 对自身调用历史的描述。
  */
 
+import {
+  type CallModelInputFilter,
+  defineToolInputGuardrail,
+  ToolGuardrailFunctionOutputFactory,
+} from "@openai/agents";
+
 import type { RecommendationEvidence } from "./evidence.ts";
+import type { ChattyRunContext } from "./tools.ts";
 
 /** Agent Loop 只有两个阶段：补齐支撑材料，或者已经可以生成草稿。 */
 export const WorkflowStage = {
@@ -26,6 +33,40 @@ export type ToolBatch = {
   stage: WorkflowStage;
   decisions: Map<string, GateDecision>;
 };
+
+/**
+ * 一批 Tool call 共享的冻结状态。
+ *
+ * stage 与 allowed 在批次开始时定格，因此同批调用不会因为彼此的执行顺序拿到不同结论；
+ * accepted 随批次推进增长，用来拦截同批重复 Tool。
+ */
+export type ToolBatchState = {
+  stage: WorkflowStage;
+  allowed: Set<string>;
+  accepted: Set<string>;
+};
+
+/** 在任何 Tool 执行前读取一次 Evidence，作为整批调用的唯一判断依据。 */
+export function openToolBatch(evidence: RecommendationEvidence): ToolBatchState {
+  return {
+    stage: stageFor(evidence),
+    allowed: new Set(allowedTools(evidence)),
+    accepted: new Set(),
+  };
+}
+
+/** 按冻结快照裁决单个 Tool call，并把放行结果记入批次。 */
+export function gateToolCall(batch: ToolBatchState, toolName: string): GateDecision {
+  if (!batch.allowed.has(toolName)) {
+    return { allowed: false, reason: "tool_not_allowed_in_stage" };
+  }
+  // 同一批重复 Tool 看不到彼此结果，所以只允许第一个执行。
+  if (batch.accepted.has(toolName)) {
+    return { allowed: false, reason: "duplicate_tool_in_batch" };
+  }
+  batch.accepted.add(toolName);
+  return { allowed: true, reason: null };
+}
 
 /** Evidence 是唯一状态源；阶段不单独持久化，避免两份状态漂移。 */
 export function stageFor(evidence: RecommendationEvidence): WorkflowStage {
@@ -68,24 +109,12 @@ export function planToolBatch(
   evidence: RecommendationEvidence,
   calls: readonly (readonly [string, string])[],
 ): ToolBatch {
-  // 在任何 Tool 开始前读取一次 Evidence，整批调用都基于同一个快照做决定。
-  const stage = stageFor(evidence);
-  const allowed = new Set(allowedTools(evidence));
-  const accepted = new Set<string>();
+  const batch = openToolBatch(evidence);
   const decisions = new Map<string, GateDecision>();
-
   for (const [callId, toolName] of calls) {
-    if (!allowed.has(toolName)) {
-      decisions.set(callId, { allowed: false, reason: "tool_not_allowed_in_stage" });
-    } else if (accepted.has(toolName)) {
-      // 同一批重复 Tool 看不到彼此结果，所以只允许第一个执行。
-      decisions.set(callId, { allowed: false, reason: "duplicate_tool_in_batch" });
-    } else {
-      decisions.set(callId, { allowed: true, reason: null });
-      accepted.add(toolName);
-    }
+    decisions.set(callId, gateToolCall(batch, toolName));
   }
-  return { stage, decisions };
+  return { stage: batch.stage, decisions };
 }
 
 /**
@@ -115,3 +144,56 @@ export function renderAgentStatus(evidence: RecommendationEvidence): string {
     "</agent_status>",
   ].join("\n");
 }
+
+/**
+ * 每轮重新追加状态快照，不改写原始对话 Context。
+ *
+ * 这里同时是批次边界：Model 再次被调用，说明上一批 Tool 已经全部结束，
+ * 下一批调用应当基于最新 Evidence 重新冻结门禁。
+ */
+export const appendAgentStatus: CallModelInputFilter = (data) => {
+  // SDK 的 filter 类型没有暴露 context 泛型，这里是固定的 Harness 边界。
+  const context = data.context as ChattyRunContext;
+  context.batch = null;
+  // 状态使用 system message，表示它比用户描述更可信。
+  return {
+    ...data.modelData,
+    input: [
+      ...data.modelData.input,
+      { role: "system", content: renderAgentStatus(context.evidence) },
+    ],
+  };
+};
+
+/** 冻结本批门禁并执行裁决，把拒绝原因返回模型。 */
+export const stageGuardrail = defineToolInputGuardrail<ChattyRunContext>({
+  name: "chatty_stage_gate",
+  run: async (data) => {
+    const context = data.context.context;
+    // 本批第一个 Tool call 负责冻结快照，同批后续调用共用它。
+    context.batch ??= openToolBatch(context.evidence);
+    const batch = context.batch;
+    const decision = gateToolCall(batch, data.toolCall.name);
+
+    if (decision.allowed) {
+      // allow 的 outputInfo 只用于观察，不会成为 Tool 的业务参数。
+      return ToolGuardrailFunctionOutputFactory.allow({ stage_snapshot: batch.stage });
+    }
+
+    // 被拒绝的调用没有执行，但仍记录原因，方便 Trace 和下一轮状态显示。
+    const reason = decision.reason ?? "unplanned_tool_call";
+    context.evidence.blocked_attempts.push(
+      `${batch.stage}:${data.toolCall.name}:${reason}`,
+    );
+    // rejectContent 会把这段结构化消息作为 Tool Result 返回 Model，让它自行修正。
+    const message = JSON.stringify({
+      status: "blocked",
+      reason,
+      required_next: allowedTools(context.evidence),
+      agent_status: renderAgentStatus(context.evidence),
+    });
+    return ToolGuardrailFunctionOutputFactory.rejectContent(message, {
+      call_id: data.toolCall.callId,
+    });
+  },
+});

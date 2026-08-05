@@ -6,11 +6,18 @@
  * 二者分开后，外部 Model 的格式限制不会污染后面的业务代码。
  */
 
+import {
+  Agent,
+  type RunErrorHandlerInput,
+  type RunErrorHandlerResult,
+} from "@openai/agents";
 import { z } from "zod";
 
 import type { ProductNeed, TaskFrame, UserContext } from "../data/models.ts";
 import { emptyUserContext, productNeedSchema, taskFrameSchema } from "../data/models.ts";
+import type { ModelProvider } from "../model-provider.ts";
 import { round } from "../round.ts";
+import { extractResponseText } from "./response-text.ts";
 
 /**
  * DeepSeek Responses API 可接受的扁平 structured output。
@@ -48,8 +55,33 @@ export function taskFrameInstructions(categories: readonly string[]): string {
   );
 }
 
-/** 只在 invalidFinalOutput 路径解开 DeepSeek 的 properties 包装。 */
-export function parseTaskFrameWireOutput(raw: string): TaskFrameWire {
+/** 使用 Agents SDK structured output 声明 TaskFrame 契约。 */
+export function buildTaskFrameAgent(
+  provider: ModelProvider,
+  categories: readonly string[],
+) {
+  return new Agent({
+    name: "Chatty Task Framer",
+    instructions: taskFrameInstructions(categories),
+    model: provider.agentModel,
+    outputType: taskFrameWireSchema,
+    modelSettings: { reasoning: { effort: "none" } },
+  });
+}
+
+export type TaskFrameAgent = ReturnType<typeof buildTaskFrameAgent>;
+
+/** 兼容 DeepSeek 把 structured output 包在 properties 中的响应。 */
+export function recoverInvalidTaskFrame(
+  data: RunErrorHandlerInput<unknown, TaskFrameAgent>,
+): RunErrorHandlerResult<TaskFrameAgent> {
+  const wire = parseTaskFrameWireOutput(extractResponseText(data.runData.rawResponses));
+  return { finalOutput: wire };
+}
+
+/** 只在 invalidFinalOutput 路径解开 DeepSeek 的 properties 包装。 */ export function parseTaskFrameWireOutput(
+  raw: string,
+): TaskFrameWire {
   let value: unknown;
   try {
     value = JSON.parse(raw);
