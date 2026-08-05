@@ -5,4 +5,4 @@ pnpm-lock.yaml
 *.md
 
 # golden 基线是冻结数据，重排会制造无意义的 diff。
-server/tests/fixtures/
+apps/api/tests/fixtures/

@@ -28,7 +28,7 @@ import {
 } from "../src/agent/workflow.ts";
 import { Catalog, CatalogError } from "../src/data/catalog.ts";
 import { segmentForIndex, splitIntoChunks } from "../src/data/database.ts";
-import { DATA_DIR } from "../src/paths.ts";
+import { DATA_DIR } from "@chatty/seed-data";
 import {
   productNeedSchema,
   recommendationDraftItemSchema,

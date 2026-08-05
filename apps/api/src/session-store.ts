@@ -31,13 +31,20 @@ export class SessionStore {
     return this.#sessions.get(id);
   }
 
-  /** 在 session 的串行链上排队执行，返回值与异常都透传给调用方。 */
+  /**
+   * 在 session 的串行链上排队执行，返回值与异常都透传给调用方。
+   *
+   * 这里不能写成先 `await session.tail` 再赋值新的 tail：两次并发调用会在
+   * await 处双双让出，然后同时往下走，串行就没了。所以必须同步接链。
+   * `.then(task, task)` 的两个参数是同一个函数，意思是上一轮无论成功还是
+   * 失败，这一轮都照常执行。
+   */
   runExclusive<T>(session: Session, task: () => Promise<T>): Promise<T> {
     const result = session.tail.then(task, task);
-    session.tail = result.then(
-      () => undefined,
-      () => undefined,
-    );
+    // 新的 tail 只关心「上一轮结束了没有」，不关心结果，所以把成败都抹平。
+    session.tail = result.then(ignoreResult, ignoreResult);
     return result;
   }
 }
+
+function ignoreResult(): void {}

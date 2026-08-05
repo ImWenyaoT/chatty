@@ -15,7 +15,7 @@ import {
   prepareTaskContext,
 } from "../src/agent/executor.ts";
 import { Catalog } from "../src/data/catalog.ts";
-import { DATA_DIR } from "../src/paths.ts";
+import { DATA_DIR } from "@chatty/seed-data";
 import { emptyUserContext } from "../src/data/models.ts";
 import type { ModelProvider } from "../src/model-provider.ts";
 import {
@@ -261,6 +261,41 @@ describe("草稿收敛", () => {
           error instanceof RecommendationError &&
           error.code === "invalid_draft",
       );
+    });
+  });
+
+  it("provider 不遵守 Schema 时，用它自己的文本纠正一次", async () => {
+    // 第一次返回不是 AgentDraft 的纯文本，SDK 判定 invalidFinalOutput；
+    // 纠正 Agent 读到这段文本后给出合法草稿，整轮仍然成功。
+    const model = new ScriptedModel([
+      textOutput("我们和多家合作快递配送，订单发出后可在页面查看物流。"),
+      textOutput(
+        JSON.stringify({
+          action: "answer",
+          answer: "我们和多家合作快递配送，订单发出后可在页面查看物流。",
+          question: null,
+          recommendations: null,
+        }),
+      ),
+    ]);
+
+    await withCatalog(async (catalog) => {
+      const evidence = createEvidence();
+      evidence.general_knowledge_hits = 1;
+      const taskContext = prepareTaskContext(
+        { product_need: null, knowledge_query: "快递公司" },
+        "user_active",
+        catalog,
+        evidence,
+      );
+      const executor = new ChattyExecutor(catalog, providerOf(model));
+
+      const reply = await executor.respond(taskContext, evidence, "快递公司");
+
+      assert.equal(reply.kind, "answer");
+      assert.match(reply.answer, /合作快递/);
+      // 纠正也调用了 Model，这次开销必须计入 Usage。
+      assert.equal(evidence.usage.requests, 2);
     });
   });
 

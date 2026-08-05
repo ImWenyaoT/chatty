@@ -46,13 +46,13 @@ Chatty 因此既保留了 Agent 处理开放问题的能力，也让关键业务
 
 主要代码位于：
 
-- `server/src/agent/chatty.ts`：Chatty Agent 对外唯一的一轮接口 `run()`。
-- `server/src/agent/executor.ts`：定义主 Agent Loop，并让 Agents SDK 执行 Harness 中的 Tool Loop。
-- `server/src/agent/workflow.ts`：Harness 的阶段机、批次门禁和上下文末尾状态栏。
-- `server/src/agent/executor.ts`：同时准备三个固定 Tool 的 Context，并让 Agents SDK 执行开放 Tool Loop。
-- `server/src/agent/tools.ts`：Harness 暴露给 Model 的知识检索与营销策略 function tools。
-- `server/src/agent/evidence.ts`：Harness 的调用顺序与事实集合校验。
-- `server/src/data/catalog.ts`：隔离 Tool 与 SQLite 查询。
+- `apps/api/src/agent/chatty.ts`：Chatty Agent 对外唯一的一轮接口 `run()`。
+- `apps/api/src/agent/executor.ts`：定义主 Agent Loop，并让 Agents SDK 执行 Harness 中的 Tool Loop。
+- `apps/api/src/agent/workflow.ts`：Harness 的阶段机、批次门禁和上下文末尾状态栏。
+- `apps/api/src/agent/executor.ts`：同时准备三个固定 Tool 的 Context，并让 Agents SDK 执行开放 Tool Loop。
+- `apps/api/src/agent/tools.ts`：Harness 暴露给 Model 的知识检索与营销策略 function tools。
+- `apps/api/src/agent/evidence.ts`：Harness 的调用顺序与事实集合校验。
+- `apps/api/src/data/catalog.ts`：隔离 Tool 与 SQLite 查询。
 
 Agents SDK 负责循环和 Tool 调用，Chatty 自己的 Harness 负责业务约束、Evidence
 与最终裁决。这样标准运行循环不用重复实现，电商事实规则也不会被藏进 SDK adapter。

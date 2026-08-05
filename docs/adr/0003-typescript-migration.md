@@ -6,8 +6,8 @@ supersedes: 0002-python-fastapi-agents-sdk
 # 从 Python 迁移到 TypeScript 全栈
 
 Chatty 原本是 Python 后端（FastAPI + uv + pytest + Pydantic + openai-agents-python）
-加 TypeScript 前端。现在整个仓库统一为 TypeScript：`server/` 承担 Agent、Tool、Harness、
-SQLite 与 HTTP，`frontend/` 保持 React + Vite 不变。
+加 TypeScript 前端。现在整个仓库统一为 TypeScript：`server/`（现为 `apps/api/`）承担 Agent、Tool、Harness、
+SQLite 与 HTTP，`frontend/`（现为 `apps/web/`）保持 React + Vite 不变。
 
 ADR 0002 中与技术栈无关的结论全部继续有效：Chatty 仍然是 Single Agent，五项能力仍然是
 Tool，SQLite 仍然是商品、库存和知识检索的运行时事实源，配置优先级仍然是
@@ -31,7 +31,7 @@ Tool，SQLite 仍然是商品、库存和知识检索的运行时事实源，配
 
 单语言仓库消除了两套包管理器、两套 lint/format 工具链和两套 CI 依赖缓存。
 更重要的是领域模型只需要定义一次：过去 Pydantic 模型和前端 TypeScript 类型是两份手写
-定义，靠 review 保持同步；现在 `server/src/data/models.ts` 是唯一定义。
+定义，靠 review 保持同步；现在 `apps/api/src/data/models.ts` 是唯一定义。
 
 Node 的内置能力已经覆盖了原先需要第三方依赖的部分（SQLite、测试、类型剥离、env 解析），
 所以这次迁移在减少语言的同时也减少了依赖数量。
@@ -39,7 +39,7 @@ Node 的内置能力已经覆盖了原先需要第三方依赖的部分（SQLite
 ## 迁移是如何被验证的
 
 数据层是纯函数与纯 SQL，两种语言必须给出逐字节相同的结果。为此先建立
-`tests/golden/` 跨语言基线：63 条 case 覆盖分词、切块、Query 改写、FTS 表达式构造、
+`apps/api/tests/fixtures/golden/` 跨语言基线：63 条 case 覆盖分词、切块、Query 改写、FTS 表达式构造、
 画像、搜索、打分、库存、知识检索、营销策略、最终重查、TaskFrame 解析与批次裁决。
 基线由 Python 实现生成并冻结，TypeScript 实现必须逐条匹配才算迁移完成。
 

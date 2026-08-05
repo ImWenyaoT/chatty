@@ -1,9 +1,12 @@
 {
-  "name": "@chatty/frontend",
+  "name": "@chatty/web",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "packageManager": "pnpm@11.20.0",
+  "exports": {
+    "./paths": "./paths.ts"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

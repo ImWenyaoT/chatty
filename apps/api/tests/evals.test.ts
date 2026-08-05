@@ -17,7 +17,7 @@ import {
   type KnowledgeSource,
 } from "../src/evals/retrieval.ts";
 import { Catalog } from "../src/data/catalog.ts";
-import { DATA_DIR } from "../src/paths.ts";
+import { DATA_DIR } from "@chatty/seed-data";
 
 const emptySource: KnowledgeSource = { retrieveKnowledge: () => [] };
 

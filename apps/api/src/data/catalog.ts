@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { Database, SeedDataError, segmentForIndex } from "./database.ts";
-import { DATA_DIR } from "../paths.ts";
+import { DATA_DIR } from "@chatty/seed-data";
 import {
   emptyUserContext,
   type KnowledgeHit,

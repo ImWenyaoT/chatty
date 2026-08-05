@@ -31,8 +31,8 @@ Frontend 与 Chatty Agent 之间的 HTTP Adapter。
 
 React GUI 是产品界面，不是多模态 Agent。Model 不会观察屏幕、点击按钮或理解图片；Chatty 当前处理的输入和输出都是文字与结构化数据。只有未来确实需要语音、图片或屏幕操作时，才需要扩展新的观察与行动空间。
 
-前端入口位于 `frontend/src/App.tsx`，数据页位于 `frontend/src/CatalogBrowser.tsx`，HTTP 类型
-位于 `frontend/src/api.ts`，后端接口位于 `server/src/api.ts`。
+前端入口位于 `apps/web/src/App.tsx`，数据页位于 `apps/web/src/CatalogBrowser.tsx`，HTTP 类型
+位于 `apps/web/src/api.ts`，后端接口位于 `apps/api/src/api.ts`。
 
 ---
 
