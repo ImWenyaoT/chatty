@@ -9,41 +9,16 @@
 import { type RunContext, tool } from "@openai/agents";
 import { z } from "zod";
 
-import type { Catalog } from "../data/catalog.ts";
-import type { RecommendationRequest } from "../data/models.ts";
-import {
-  guardRepeatedCall,
-  recordKnowledge,
-  type RecommendationEvidence,
-} from "./evidence.ts";
-import { stageGuardrail, type ToolBatchState } from "./workflow.ts";
-
-/** 一次 Agent Loop 内 Tool 共享的对象，不会写入用户会话。 */
-export type ChattyRunContext = {
-  // 纯知识问答没有商品请求，因此 request 可以是 null。
-  request: RecommendationRequest | null;
-  // catalog 是 SQLite 查询入口；Tool 不直接写 SQL。
-  catalog: Catalog;
-  // evidence 是 Harness 账本，只能由确定性 Tool 代码更新。
-  evidence: RecommendationEvidence;
-  // batch 由 workflow 为“当前这批 Tool 调用”临时冻结。
-  batch: ToolBatchState | null;
-};
-
-export function createRunContext(
-  request: RecommendationRequest | null,
-  catalog: Catalog,
-  evidence: RecommendationEvidence,
-): ChattyRunContext {
-  return { request, catalog, evidence, batch: null };
-}
+import type { ChattyRunContext } from "./context.ts";
+import { guardRepeatedCall, recordKnowledge } from "./evidence.ts";
+import { stageGuardrail } from "./workflow.ts";
 
 /** 递归排序 key，让同一组参数总是得到同一个签名。 */
 function stableStringify(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
   if (value !== null && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) =>
-      a < b ? -1 : a > b ? 1 : 0,
+    const entries = Object.entries(value as Record<string, unknown>).sort(
+      ([a], [b]) => (a < b ? -1 : a > b ? 1 : 0),
     );
     return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(",")}}`;
   }
@@ -68,7 +43,9 @@ const retrieveKnowledge = tool({
     limit: z.number().int().min(1).max(8).describe("最多返回的知识块数量。"),
     scope: z
       .enum(["general", "product"])
-      .describe("general 检索政策等通用知识；product 只检索当前在售候选商品知识。"),
+      .describe(
+        "general 检索政策等通用知识；product 只检索当前在售候选商品知识。",
+      ),
   }),
   errorFunction: null,
   inputGuardrails: [stageGuardrail],
@@ -83,11 +60,14 @@ const retrieveKnowledge = tool({
       if (context.request === null)
         throw new Error("recommendation_context_not_prepared");
       // 用户本轮明确类目优先；没有明确类目时才使用历史画像偏好。
-      const explicitCategories = context.request.context.preferred_categories ?? [];
+      const explicitCategories =
+        context.request.context.preferred_categories ?? [];
       const profile = context.evidence.profile;
       if (profile === null) throw new Error("profile_not_loaded");
       categories =
-        explicitCategories.length > 0 ? explicitCategories : profile.preferred_categories;
+        explicitCategories.length > 0
+          ? explicitCategories
+          : profile.preferred_categories;
       productIds = context.evidence.in_stock_product_order;
     }
     const signature = stableStringify({
@@ -119,7 +99,8 @@ const retrieveKnowledge = tool({
 
     const groundedIds = new Set(productSpecificIds);
     for (const product of context.catalog.inventory(productIds)) {
-      if (genericCategories.has(product.category)) groundedIds.add(product.product_id);
+      if (genericCategories.has(product.category))
+        groundedIds.add(product.product_id);
     }
 
     // 先记录 Harness Evidence，再把同一批命中序列化后返回给 Model。
@@ -137,8 +118,11 @@ const getMarketingStrategy = tool({
   execute: async (_input, runContext) => {
     const context = requireContext(runContext);
     // 营销策略依赖用户分群，因此画像未加载时宁可明确失败，也不使用默认语气。
-    if (context.evidence.profile === null) throw new Error("profile_not_loaded");
-    const strategy = context.catalog.marketingStrategy(context.evidence.profile.segment);
+    if (context.evidence.profile === null)
+      throw new Error("profile_not_loaded");
+    const strategy = context.catalog.marketingStrategy(
+      context.evidence.profile.segment,
+    );
     // 只有真实读取成功后才把 Tool 记入 used_tools。
     context.evidence.used_tools.push("get_marketing_strategy");
     return JSON.stringify(strategy);

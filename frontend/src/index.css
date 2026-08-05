@@ -14,10 +14,10 @@
   font-family:
     system-ui,
     -apple-system,
-    'Segoe UI',
-    'PingFang SC',
-    'Hiragino Sans GB',
-    'Microsoft YaHei',
+    "Segoe UI",
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Microsoft YaHei",
     sans-serif;
   color: var(--ink);
   background: var(--bg);
@@ -429,7 +429,7 @@ tbody tr:hover {
 
 .numeric {
   font-variant-numeric: tabular-nums;
-  font-feature-settings: 'tnum';
+  font-feature-settings: "tnum";
   text-align: right;
   white-space: nowrap;
 }

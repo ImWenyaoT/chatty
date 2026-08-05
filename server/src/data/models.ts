@@ -72,9 +72,12 @@ export const taskFrameSchema = z
     product_need: frame.product_need,
     knowledge_query: frame.knowledge_query?.trim() || null,
   }))
-  .refine((frame) => frame.product_need !== null || frame.knowledge_query !== null, {
-    error: "empty_task_frame",
-  });
+  .refine(
+    (frame) => frame.product_need !== null || frame.knowledge_query !== null,
+    {
+      error: "empty_task_frame",
+    },
+  );
 
 export const userProfileSchema = z.object({
   user_id: z.string(),
@@ -116,7 +119,9 @@ export const recommendationDraftItemSchema = z.object({
   reason: z.string(),
   marketing_copy: z.string(),
 });
-export type RecommendationDraftItem = z.infer<typeof recommendationDraftItemSchema>;
+export type RecommendationDraftItem = z.infer<
+  typeof recommendationDraftItemSchema
+>;
 
 export const recommendationRequestSchema = z.object({
   user_id: z.string(),
@@ -159,7 +164,10 @@ export const agentDraftSchema = z
     action: z.enum(["answer", "clarify", "recommend"]),
     answer: z.string().nullable().default(null),
     question: z.string().nullable().default(null),
-    recommendations: z.array(recommendationDraftItemSchema).nullable().default(null),
+    recommendations: z
+      .array(recommendationDraftItemSchema)
+      .nullable()
+      .default(null),
   })
   .superRefine((draft, ctx) => {
     const fail = (error: string) => ctx.addIssue({ code: "custom", error });

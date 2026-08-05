@@ -81,7 +81,9 @@ export type EvidenceSnapshot = {
 };
 
 /** 只复制定位错误需要的字段，避免日志带出整段业务内容。 */
-export function snapshotEvidence(evidence: RecommendationEvidence): EvidenceSnapshot {
+export function snapshotEvidence(
+  evidence: RecommendationEvidence,
+): EvidenceSnapshot {
   return {
     used_tools: [...evidence.used_tools],
     profile_segment: evidence.profile?.segment ?? null,
@@ -94,12 +96,17 @@ export function snapshotEvidence(evidence: RecommendationEvidence): EvidenceSnap
 }
 
 /** 记录 Agents SDK 汇总的 Model 请求与 Token 用量。 */
-export function recordRunUsage(evidence: RecommendationEvidence, usage: Usage): void {
+export function recordRunUsage(
+  evidence: RecommendationEvidence,
+  usage: Usage,
+): void {
   evidence.usage.add(usage);
 }
 
 /** 检查 Tool 是否齐全，以及前三个 Tool 的依赖顺序。 */
-export function validateToolSequence(usedTools: readonly string[]): string | null {
+export function validateToolSequence(
+  usedTools: readonly string[],
+): string | null {
   const expected = new Set<string>(TOOL_NAMES);
   const actual = new Set(usedTools);
 
@@ -112,7 +119,8 @@ export function validateToolSequence(usedTools: readonly string[]): string | nul
   for (let index = 1; index < DEPENDENCY_CHAIN.length; index += 1) {
     const previous = usedTools.indexOf(DEPENDENCY_CHAIN[index - 1]!);
     const current = usedTools.indexOf(DEPENDENCY_CHAIN[index]!);
-    if (current < previous) return `依赖顺序错误，应为 ${DEPENDENCY_CHAIN.join(" -> ")}`;
+    if (current < previous)
+      return `依赖顺序错误，应为 ${DEPENDENCY_CHAIN.join(" -> ")}`;
   }
 
   return null;
@@ -129,7 +137,9 @@ export function guardRepeatedCall(
 
   const repeated = evidence.call_log.filter((logged) => logged === call).length;
   if (repeated > 3) {
-    throw new Error(`相同参数调用 ${toolName} 已达 3 次，请改变参数后重试或使用现有结果`);
+    throw new Error(
+      `相同参数调用 ${toolName} 已达 3 次，请改变参数后重试或使用现有结果`,
+    );
   }
 }
 
@@ -203,7 +213,8 @@ export function validateRecommendationEvidence(
   if (sequenceError)
     throw new EvidenceError("required_tools_not_used", [], sequenceError);
 
-  if (evidence.knowledge.length === 0) throw new EvidenceError("knowledge_not_retrieved");
+  if (evidence.knowledge.length === 0)
+    throw new EvidenceError("knowledge_not_retrieved");
   if (evidence.profile === null) throw new EvidenceError("profile_not_loaded");
 
   const recommended = new Set(draft.map((item) => item.product_id));
@@ -222,7 +233,9 @@ export function validateRecommendationEvidence(
 }
 
 /** 澄清可以没有候选商品，但仍必须完成五个 Tool。 */
-export function validateClarificationEvidence(evidence: RecommendationEvidence): void {
+export function validateClarificationEvidence(
+  evidence: RecommendationEvidence,
+): void {
   const sequenceError = validateToolSequence(evidence.used_tools);
   if (sequenceError)
     throw new EvidenceError("required_tools_not_used", [], sequenceError);

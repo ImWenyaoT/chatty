@@ -11,8 +11,7 @@
     "eval:retrieval": "node src/evals/retrieval.ts",
     "eval:agent": "node src/evals/agent.ts",
     "typecheck": "tsc --noEmit --pretty false",
-    "lint": "oxlint && prettier --check .",
-    "format": "prettier --write ."
+    "lint": "oxlint"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.0",
@@ -24,7 +23,6 @@
   "devDependencies": {
     "@types/node": "^24.13.3",
     "oxlint": "^1.75.0",
-    "prettier": "^3.9.6",
     "typescript": "~7.0.2"
   }
 }

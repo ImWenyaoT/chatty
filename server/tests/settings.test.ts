@@ -13,7 +13,10 @@ function tempRoot(): URL {
 
 describe("配置加载", () => {
   it(".env.local 覆盖 .env，.env 覆盖系统环境变量", (t) => {
-    t.mock.property(process, "env", { ...process.env, DEEPSEEK_MODEL: "system-model" });
+    t.mock.property(process, "env", {
+      ...process.env,
+      DEEPSEEK_MODEL: "system-model",
+    });
     const root = tempRoot();
     writeFileSync(new URL(".env", root), "DEEPSEEK_MODEL=env-model\n");
     writeFileSync(new URL(".env.local", root), "DEEPSEEK_MODEL=local-model\n");
@@ -22,7 +25,10 @@ describe("配置加载", () => {
   });
 
   it("缺少 env 文件时回落到系统环境变量", (t) => {
-    t.mock.property(process, "env", { ...process.env, DEEPSEEK_MODEL: "system-model" });
+    t.mock.property(process, "env", {
+      ...process.env,
+      DEEPSEEK_MODEL: "system-model",
+    });
 
     assert.equal(loadSettings(tempRoot()).model, "system-model");
   });

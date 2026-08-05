@@ -23,9 +23,16 @@ import {
 
 import { Catalog, CatalogError } from "../data/catalog.ts";
 import type { Reply } from "../data/models.ts";
-import { MissingCredentialsError, type ModelProvider } from "../model-provider.ts";
+import {
+  MissingCredentialsError,
+  type ModelProvider,
+} from "../model-provider.ts";
 import { createEvidence, type RecommendationEvidence } from "./evidence.ts";
-import { ChattyExecutor, RecommendationError, prepareTaskContext } from "./executor.ts";
+import {
+  ChattyExecutor,
+  RecommendationError,
+  prepareTaskContext,
+} from "./executor.ts";
 import {
   TaskFrameParseError,
   buildTaskFrameAgent,
@@ -73,7 +80,11 @@ export class ChattyError extends Error {
   readonly code: string;
   readonly diagnostics: Record<string, unknown>;
 
-  constructor(code: string, diagnostics: Record<string, unknown> = {}, cause?: unknown) {
+  constructor(
+    code: string,
+    diagnostics: Record<string, unknown> = {},
+    cause?: unknown,
+  ) {
     super(code, { cause });
     this.code = code;
     this.diagnostics = diagnostics;
@@ -82,7 +93,11 @@ export class ChattyError extends Error {
 
 /** HTTP 层依赖的最小 Interface；测试可传入实现相同方法的 Fake。 */
 export type ChattyAgent = {
-  run(userId: string, text: string, context: ChattyContext): Promise<ChattyTurn>;
+  run(
+    userId: string,
+    text: string,
+    context: ChattyContext,
+  ): Promise<ChattyTurn>;
 };
 
 /**
@@ -103,12 +118,17 @@ export class Chatty implements ChattyAgent {
   }
 
   /** 完成一轮 Context In / Context Out。 */
-  async run(userId: string, text: string, context: ChattyContext): Promise<ChattyTurn> {
+  async run(
+    userId: string,
+    text: string,
+    context: ChattyContext,
+  ): Promise<ChattyTurn> {
     // 计时覆盖 Task Framer 和主 Agent，表示用户等待这一整轮的时间。
     const started = performance.now();
 
     // turns 在进入模型前检查，避免已经耗尽的会话继续产生费用。
-    if (context.turns >= MAX_TURNS) throw new ChattyError("conversation_exhausted");
+    if (context.turns >= MAX_TURNS)
+      throw new ChattyError("conversation_exhausted");
 
     // Task Framer 需要看到所有待补全的原话；主 Agent 仍只接收当前 text 和 history。
     const pendingMessages = [...context.pendingUserMessages, text];
@@ -133,10 +153,18 @@ export class Chatty implements ChattyAgent {
       if (frameResult.finalOutput === undefined) {
         throw new TaskFrameParseError("invalid_task_frame_output");
       }
-      const frame = parseTaskFrame(frameResult.finalOutput, this.#catalog.categories);
+      const frame = parseTaskFrame(
+        frameResult.finalOutput,
+        this.#catalog.categories,
+      );
 
       // 第二步先从 SQLite 准备画像、候选和库存等确定性 Context，再运行主 Agent。
-      const taskContext = prepareTaskContext(frame, userId, this.#catalog, evidence);
+      const taskContext = prepareTaskContext(
+        frame,
+        userId,
+        this.#catalog,
+        evidence,
+      );
       const reply = await this.#executor.respond(
         taskContext,
         evidence,
@@ -194,7 +222,8 @@ function toChattyError(error: unknown): ChattyError {
   if (error instanceof RecommendationError) {
     return new ChattyError(error.code, error.diagnostics, error);
   }
-  if (error instanceof CatalogError) return new ChattyError(error.message, {}, error);
+  if (error instanceof CatalogError)
+    return new ChattyError(error.message, {}, error);
   throw error;
 }
 

@@ -1,8 +1,7 @@
 /**
  * HTTP 层：把 Chatty 的一轮对话暴露成 REST 接口。
  *
- * 会话状态保存在服务端内存，不写入 SQLite。每个 session 串行处理请求，
- * 避免并发轮次互相覆盖 ChattyContext。
+ * 字段名保持 snake_case，跟前端和 SQLite 列名一致。
  */
 
 import { existsSync } from "node:fs";
@@ -13,51 +12,15 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { z } from "zod";
 
-import {
-  Chatty,
-  ChattyError,
-  createChattyContext,
-  type ChattyAgent,
-  type ChattyContext,
-} from "./agent/chatty.ts";
+import { Chatty, ChattyError, type ChattyAgent } from "./agent/chatty.ts";
 import { Catalog } from "./data/catalog.ts";
-import { ResponsesModelProvider, type ModelProvider } from "./model-provider.ts";
-import { FRONTEND_DIST } from "./settings.ts";
-
-export const DEMO_USERS = [
-  {
-    id: "user_active",
-    label: "用户 A · 活跃型",
-    display_name: "用户 A",
-    profile_label: "活跃型",
-  },
-  {
-    id: "user_budget",
-    label: "用户 B · 价格敏感型",
-    display_name: "用户 B",
-    profile_label: "价格敏感型",
-  },
-  {
-    id: "user_vip",
-    label: "用户 C · 高价值型",
-    display_name: "用户 C",
-    profile_label: "高价值型",
-  },
-  {
-    id: "user_new",
-    label: "用户 D · 新客型",
-    display_name: "用户 D",
-    profile_label: "新客型",
-  },
-  {
-    id: "user_churn",
-    label: "用户 E · 流失风险型",
-    display_name: "用户 E",
-    profile_label: "流失风险型",
-  },
-] as const;
-
-const DEMO_USER_IDS = new Set<string>(DEMO_USERS.map((user) => user.id));
+import { DEMO_USERS, DEMO_USER_IDS } from "./data/demo-users.ts";
+import {
+  ResponsesModelProvider,
+  type ModelProvider,
+} from "./model-provider.ts";
+import { FRONTEND_DIST } from "./paths.ts";
+import { SessionStore } from "./session-store.ts";
 
 const createSessionSchema = z.object({
   user_id: z.string().default("user_active"),
@@ -72,23 +35,6 @@ const turnSchema = z.object({
     .refine((value) => value.length > 0),
 });
 
-type SessionState = {
-  userId: string;
-  context: ChattyContext;
-  // tail 是这个 session 上一次处理的完成信号，用来把请求排成一条串行链。
-  tail: Promise<void>;
-};
-
-/** 同一 session 串行处理，避免并发请求覆盖彼此的 context。 */
-function runExclusive<T>(session: SessionState, task: () => Promise<T>): Promise<T> {
-  const result = session.tail.then(task, task);
-  session.tail = result.then(
-    () => undefined,
-    () => undefined,
-  );
-  return result;
-}
-
 export type AppDependencies = {
   catalog?: Catalog;
   provider?: ModelProvider;
@@ -99,7 +45,7 @@ export function createApp(dependencies: AppDependencies = {}) {
   const catalog = dependencies.catalog ?? new Catalog();
   const provider = dependencies.provider ?? new ResponsesModelProvider();
   const chatty = dependencies.chatty ?? new Chatty(catalog, provider);
-  const sessions = new Map<string, SessionState>();
+  const sessions = new SessionStore();
 
   const app = new Hono();
 
@@ -132,26 +78,26 @@ export function createApp(dependencies: AppDependencies = {}) {
     if (!DEMO_USER_IDS.has(body.data.user_id)) {
       return c.json({ detail: "unknown_user" }, 422);
     }
-    const sessionId = `session_${crypto.randomUUID().replaceAll("-", "")}`;
-    sessions.set(sessionId, {
-      userId: body.data.user_id,
-      context: createChattyContext(),
-      tail: Promise.resolve(),
-    });
+    const sessionId = sessions.create(body.data.user_id);
     return c.json({ session_id: sessionId });
   });
 
   app.post("/api/sessions/:sessionId/turns", async (c) => {
     const session = sessions.get(c.req.param("sessionId"));
-    if (session === undefined) return c.json({ detail: "session_not_found" }, 404);
+    if (session === undefined)
+      return c.json({ detail: "session_not_found" }, 404);
 
     const body = turnSchema.safeParse(await readJson(c.req.raw));
     if (!body.success) return c.json({ detail: "invalid_request" }, 422);
 
-    return runExclusive(session, async () => {
+    return sessions.runExclusive(session, async () => {
       let turn;
       try {
-        turn = await chatty.run(session.userId, body.data.text, session.context);
+        turn = await chatty.run(
+          session.userId,
+          body.data.text,
+          session.context,
+        );
       } catch (error) {
         if (!(error instanceof ChattyError)) throw error;
         console.error(error.code, error.diagnostics);
@@ -176,7 +122,12 @@ export function createApp(dependencies: AppDependencies = {}) {
       };
 
       if (turn.reply.kind === "answer") {
-        return c.json({ ...common, kind: "answer", question: null, products: [] });
+        return c.json({
+          ...common,
+          kind: "answer",
+          question: null,
+          products: [],
+        });
       }
       if (turn.reply.kind === "clarify") {
         return c.json({

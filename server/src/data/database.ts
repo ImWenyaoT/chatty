@@ -5,15 +5,13 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { z } from "zod";
 
+import { DATA_DIR } from "../paths.ts";
 import {
   USER_SEGMENTS,
   knowledgeDocumentSchema,
   productSchema,
   userProfileSchema,
 } from "./models.ts";
-
-export const PROJECT_ROOT = new URL("../../../", import.meta.url);
-export const DATA_DIR = new URL("data/", PROJECT_ROOT);
 
 const CHINESE_CHARACTER = /[\u4e00-\u9fff]/gu;
 const SENTENCE_END = /(?<=[。！？；])/u;
@@ -24,7 +22,11 @@ export function segmentForIndex(text: string): string {
 }
 
 /** 优先在中文句末切块；跨块保留少量重叠上下文。 */
-export function splitIntoChunks(text: string, target = 160, overlap = 40): string[] {
+export function splitIntoChunks(
+  text: string,
+  target = 160,
+  overlap = 40,
+): string[] {
   const normalized = text.trim();
   if (!normalized) return [];
   // Python 的 len() 与切片按码点计数，JS 的 length 按 UTF-16 单元，这里统一到码点。
@@ -32,7 +34,9 @@ export function splitIntoChunks(text: string, target = 160, overlap = 40): strin
 
   const chunks: string[] = [];
   let current = "";
-  const sentences = normalized.split(SENTENCE_END).filter((part) => part.trim());
+  const sentences = normalized
+    .split(SENTENCE_END)
+    .filter((part) => part.trim());
 
   for (const sentence of sentences) {
     if (!current || [...current].length + [...sentence].length <= target) {
@@ -119,16 +123,19 @@ export class Database {
 
   #seed(dataDir: URL): void {
     const products = readJsonLines(dataDir, "products.jsonl", productSchema);
-    const profiles = readJsonLines(dataDir, "user_profiles.jsonl", userProfileSchema);
+    const profiles = readJsonLines(
+      dataDir,
+      "user_profiles.jsonl",
+      userProfileSchema,
+    );
     const documents = readJsonLines(
       dataDir,
       "knowledge_documents.jsonl",
       knowledgeDocumentSchema,
     );
-    const templates = JSON.parse(readText(dataDir, "marketing_templates.json")) as Record<
-      string,
-      { tone: string; instructions: string }
-    >;
+    const templates = JSON.parse(
+      readText(dataDir, "marketing_templates.json"),
+    ) as Record<string, { tone: string; instructions: string }>;
     const forbiddenWords = JSON.parse(
       readText(dataDir, "forbidden_words.json"),
     ) as string[];
@@ -196,7 +203,9 @@ export class Database {
       for (const [segment, template] of Object.entries(templates)) {
         insertTemplate.run(segment, template.tone, template.instructions);
       }
-      const insertWord = connection.prepare("INSERT INTO forbidden_words VALUES (?)");
+      const insertWord = connection.prepare(
+        "INSERT INTO forbidden_words VALUES (?)",
+      );
       for (const word of forbiddenWords) insertWord.run(word);
 
       const insertDocument = connection.prepare(

@@ -1,8 +1,9 @@
 /**
- * 跨语言 parity 基线。
+ * 数据层回归基线。
  *
- * Python 与 TypeScript 后端读同一份 `tests/golden/data-layer.cases.json`，输出必须与
- * `data-layer.expected.json` 完全一致。迁移期间它是判断两套实现是否等价的唯一依据。
+ * `fixtures/golden/data-layer.cases.json` 的预期输出最初由 Python 实现生成并冻结，
+ * 迁移时用来判定两套实现等价。Python 移除后它仍然是商品排序、分词、
+ * 检索表达式这些易碎行为的回归防线，改动它等于改变 Chatty 的对外行为。
  */
 
 import assert from "node:assert/strict";
@@ -20,21 +21,33 @@ import {
   validateToolSequence,
   type RecommendationEvidence,
 } from "../src/agent/evidence.ts";
-import { allowedTools, planToolBatch, renderAgentStatus } from "../src/agent/workflow.ts";
+import {
+  allowedTools,
+  planToolBatch,
+  renderAgentStatus,
+} from "../src/agent/workflow.ts";
 import { Catalog, CatalogError } from "../src/data/catalog.ts";
-import { DATA_DIR, segmentForIndex, splitIntoChunks } from "../src/data/database.ts";
+import { segmentForIndex, splitIntoChunks } from "../src/data/database.ts";
+import { DATA_DIR } from "../src/paths.ts";
 import {
   productNeedSchema,
   recommendationDraftItemSchema,
   recommendationRequestSchema,
   userContextSchema,
 } from "../src/data/models.ts";
-import { caseKey, loadCases, loadExpected, type GoldenCase } from "./golden.ts";
+import {
+  caseKey,
+  loadCases,
+  loadExpected,
+  type GoldenCase,
+} from "./helpers/golden.ts";
 
 /** 把 JSON 里的 evidence 规格还原成 Harness 使用的可变 Evidence。 */
 function buildEvidence(spec: Record<string, unknown>): RecommendationEvidence {
   const evidence = createEvidence();
-  evidence.used_tools = [...((spec["used_tools"] as string[] | undefined) ?? [])];
+  evidence.used_tools = [
+    ...((spec["used_tools"] as string[] | undefined) ?? []),
+  ];
   evidence.blocked_attempts = [
     ...((spec["blocked_attempts"] as string[] | undefined) ?? []),
   ];
@@ -45,7 +58,9 @@ function buildEvidence(spec: Record<string, unknown>): RecommendationEvidence {
     ...((spec["required_knowledge_scopes"] as string[] | undefined) ?? []),
   ];
   if ("required_support_tools" in spec) {
-    evidence.required_support_tools = [...(spec["required_support_tools"] as string[])];
+    evidence.required_support_tools = [
+      ...(spec["required_support_tools"] as string[]),
+    ];
   }
   return evidence;
 }
@@ -98,7 +113,9 @@ function run(goldenCase: GoldenCase, catalog: Catalog): unknown {
       );
     }
     case "inventory":
-      return catalog.inventory(data["product_ids"]).map((product) => product.product_id);
+      return catalog
+        .inventory(data["product_ids"])
+        .map((product) => product.product_id);
     case "retrieve_knowledge":
       return catalog
         .retrieveKnowledge({
@@ -136,7 +153,10 @@ function run(goldenCase: GoldenCase, catalog: Catalog): unknown {
     }
 
     case "parse_task_frame":
-      return parseTaskFrame(taskFrameWireSchema.parse(data["wire"]), catalog.categories);
+      return parseTaskFrame(
+        taskFrameWireSchema.parse(data["wire"]),
+        catalog.categories,
+      );
     case "product_context":
       return productContext(productNeedSchema.parse(data["need"]));
     case "describe_task_frame": {
@@ -168,7 +188,10 @@ function run(goldenCase: GoldenCase, catalog: Catalog): unknown {
         ([callId, name]) => [callId, name] as const,
       );
       const batch = planToolBatch(evidence, calls);
-      return { stage: batch.stage, decisions: Object.fromEntries(batch.decisions) };
+      return {
+        stage: batch.stage,
+        decisions: Object.fromEntries(batch.decisions),
+      };
     }
 
     default:
@@ -176,7 +199,7 @@ function run(goldenCase: GoldenCase, catalog: Catalog): unknown {
   }
 }
 
-/** 与 Python 侧一致：只有业务错误折叠成 `{error}`，其它异常直接失败。 */
+/** 只有业务错误折叠成 `{error}`，其它异常直接失败。 */
 function outcome(goldenCase: GoldenCase, catalog: Catalog): unknown {
   try {
     return { ok: run(goldenCase, catalog) };
@@ -194,7 +217,10 @@ describe("golden 基线", () => {
     const expected = loadExpected();
 
     assert.ok(cases.length > 0);
-    assert.deepStrictEqual(cases.map(caseKey).sort(), Object.keys(expected).sort());
+    assert.deepStrictEqual(
+      cases.map(caseKey).sort(),
+      Object.keys(expected).sort(),
+    );
   });
 
   it("数据层输出与 golden 基线一致", () => {
@@ -206,8 +232,10 @@ describe("golden 基线", () => {
       // 逐条断言而不是整体比较，失败时能直接看到是哪个 case 漂移了。
       for (const goldenCase of cases) {
         const key = caseKey(goldenCase);
-        // 先过一遍 JSON，把 undefined 字段与 Map 归一成与 Python 相同的形状。
-        const actual: unknown = JSON.parse(JSON.stringify(outcome(goldenCase, catalog)));
+        // 先过一遍 JSON，把 undefined 字段与 Map 归一成与基线相同的形状。
+        const actual: unknown = JSON.parse(
+          JSON.stringify(outcome(goldenCase, catalog)),
+        );
         assert.deepStrictEqual(actual, expected[key], key);
       }
     } finally {

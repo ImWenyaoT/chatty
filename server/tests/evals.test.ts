@@ -6,14 +6,18 @@ import type {
   Product,
   RecommendationResponse,
 } from "../src/data/models.ts";
-import { answerContains, caseSucceeds, type AgentCase } from "../src/evals/agent.ts";
+import {
+  answerContains,
+  caseSucceeds,
+  type AgentCase,
+} from "../src/evals/agent.ts";
 import {
   evaluateRetrieval,
   runRetrievalEval,
   type KnowledgeSource,
 } from "../src/evals/retrieval.ts";
 import { Catalog } from "../src/data/catalog.ts";
-import { DATA_DIR } from "../src/data/database.ts";
+import { DATA_DIR } from "../src/paths.ts";
 
 const emptySource: KnowledgeSource = { retrieveKnowledge: () => [] };
 
@@ -42,7 +46,10 @@ describe("离线评测", () => {
   });
 
   it("知识回答缺少事实要点时判失败", () => {
-    const reply: KnowledgeReply = { kind: "answer", answer: "请查看帮助中心。" };
+    const reply: KnowledgeReply = {
+      kind: "answer",
+      answer: "请查看帮助中心。",
+    };
 
     assert.equal(answerContains(reply, ["合作快递", "订单"]), false);
     assert.equal(answerContains(reply, []), true);
@@ -61,6 +68,9 @@ describe("离线评测", () => {
       answer: null,
     };
 
-    assert.equal(caseSucceeds(testCase, reply, new Map<string, Product>()), false);
+    assert.equal(
+      caseSucceeds(testCase, reply, new Map<string, Product>()),
+      false,
+    );
   });
 });

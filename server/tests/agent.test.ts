@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { Chatty, ChattyError, createChattyContext } from "../src/agent/chatty.ts";
+import {
+  Chatty,
+  ChattyError,
+  createChattyContext,
+} from "../src/agent/chatty.ts";
 import { createEvidence } from "../src/agent/evidence.ts";
 import {
   ChattyExecutor,
@@ -11,12 +15,18 @@ import {
   prepareTaskContext,
 } from "../src/agent/executor.ts";
 import { Catalog } from "../src/data/catalog.ts";
-import { DATA_DIR } from "../src/data/database.ts";
+import { DATA_DIR } from "../src/paths.ts";
 import { emptyUserContext } from "../src/data/models.ts";
 import type { ModelProvider } from "../src/model-provider.ts";
-import { ScriptedModel, textOutput, toolCalls } from "./scripted-model.ts";
+import {
+  ScriptedModel,
+  textOutput,
+  toolCalls,
+} from "./helpers/scripted-model.ts";
 
-async function withCatalog<T>(body: (catalog: Catalog) => T | Promise<T>): Promise<T> {
+async function withCatalog<T>(
+  body: (catalog: Catalog) => T | Promise<T>,
+): Promise<T> {
   const catalog = new Catalog(":memory:", DATA_DIR);
   try {
     return await body(catalog);
@@ -77,7 +87,9 @@ describe("Harness 准备确定性 Context", () => {
         evidence,
       );
 
-      assert.deepStrictEqual(evidence.required_support_tools, ["retrieve_knowledge"]);
+      assert.deepStrictEqual(evidence.required_support_tools, [
+        "retrieve_knowledge",
+      ]);
       assert.deepStrictEqual(evidence.required_knowledge_scopes, ["general"]);
     });
   });
@@ -209,7 +221,8 @@ describe("Chatty 端到端", () => {
           turns: 3,
         }),
         (error: unknown) =>
-          error instanceof ChattyError && error.code === "conversation_exhausted",
+          error instanceof ChattyError &&
+          error.code === "conversation_exhausted",
       );
     });
   });
@@ -245,7 +258,8 @@ describe("草稿收敛", () => {
       await assert.rejects(
         executor.respond(taskContext, evidence, "推荐耳机并说明退货政策"),
         (error: unknown) =>
-          error instanceof RecommendationError && error.code === "invalid_draft",
+          error instanceof RecommendationError &&
+          error.code === "invalid_draft",
       );
     });
   });

@@ -12,21 +12,13 @@ import {
   ToolGuardrailFunctionOutputFactory,
 } from "@openai/agents";
 
+import {
+  WorkflowStage,
+  type ChattyRunContext,
+  type GateDecision,
+  type ToolBatchState,
+} from "./context.ts";
 import type { RecommendationEvidence } from "./evidence.ts";
-import type { ChattyRunContext } from "./tools.ts";
-
-/** Agent Loop 只有两个阶段：补齐支撑材料，或者已经可以生成草稿。 */
-export const WorkflowStage = {
-  NEED_SUPPORT: "need_support",
-  READY_TO_DRAFT: "ready_to_draft",
-} as const;
-export type WorkflowStage = (typeof WorkflowStage)[keyof typeof WorkflowStage];
-
-/** 单个 Tool call 的门禁结果。 */
-export type GateDecision = {
-  allowed: boolean;
-  reason: string | null;
-};
 
 /** 同一次 Model 响应中全部 Tool call 的冻结决策。 */
 export type ToolBatch = {
@@ -34,20 +26,10 @@ export type ToolBatch = {
   decisions: Map<string, GateDecision>;
 };
 
-/**
- * 一批 Tool call 共享的冻结状态。
- *
- * stage 与 allowed 在批次开始时定格，因此同批调用不会因为彼此的执行顺序拿到不同结论；
- * accepted 随批次推进增长，用来拦截同批重复 Tool。
- */
-export type ToolBatchState = {
-  stage: WorkflowStage;
-  allowed: Set<string>;
-  accepted: Set<string>;
-};
-
 /** 在任何 Tool 执行前读取一次 Evidence，作为整批调用的唯一判断依据。 */
-export function openToolBatch(evidence: RecommendationEvidence): ToolBatchState {
+export function openToolBatch(
+  evidence: RecommendationEvidence,
+): ToolBatchState {
   return {
     stage: stageFor(evidence),
     allowed: new Set(allowedTools(evidence)),
@@ -56,7 +38,10 @@ export function openToolBatch(evidence: RecommendationEvidence): ToolBatchState 
 }
 
 /** 按冻结快照裁决单个 Tool call，并把放行结果记入批次。 */
-export function gateToolCall(batch: ToolBatchState, toolName: string): GateDecision {
+export function gateToolCall(
+  batch: ToolBatchState,
+  toolName: string,
+): GateDecision {
   if (!batch.allowed.has(toolName)) {
     return { allowed: false, reason: "tool_not_allowed_in_stage" };
   }
@@ -126,7 +111,8 @@ export function planToolBatch(
 export function renderAgentStatus(evidence: RecommendationEvidence): string {
   const stage = stageFor(evidence);
   const completed = [...new Set(evidence.used_tools)].join(", ") || "none";
-  const requiredScopes = evidence.required_knowledge_scopes.join(", ") || "none";
+  const requiredScopes =
+    evidence.required_knowledge_scopes.join(", ") || "none";
   const completedScopes =
     [...evidence.completed_knowledge_scopes].sort().join(", ") || "none";
   const nextSteps = allowedTools(evidence);
@@ -177,7 +163,9 @@ export const stageGuardrail = defineToolInputGuardrail<ChattyRunContext>({
 
     if (decision.allowed) {
       // allow 的 outputInfo 只用于观察，不会成为 Tool 的业务参数。
-      return ToolGuardrailFunctionOutputFactory.allow({ stage_snapshot: batch.stage });
+      return ToolGuardrailFunctionOutputFactory.allow({
+        stage_snapshot: batch.stage,
+      });
     }
 
     // 被拒绝的调用没有执行，但仍记录原因，方便 Trace 和下一轮状态显示。

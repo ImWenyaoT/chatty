@@ -1,0 +1,8 @@
+pnpm-lock.yaml
+
+# Prettier 会按“字符数”对齐 Markdown 表格，而中文字符的显示宽度是 2，
+# 对齐后在等宽字体下反而更乱，所以文档不交给它格式化。
+*.md
+
+# golden 基线是冻结数据，重排会制造无意义的 diff。
+server/tests/fixtures/
