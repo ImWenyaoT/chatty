@@ -26,7 +26,7 @@ async function withCatalog<T>(body: (catalog: Catalog) => T | Promise<T>): Promi
 }
 
 function providerOf(model: ScriptedModel): ModelProvider {
-  return { agentModel: model, configured: true };
+  return { agentModel: model, configured: true, modelId: "scripted" };
 }
 
 const TASK_FRAME_KNOWLEDGE = JSON.stringify({
@@ -189,6 +189,7 @@ describe("Chatty 端到端", () => {
       const chatty = new Chatty(catalog, {
         agentModel: new ScriptedModel([]),
         configured: false,
+        modelId: "scripted",
       });
       await assert.rejects(
         chatty.run("user_active", "退货政策", createChattyContext()),

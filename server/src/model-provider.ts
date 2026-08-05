@@ -9,6 +9,7 @@ export class MissingCredentialsError extends Error {}
 export type ModelProvider = {
   readonly agentModel: Model;
   readonly configured: boolean;
+  readonly modelId: string;
 };
 
 /** Task Framer 和主 Agent Loop 共用同一个 DeepSeek Responses 客户端。 */
