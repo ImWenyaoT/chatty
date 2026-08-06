@@ -1,6 +1,7 @@
 {
   "name": "chatty",
   "private": true,
+  "type": "module",
   "packageManager": "pnpm@11.20.0",
   "engines": {
     "node": ">=24",
@@ -9,23 +10,38 @@
   "scripts": {
     "setup": "pnpm install --frozen-lockfile",
     "dev": "concurrently -k -n api,web \"pnpm dev:api\" \"pnpm dev:web\"",
-    "dev:api": "pnpm --filter @chatty/api dev",
-    "dev:web": "pnpm --filter @chatty/web dev",
-    "build": "pnpm --filter @chatty/web build",
-    "start": "pnpm build && pnpm --filter @chatty/api start",
-    "test": "pnpm --filter @chatty/api test",
-    "typecheck": "pnpm --filter @chatty/web typecheck && pnpm --filter @chatty/api typecheck",
-    "lint": "pnpm lint:web && pnpm lint:api && pnpm format:check",
-    "lint:web": "pnpm --filter @chatty/web lint",
-    "lint:api": "pnpm --filter @chatty/api lint",
+    "dev:api": "node --watch server/main.ts",
+    "dev:web": "vite --config web/vite.config.ts",
+    "build": "vite build --config web/vite.config.ts",
+    "start": "pnpm build && node server/main.ts",
+    "test": "node --test \"tests/**/*.test.ts\"",
+    "typecheck": "tsc -b --pretty false",
+    "lint": "oxlint && pnpm format:check",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "eval:retrieval": "pnpm --filter @chatty/api eval:retrieval",
-    "eval:agent": "pnpm --filter @chatty/api eval:agent",
+    "eval:retrieval": "node evals/retrieval.ts",
+    "eval:agent": "node evals/agent.ts",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
+  "dependencies": {
+    "@hono/node-server": "^2.1.0",
+    "@hono/zod-validator": "^0.9.0",
+    "@openai/agents": "^0.14.2",
+    "hono": "^4.13.0",
+    "openai": "^6.49.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "zod": "^4.4.3"
+  },
   "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
     "concurrently": "^10.0.4",
-    "prettier": "^3.9.6"
+    "oxlint": "^1.75.0",
+    "prettier": "^3.9.6",
+    "typescript": "~7.0.2",
+    "vite": "^8.2.0"
   }
 }

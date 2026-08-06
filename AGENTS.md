@@ -18,13 +18,57 @@
 - 商品价格和库存必须来自 SQLite，不能由模型生成。
 - JSON/JSONL 是 SQLite 的初始化种子，不是运行时业务查询接口。
 
-## Verification
+## Dev environment
 
-提交前运行：
+单包仓库，只有一份根 `package.json`。装依赖：
+
+```bash
+pnpm install
+```
+
+顶层六个目录按领域切分，布局理由见 ADR 0004：
+
+- `agent/` — Agent 表面。当前只有 `lib/`；目标形态是 `agent.ts` + `instructions.md` + `tools/` + `subagents/` + `lib/`，路径决定身份，文件名即 tool 名。
+- `data/` — SQLite 访问层与种子数据。
+- `server/` — HTTP 层与进程入口。
+- `web/` — Vite + React 前端。
+- `evals/` — 行为评测与检索评测。
+- `tests/` — 单元测试。
+
+Node 24 直跑 `.ts`，靠 Node 原生类型剥离，服务端没有构建步骤也没有 dist。因此 `tsconfig.server.json` 开着
+`erasableSyntaxOnly`：只写擦除类型后即为合法 JS 的语法。enum、参数属性、`namespace` 需要转译，
+写了就通不过 `pnpm typecheck`。
+
+## Testing
+
+`pnpm run check` 是唯一门禁，等价于 CI——`.github/workflows/ci.yml` 只跑这一条。本地绿即 CI 绿。
 
 ```bash
 pnpm run check
 ```
+
+三条评测 lane：
+
+- `pnpm test` — `tests/` 下的 `node:test` 单元测试，已包含在 `check` 里。
+- `pnpm eval:retrieval` — 检索评测。改检索、切块、Query 改写或知识种子后跑。
+- `pnpm eval:agent` — 行为评测，调真实模型，需要 API key。
+
+改 Agent 行为或 prompt 时必须跑 `pnpm eval:agent`，把改动前后的结果逐条比对，并在 PR 描述里
+写明差异。只搬文件、改 import、改类型而不改逻辑时，跑 `pnpm run check` 就够。
+
+改动代码就补测试或更新已有测试，即使 issue 没有要求。移动文件或改 import 之后跑 `pnpm lint`。
+
+## PR instructions
+
+- commit 标题格式：conventional commits 英文前缀 + 中文标题。例：
+  `refactor: 扁平化仓库布局，agent/ 提升为顶层目录`
+- 前缀取 `feat` / `fix` / `refactor` / `docs` / `chore` / `test` 之一。
+- 提交前跑 `pnpm run check`。
+
+为什么定这一套：最近 15 条 commit 混用了四套惯例——英文 conventional 前缀、`[chatty] Title`、
+中文「重构：」「迁移：」、以及裸标题。conventional 前缀与 `[chatty]` 各 5 条并列最多，而
+`[chatty]` 在单项目仓库里不携带信息；conventional commits 也与 `docs/adr/` 的工程习惯一致，
+所以收敛到它。
 
 ## Agent skills
 

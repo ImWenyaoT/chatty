@@ -31,7 +31,7 @@ Hono 是 HTTP Adapter，核心业务规则位于 Chatty Agent（Model + Harness�
 
 React GUI 是产品界面，不是多模态 Agent。Model 不会观察屏幕、点击按钮或理解图片；Chatty 当前处理的输入和输出都是文字与结构化数据。只有未来确实需要语音、图片或屏幕操作时，才需要扩展新的观察与行动空间。
 
-Frontend 位于 `apps/web/`。Backend 路由位于 `apps/api/src/api.ts`，Frontend 通过 Hono RPC
+Frontend 位于 `web/`。Backend 路由位于 `server/api.ts`，Frontend 通过 Hono RPC
 直接从 Backend 路由推导 HTTP 类型，不维护第二份契约。
 
 ---
