@@ -7,12 +7,10 @@
  */
 
 import {
-  Agent,
   extractAllTextOutput,
   type RunErrorHandlerInput,
   type RunErrorHandlerResult,
 } from "@openai/agents";
-import { z } from "zod";
 
 import type { ProductNeed, TaskFrame, UserContext } from "../../data/models.ts";
 import {
@@ -20,60 +18,15 @@ import {
   productNeedSchema,
   taskFrameSchema,
 } from "../../data/models.ts";
-import type { ModelProvider } from "./model-provider.ts";
+import {
+  taskFrameWireSchema,
+  type TaskFrameAgent,
+  type TaskFrameWire,
+} from "../subagents/task_framer/agent.ts";
 import { round } from "../../data/round.ts";
-
-/**
- * DeepSeek Responses API 可接受的扁平 structured output。
- *
- * 数组最多只有一个元素，是为了兼容 provider 的 structured output 能力。
- */
-export const taskFrameWireSchema = z.object({
-  product_requested: z.boolean(),
-  category: z.array(z.string()).max(1),
-  min_yuan: z.array(z.number().min(0)).max(1),
-  max_yuan: z.array(z.number().min(0)).max(1),
-  knowledge_query: z.array(z.string()).max(1),
-});
-export type TaskFrameWire = z.infer<typeof taskFrameWireSchema>;
 
 /** 模型返回的 TaskFrame 无法安全映射到当前业务数据。 */
 export class TaskFrameParseError extends Error {}
-
-/** 把 SQLite 中真实存在的商品类目写入 Task Framer Instructions。 */
-export function taskFrameInstructions(categories: readonly string[]): string {
-  // join 把 ["耳机", "键盘"] 变成适合给 Model 阅读的“耳机、键盘”。
-  const categoryText = categories.join("、");
-  return (
-    "把整段用户对话整理成一个结构化 TaskFrame。" +
-    "TaskFrameWire 是扁平结构，所有字段都必须填写。" +
-    "用户要求推荐、查找或比较商品时，product_requested=true；否则为 false。" +
-    "category、min_yuan、max_yuan 和 knowledge_query 都是最多一个元素的数组；" +
-    "对应内容不存在时填写空数组。" +
-    "单个价格默认是上限；以上或起是下限；到或至才同时填写区间。" +
-    "用户询问快递、退换货等已有规则或事实时，把适合检索的简短表达填入" +
-    "knowledge_query；没有知识问题时填空数组。混合请求必须同时保留两部分。" +
-    "后续短回答用于补充前文，最新的明确约束覆盖旧约束。" +
-    `商品可选类目：${categoryText}。` +
-    "不要创建 intent、goal、route 或支付相关字段。"
-  );
-}
-
-/** 使用 Agents SDK structured output 声明 TaskFrame 契约。 */
-export function buildTaskFrameAgent(
-  provider: ModelProvider,
-  categories: readonly string[],
-) {
-  return new Agent({
-    name: "Chatty Task Framer",
-    instructions: taskFrameInstructions(categories),
-    model: provider.agentModel,
-    outputType: taskFrameWireSchema,
-    modelSettings: { reasoning: { effort: "none" } },
-  });
-}
-
-export type TaskFrameAgent = ReturnType<typeof buildTaskFrameAgent>;
 
 /** 兼容 DeepSeek 把 structured output 包在 properties 中的响应。 */
 export function recoverInvalidTaskFrame(

@@ -1,0 +1,27 @@
+/**
+ * Draft Corrector：provider 未遵守 schema 时，把最终文本改写回结构化契约。
+ *
+ * 与 task_framer 一样由 Harness 确定性调用（挂在 SDK 的 invalidFinalOutput 钩子上），
+ * 主 Agent 看不到它。它只允许改写，不允许引入新事实——收敛仍由 finalizeReply 负责。
+ */
+
+import { Agent } from "@openai/agents";
+
+import { agentDraftSchema } from "../../../data/models.ts";
+import { readInstructions } from "../../lib/instructions.ts";
+import type { ModelProvider } from "../../lib/model-provider.ts";
+
+const INSTRUCTIONS = readInstructions(
+  new URL("./instructions.md", import.meta.url),
+);
+
+/** 把 provider 未遵守 Schema 的最终文本纠正为同一个结构化契约。 */
+export function buildDraftCorrectionAgent(provider: ModelProvider) {
+  return new Agent({
+    name: "Chatty Draft Corrector",
+    instructions: INSTRUCTIONS,
+    model: provider.agentModel,
+    outputType: agentDraftSchema,
+    modelSettings: { reasoning: { effort: "none" } },
+  });
+}

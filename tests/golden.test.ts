@@ -14,8 +14,8 @@ import {
   describeTaskFrame,
   parseTaskFrame,
   productContext,
-  taskFrameWireSchema,
 } from "../agent/lib/framing.ts";
+import { taskFrameWireSchema } from "../agent/subagents/task_framer/agent.ts";
 import {
   createEvidence,
   validateToolSequence,

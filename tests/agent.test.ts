@@ -10,6 +10,8 @@ import {
 } from "../agent/lib/chatty.ts";
 import { createEvidence } from "../agent/lib/evidence.ts";
 import { buildChattyAgent } from "../agent/agent.ts";
+import { buildDraftCorrectionAgent } from "../agent/subagents/draft_corrector/agent.ts";
+import { buildTaskFrameAgent } from "../agent/subagents/task_framer/agent.ts";
 import {
   ChattyExecutor,
   RecommendationError,
@@ -172,6 +174,66 @@ describe("主 Agent 契约", () => {
     assert.equal(agent.instructions, onDisk);
     // 读取不做 trim，所以行首行尾的空白也必须原样保留。
     assert.ok(onDisk.endsWith("\n"), "instructions.md 应以换行结尾");
+  });
+
+  // Single Agent 的判据：只有一个 Agent 参与对话循环、持有历史、对用户可见。
+  // subagent 由 Harness 确定性调用，绝不能作为 Tool 暴露给主 Agent——那才是 Multi-Agent。
+  it("主 Agent 的 Tool 里不含任何 subagent", () => {
+    const agent = buildChattyAgent(providerOf(new ScriptedModel([])));
+    // 两个 subagent 名，外加 eve / Agents SDK 用来表示「委派」的通用 tool 名。
+    const delegationToolNames = [
+      "task_framer",
+      "draft_corrector",
+      "agent",
+      "handoff",
+    ];
+
+    for (const tool of agent.tools) {
+      assert.ok(
+        !delegationToolNames.includes(tool.name),
+        `${tool.name} 不应作为 Tool 暴露给主 Agent`,
+      );
+    }
+    assert.deepStrictEqual(agent.handoffs ?? [], []);
+  });
+});
+
+describe("Subagent 提示词", () => {
+  const provider = providerOf(new ScriptedModel([]));
+
+  function onDisk(relative: string): string {
+    return readFileSync(
+      fileURLToPath(new URL(`../agent/subagents/${relative}`, import.meta.url)),
+      "utf8",
+    );
+  }
+
+  it("draft_corrector 逐字节来自 instructions.md", () => {
+    assert.equal(
+      buildDraftCorrectionAgent(provider).instructions,
+      onDisk("draft_corrector/instructions.md"),
+    );
+  });
+
+  // 这份是模板：唯一的动态位是 SQLite 里真实存在的类目。
+  it("task_framer 只替换 {{categories}}，其余逐字节保留", () => {
+    const template = onDisk("task_framer/instructions.md");
+    const categories = ["耳机", "键盘"];
+    const rendered = buildTaskFrameAgent(provider, categories).instructions;
+
+    assert.ok(template.includes("{{categories}}"), "模板应保留占位符");
+    assert.equal(rendered, template.replace("{{categories}}", "耳机、键盘"));
+    assert.ok(!rendered.includes("{{"), "渲染后不应残留占位符");
+  });
+
+  // 原提示词是 + 拼接、没有换行。加换行就不是逐字搬运，而是改 prompt。
+  it("subagent 提示词保持单行、无末尾换行", () => {
+    for (const file of [
+      "task_framer/instructions.md",
+      "draft_corrector/instructions.md",
+    ]) {
+      assert.ok(!onDisk(file).includes("\n"), `${file} 应保持单行`);
+    }
   });
 });
 
