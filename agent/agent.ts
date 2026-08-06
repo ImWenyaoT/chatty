@@ -15,7 +15,7 @@ import {
 import type { ChattyRunContext } from "./lib/context.ts";
 import { readInstructions } from "./lib/instructions.ts";
 import type { ModelProvider } from "./lib/model-provider.ts";
-import { CHATTY_TOOLS } from "./tools/index.ts";
+import { CHATTY_TOOLS } from "./lib/tool-registry.ts";
 
 const INSTRUCTIONS = readInstructions(
   new URL("./instructions.md", import.meta.url),

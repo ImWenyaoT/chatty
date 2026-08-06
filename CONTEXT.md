@@ -99,15 +99,57 @@ Chatty 根据用户画像、商品信息、检索知识和库存产生的有序�
 | `subagents/` | `task_framer` 与 `draft_corrector`，各自带 `agent.ts` + `instructions.md` |
 | `lib/` | 只供 import 的共享代码，不构成任何 slot |
 
+两处与 eve 规范的偏离，写在这里免得被当成疏漏：
+
+- **subagent 不声明 `description`**。eve 规范要求 static subagent 的定义声明 description，
+  parent 在降解出的 subagent tool 上读它，决定何时委派。chatty 的 subagent 由 Harness 触发，
+  parent Model 看不到它们，没有读 description 的人。理由见 `## Subagent`。
+- **Agent 带 `name` 字段**。`@openai/agents` 的 `Agent` 构造函数要求 `name` 必填，这是
+  「路径决定身份」在这个 SDK 上的唯一例外。两个 subagent 的 `name` 等于它所在的目录名
+  （`task_framer`、`draft_corrector`），由 `tests/agent.test.ts` 钉住。根 Agent 的 `name`
+  是 `"Chatty"`，对应的不是目录名 `agent`，而是 `package.json` 的 `"chatty"`，大小写不同。
+
 核心约定是**路径决定身份**：`agent/tools/<name>.ts` 就是名为 `<name>` 的 Tool，Tool 文件里
 没有 `name` 字段（`defineTool` 的类型里就没有这个字段）。加一个文件就是加一个 Tool，
-不存在需要同步的注册表。共享代码必须放 `lib/`——`tools/` 下的每个 `.ts` 都会被当成一个 Tool。
+不存在需要同步的注册表。共享代码必须放 `lib/`——`agent/tools/` 下只放 Tool，每个 `.ts`
+都是一个 Tool，没有例外。
+
+装配器 `lib/tool-registry.ts` 与名字派生 `lib/tool-names.ts` 住在 `lib/` 而不是 `tools/`，
+正是为了让「没有例外」成立。装配器一旦放进 `tools/`，它自己就是目录里的非 Tool 文件，
+只能靠一份硬编码排除名单把自己排掉，而名单是第二处需要人手同步的真相。放在 `lib/` 之后
+排除名单不存在。
+
+两者拆成两个文件不是洁癖，是打破循环依赖：Tool 实现 import `evidence.ts`，而 evidence 需要
+Tool 名。名字只依赖文件名、不依赖文件内容，所以只做 readdir 的那半拆进 `tool-names.ts`，
+evidence 拿名字时不会把 Tool 实现拖进来。
 
 不采纳的 eve slot 及原因：
 
 - `channels/` — 只有一个 HTTP 面，单文件目录是仪式。
 - `sandbox/` — 没有代码执行需求。
 - `skills/` — eve 的 Skill 是 Markdown；营销策略数据在 SQLite，不是文档。
-- `schedules/` `connections/` `hooks/` `instrumentation.ts` — 均在 MVP 边界外。
+- `hooks/` — 这个形状的代码存在，缺的是发现它的运行时。`lib/workflow.ts` 里的
+  `appendAgentStatus` 是 callModelInputFilter，`stageGuardrail` 是 tool input guardrail，
+  两者都是 hook。eve 靠运行时扫描 `hooks/` 把它们接上，chatty 没有这个运行时，接线只能手工做：
+  `appendAgentStatus` 接在 `lib/executor.ts` 的 run 选项上，`stageGuardrail` 接在每个 Tool 的
+  `inputGuardrails` 上。不是没有这个需求，是没有能发现这个 slot 的运行时，实现位置只好换地方。
+- `schedules/` `connections/` `instrumentation.ts` — 均在 MVP 边界外。
 
 空目录不建：用得上的 slot 严格照做，用不上的在这里写明为什么不做。
+
+## Evals
+
+`evals/` 是 eve 的 slot，chatty 用了，但三处约定与规范不同。
+
+**文件命名**。eve 的约定是 `evals/*.eval.ts`，且文件路径即 eval 身份，文件里不写 id 或 name。
+chatty 用的是 `evals/agent.ts` 与 `evals/retrieval.ts`：case 是数组元素，身份写在元素里——
+`agent.ts` 用手写的 `name` 字段，`retrieval.ts` 用 `query` 字符串。这是偏离。现状是 case 数量少
+（7 + 10），按行为拆成多文件的收益暂时不抵结构噪音。
+
+**没有 `evals.config.ts`**。eve 要求每个 `evals/` 根有且仅有一个，但它声明的是 judge model、
+reporters 和 maxConcurrency，全是 eve runner 的配置项。chatty 没有 runner，属不适用。
+
+**不打 HTTP 面**。eve 的 eval 会 boot 一个真实 agent server，走用户实际打的 HTTP 面。chatty 的
+eval 在进程内直接 `new Chatty(...).run(...)`，绕过 `server/`。eve 那句话成立的前提是 runner
+替你 boot server；chatty 没有 runner，为 7 个 case 自建启动与关停是负收益。`server/` 层的覆盖由
+`tests/api.test.ts` 负责，分工是清楚的。

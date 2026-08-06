@@ -11,6 +11,7 @@ import {
 import { Catalog } from "../data/catalog.ts";
 import type { Product, Reply } from "../data/models.ts";
 import { ResponsesModelProvider } from "../agent/lib/model-provider.ts";
+import { loadSettings } from "../server/settings.ts";
 import { round } from "../data/round.ts";
 
 export type AgentCase = {
@@ -138,7 +139,7 @@ export function caseSucceeds(
 }
 
 async function main(): Promise<void> {
-  const provider = new ResponsesModelProvider();
+  const provider = new ResponsesModelProvider(loadSettings());
   if (!provider.configured) {
     throw new Error("请在 .env.local、.env 或系统环境配置 DEEPSEEK_API_KEY");
   }

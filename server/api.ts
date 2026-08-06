@@ -17,6 +17,7 @@ import {
   type ModelProvider,
 } from "../agent/lib/model-provider.ts";
 import { SessionStore } from "./session-store.ts";
+import { loadSettings } from "./settings.ts";
 
 const createSessionSchema = z.object({
   user_id: z.string().default("user_active"),
@@ -39,7 +40,8 @@ export type AppDependencies = {
 
 export function createApp(dependencies: AppDependencies = {}) {
   const catalog = dependencies.catalog ?? new Catalog();
-  const provider = dependencies.provider ?? new ResponsesModelProvider();
+  const provider =
+    dependencies.provider ?? new ResponsesModelProvider(loadSettings());
   const chatty = dependencies.chatty ?? new Chatty(catalog, provider);
   const sessions = new SessionStore();
 

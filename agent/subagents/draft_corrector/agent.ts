@@ -30,7 +30,7 @@ export function buildDraftCorrectionAgent(
   allowedActions: readonly [DraftAction, ...DraftAction[]] = DRAFT_ACTIONS,
 ) {
   return new Agent({
-    name: "Chatty Draft Corrector",
+    name: "draft_corrector",
     instructions: INSTRUCTIONS,
     model: provider.agentModel,
     outputType: buildAgentDraftSchema(allowedActions),
