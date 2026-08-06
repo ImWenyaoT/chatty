@@ -180,7 +180,8 @@ describe("主 Agent 契约", () => {
   // subagent 由 Harness 确定性调用，绝不能作为 Tool 暴露给主 Agent——那才是 Multi-Agent。
   it("主 Agent 的 Tool 里不含任何 subagent", () => {
     const agent = buildChattyAgent(providerOf(new ScriptedModel([])));
-    const subagentNames = [
+    // 两个 subagent 名，外加 eve / Agents SDK 用来表示「委派」的通用 tool 名。
+    const delegationToolNames = [
       "task_framer",
       "draft_corrector",
       "agent",
@@ -189,7 +190,7 @@ describe("主 Agent 契约", () => {
 
     for (const tool of agent.tools) {
       assert.ok(
-        !subagentNames.includes(tool.name),
+        !delegationToolNames.includes(tool.name),
         `${tool.name} 不应作为 Tool 暴露给主 Agent`,
       );
     }
