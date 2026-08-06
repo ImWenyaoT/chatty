@@ -21,7 +21,11 @@ import {
 } from "../agent/lib/executor.ts";
 import { Catalog } from "../data/catalog.ts";
 import { DATA_DIR } from "../data/seed.ts";
-import { emptyUserContext } from "../data/models.ts";
+import {
+  agentDraftSchema,
+  buildAgentDraftSchema,
+  emptyUserContext,
+} from "../data/models.ts";
 import type { ModelProvider } from "../agent/lib/model-provider.ts";
 import {
   ScriptedModel,
@@ -225,6 +229,49 @@ describe("主 Agent 契约", () => {
   });
 });
 
+describe("输出契约收窄", () => {
+  // 防呆：存在商品需求时，模型在解码阶段就发不出 answer，而不是发出来再被拒。
+  it("收窄后的 schema 直接拒绝被禁的 action", () => {
+    const narrowed = buildAgentDraftSchema(["recommend", "clarify"]);
+    const draft = {
+      action: "answer",
+      answer: "七天内可退货",
+      question: null,
+      recommendations: null,
+    };
+
+    assert.equal(narrowed.safeParse(draft).success, false);
+    // 同一份草稿在全量 schema 下是合法的——被拒是因为本轮取值范围收窄了。
+    assert.equal(agentDraftSchema.safeParse(draft).success, true);
+  });
+
+  it("收窄不影响允许的 action 与既有跨字段规则", () => {
+    const narrowed = buildAgentDraftSchema(["recommend", "clarify"]);
+
+    assert.equal(
+      narrowed.safeParse({
+        action: "clarify",
+        answer: null,
+        question: "预算大概多少？",
+        recommendations: null,
+      }).success,
+      true,
+    );
+    // clarify 仍然不能带推荐项，收窄没有绕过 superRefine。
+    assert.equal(
+      narrowed.safeParse({
+        action: "clarify",
+        answer: null,
+        question: "预算大概多少？",
+        recommendations: [
+          { product_id: "P001", reason: "r", marketing_copy: "m" },
+        ],
+      }).success,
+      false,
+    );
+  });
+});
+
 describe("Subagent 提示词", () => {
   const provider = providerOf(new ScriptedModel([]));
 
@@ -386,16 +433,18 @@ describe("Chatty 端到端", () => {
 });
 
 describe("草稿收敛", () => {
+  // 存在商品需求时 answer 被两道防线挡住：主 Agent 的 outputType 收窄成
+  // recommend/clarify，纠正 Agent 用同一份收窄 schema。两次都发 answer 就整轮失败。
   it("混合任务不能以纯知识回答收场", async () => {
+    const answerDraft = JSON.stringify({
+      action: "answer",
+      answer: "七天内可退货",
+      question: null,
+      recommendations: null,
+    });
     const model = new ScriptedModel([
-      textOutput(
-        JSON.stringify({
-          action: "answer",
-          answer: "七天内可退货",
-          question: null,
-          recommendations: null,
-        }),
-      ),
+      textOutput(answerDraft),
+      textOutput(answerDraft),
     ]);
 
     await withCatalog(async (catalog) => {

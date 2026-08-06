@@ -23,3 +23,6 @@ get_marketing_strategy。混合请求需要分别检索 general 与 product。
 
 每轮末尾的 <agent_status> 由 Harness 根据真实执行状态生成。
 只调用 allowed_next 列出的 Tool；blocked 表示调用未执行，应按 required_next 纠正。
+allowed_final_action 是本轮 final_output 允许的 action 完整集合，由 Harness 按真实请求类型算出。
+不在其中的 action 一律被拒绝，即使 JSON 合法。它不含 answer 时，说明本轮存在商品需求，
+必须用 recommend 给出推荐，或用 clarify 追问缺失偏好；知识问题的答案写进 answer 字段随之返回。

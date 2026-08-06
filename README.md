@@ -26,7 +26,8 @@ Model 主导的 Tool Loop、Evidence 校验与领域输出：商品 ID、价格�
 ## 效果
 
 下面是一次真实 DeepSeek mixed-goal 请求：既推荐 300 元内耳机，也回答七天无理由退货条件。
-界面同时展示理解结果、耗时、Model 请求数、Token Usage 与事实来源说明。
+界面同时展示理解结果、耗时、Model 请求数、Token Usage 与事实来源说明。展开 trace 可以逐步
+看到哪些步骤由 Harness 确定性执行、哪些是 Model 自己发起的 Tool 调用。
 
 <a href="docs/assets/chatty-conversation.png">
   <img src="docs/assets/chatty-conversation.png" alt="Chatty 完成耳机推荐与退货政策 mixed-goal 请求" width="920">
@@ -211,6 +212,12 @@ pnpm dev
 | 无候选商品 | `推荐 200 元以内的耳机` | 澄清而不是编造商品 |
 | 画像覆盖 | 切换用户后提出同一需求 | 本轮明确约束优先于历史画像 |
 
+界面左上角可以切换五个演示用户：用户 A 活跃型、用户 B 价格敏感型、用户 C 高价值型、
+用户 D 新客型、用户 E 流失风险型。同一句话在不同画像下的候选和文案都不同。
+
+某一轮失败是预期内的：端到端通过率存在波动，见[评估与验证](#评估与验证)。失败时界面返回
+稳定错误码，而不是一段编造的回答——宁可失败，也不返回没有事实支撑的内容。
+
 ## 目录与阅读路径
 
 ```text
@@ -246,9 +253,9 @@ Agent Eval 调用真实 Model。这样既能快速定位代码和检索回归，
 
 | 层级 | 是否调用 Model | 当前覆盖 / 指标 | 用途 |
 | --- | --- | --- | --- |
-| 确定性测试 | 否 | 23 项测试（含 63 条 golden 基线对拉） | Tool 顺序、Evidence、SQLite、HTTP、会话状态 |
+| 确定性测试 | 否 | 32 项测试（含 63 条 golden 基线对拉） | Tool 顺序、Evidence、SQLite、HTTP、会话状态 |
 | Retrieval Eval | 否 | 10 条标注 Query；HitRate@5 100%，MRR@5 0.8083 | FTS5 + BM25 检索质量 |
-| Agent Eval | 是，真实 DeepSeek | 7 条端到端 Case；最近一次通过率 85.7%（6/7） | 推荐、澄清、政策问答、mixed-goal |
+| Agent Eval | 是，真实 DeepSeek | 7 条端到端 Case；5 轮实测 pass_rate 0.714–1.000，平均 0.914 | 推荐、澄清、政策问答、mixed-goal |
 
 ```bash
 pnpm test             # 确定性测试，不联网
@@ -257,8 +264,14 @@ pnpm eval:agent       # 真实 DeepSeek + 完整 Chatty.run()
 pnpm run check        # lint、typecheck、test、build
 ```
 
-Agent Eval 还记录 Action、端到端耗时、Model 请求数与 Token。真实 Model 输出存在波动，
-因此 README 保留最近一次实测值，而不是把单次满分包装成稳定能力。
+`pnpm run check` 与 CI 等价——`.github/workflows/ci.yml` 只跑这一条，本地绿即 CI 绿。
+只有 Agent Eval 需要 Model API key，其余全部离线可跑。
+
+Agent Eval 还记录 Action、端到端耗时、Model 请求数与 Token。真实 Model 输出存在波动：
+7 个 Case 里只有 2 个每轮都通过，同一份代码的运行间波动大于多数改动的效果。因此
+**单次 `eval:agent` 结果不作为一次改动是否有效的判据**，需要多轮分布对比，或者把结论换成
+确定性断言。失败归因方法、软约束与硬约束的对照实验见
+[Chatty Book 第 6 章](docs/chatty-book/chapter6.md)。
 
 ## MVP 边界
 
@@ -279,8 +292,6 @@ Chatty 有意保持在最小可实现范围：
 - [ADR 0003](docs/adr/0003-typescript-migration.md)：为什么从 Python 迁移到 TypeScript 全栈。
 - [ADR 0004](docs/adr/0004-flat-repo-layout.md)：为什么扁平化为单包，agent/ 提升为顶层目录。
 - [CONTEXT.md](CONTEXT.md)：项目唯一领域词汇入口，含 Single Agent 判据与 Project Structure 约定。
-- [DEMO.md](DEMO.md)：5 分钟演示脚本，每一步说明它在证明什么。
-- [PROOF.md](PROOF.md)：每条主张怎么自己验一遍，含端到端评测的已知方差。
 
 ## License
 

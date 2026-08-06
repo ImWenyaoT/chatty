@@ -23,5 +23,5 @@
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true
   },
-  "include": ["agent", "data", "server", "evals", "tests"]
+  "include": ["agent", "data", "server", "evals", "tests", "web/vite.config.ts"]
 }

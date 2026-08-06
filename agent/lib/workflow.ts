@@ -108,6 +108,16 @@ export function planToolBatch(
  * 返回普通字符串而不是对象，因为它会作为 system message 加入 Model Context。
  * 商品 ID、画像详情等真实 Evidence 不放进去，避免 Model 反过来篡改 Harness 判断。
  */
+/** 把 allowed_final_actions 这行读数翻译成模型可以直接照做的结论。 */
+function finalActionCheck(evidence: RecommendationEvidence): string {
+  const allowed = evidence.allowed_final_actions;
+  if (allowed.length === 0) return "task context not prepared";
+  if (!allowed.includes("answer")) {
+    return `'answer' is NOT allowed this turn (product request present) — use ${allowed.join(" or ")}`;
+  }
+  return `only 'answer' is allowed this turn (no product request)`;
+}
+
 export function renderAgentStatus(evidence: RecommendationEvidence): string {
   const stage = stageFor(evidence);
   const completed = [...new Set(evidence.used_tools)].join(", ") || "none";
@@ -127,6 +137,8 @@ export function renderAgentStatus(evidence: RecommendationEvidence): string {
     `completed_knowledge_scopes: ${completedScopes}`,
     `allowed_next: ${nextSteps.join(", ")}`,
     `allowed_final_action: ${evidence.allowed_final_actions.join(", ") || "none"}`,
+    // 读数旁边给结论：模型信状态栏，但「信」不等于「知道该怎么用」。
+    `final_action_check: ${finalActionCheck(evidence)}`,
     `blocked_attempts: ${evidence.blocked_attempts.length}`,
     "</agent_status>",
   ].join("\n");
