@@ -7,8 +7,7 @@ import {
   type CatalogProduct,
   type CatalogProfile,
 } from "../api-client.ts";
-
-const yuan = (cents: number) => (cents / 100).toFixed(2);
+import { yuan } from "../format.ts";
 
 export default function CatalogBrowser() {
   const [data, setData] = useState<CatalogData | null>(null);

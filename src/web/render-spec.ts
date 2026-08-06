@@ -14,7 +14,6 @@ import type { RecommendedProduct } from "../data/models.ts";
 
 export function buildRenderSpec(
   products: readonly RecommendedProduct[],
-  answer: string | null,
 ): Spec | null {
   const elements: Record<string, UIElement> = {};
   const children: string[] = [];
@@ -24,8 +23,6 @@ export function buildRenderSpec(
     elements[key] = element;
     children.push(key);
   };
-
-  if (answer) push({ type: "policy_note", props: { text: answer } });
 
   if (products.length > 1) {
     push({ type: "product_table", props: { products: [...products] } });

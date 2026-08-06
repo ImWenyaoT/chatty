@@ -279,7 +279,7 @@ function Bubble({ entry }: { entry: Entry }) {
     case "products":
       return (
         <section className="products">
-          <ChattyRenderer spec={buildRenderSpec(entry.products, null)} />
+          <ChattyRenderer spec={buildRenderSpec(entry.products)} />
           <p className="hint">
             ID、名称、价格与库存均来自 SQLite 重查，并通过 Harness
             六条证据校验；模型只写了理由和文案。

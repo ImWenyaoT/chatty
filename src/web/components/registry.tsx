@@ -12,13 +12,11 @@
 import { createRenderer } from "@json-render/react";
 
 import { chattyCatalog } from "./catalog.ts";
-import PolicyNote from "./PolicyNote.tsx";
 import ProductCard from "./ProductCard.tsx";
 import ProductTable from "./ProductTable.tsx";
 
 export const ChattyRenderer = createRenderer(chattyCatalog, {
   product_card: ({ element }) => <ProductCard {...element.props} />,
   product_table: ({ element }) => <ProductTable {...element.props} />,
-  policy_note: ({ element }) => <PolicyNote {...element.props} />,
   stack: ({ children }) => <>{children}</>,
 });
