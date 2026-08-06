@@ -28,11 +28,11 @@ pnpm install
 
 顶层六个目录按领域切分，布局理由见 ADR 0004：
 
-- `agent/` — Agent 表面。当前只有 `lib/`；目标形态是 `agent.ts` + `instructions.md` + `tools/` + `subagents/` + `lib/`，路径决定身份，文件名即 tool 名。
+- `agent/` — Agent 表面：`agent.ts` + `instructions.md` + `tools/` + `hooks/` + `subagents/` + `lib/`。路径决定身份，文件名即 Tool 名、Hook 名；共享代码只放 `lib/`。
 - `data/` — SQLite 访问层与种子数据。
 - `server/` — HTTP 层与进程入口。
 - `web/` — Vite + React 前端。
-- `evals/` — 行为评测与检索评测。
+- `evals/` — 行为评测与检索评测，`<name>.eval.ts` 一文件一个 Eval，`evals.config.ts` 与 `lib/` 不是 Eval。
 - `tests/` — 单元测试。
 
 Node 24 直跑 `.ts`，靠 Node 原生类型剥离，服务端没有构建步骤也没有 dist。因此 `tsconfig.server.json` 开着
@@ -47,11 +47,12 @@ Node 24 直跑 `.ts`，靠 Node 原生类型剥离，服务端没有构建步骤
 pnpm run check
 ```
 
-三条评测 lane：
+评测 lane：
 
 - `pnpm test` — `tests/` 下的 `node:test` 单元测试，已包含在 `check` 里。
-- `pnpm eval:retrieval` — 检索评测。改检索、切块、Query 改写或知识种子后跑。
-- `pnpm eval:agent` — 行为评测，调真实模型，需要 API key。
+- `pnpm eval` — `evals/lib/runner.ts` 跑 `evals/` 下全部 Eval，退出码 0 表示每个跑过的 Eval 都过了自己的 gate。
+- `pnpm eval:retrieval` — 同一个 runner 只跑 `retrieval.eval.ts`。改检索、切块、Query 改写或知识种子后跑。
+- `pnpm eval:agent` — 同一个 runner 只跑 `agent.eval.ts`，调真实模型，需要 API key；缺 key 按 `evals.config.ts` 的 `onMissingCredentials` 处理，当前判失败。
 
 改 Agent 行为或 prompt 时必须跑 `pnpm eval:agent`，把改动前后的结果逐条比对，并在 PR 描述里
 写明差异。只搬文件、改 import、改类型而不改逻辑时，跑 `pnpm run check` 就够。

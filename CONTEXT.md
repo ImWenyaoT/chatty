@@ -96,6 +96,7 @@ Chatty 根据用户画像、商品信息、检索知识和库存产生的有序�
 | `agent.ts` | 主 Agent 的 Model、Tool 与输出契约 |
 | `instructions.md` | 主 Agent 系统提示词 |
 | `tools/` | 模型可调用的 Tool，一文件一个 |
+| `hooks/` | 挂在生命周期点上的 Hook，一文件一个 |
 | `subagents/` | `task_framer` 与 `draft_corrector`，各自带 `agent.ts` + `instructions.md` |
 | `lib/` | 只供 import 的共享代码，不构成任何 slot |
 
@@ -123,33 +124,44 @@ Chatty 根据用户画像、商品信息、检索知识和库存产生的有序�
 Tool 名。名字只依赖文件名、不依赖文件内容，所以只做 readdir 的那半拆进 `tool-names.ts`，
 evidence 拿名字时不会把 Tool 实现拖进来。
 
+`hooks/` 走同一条约定：`agent/hooks/<name>.ts` 就是名为 `<name>` 的 Hook，文件里不写名字，
+只用 `defineHook` 的 `kind` 声明它挂在哪个生命周期点。eve 靠框架扫描这个目录，chatty 没有框架，
+`lib/hook-registry.ts` 就是那个运行时：readdir `hooks/`，按 kind 分发。当前有两个 kind——
+`before_model_call` 映射到 SDK 的 `callModelInputFilter`，多个会被串成一个 filter，前一个的输出
+作为后一个的 modelData，顺序即文件名字典序；`before_tool_call` 由 registry 挂到**每一个** Tool 上。
+
+Hook 实现仍住在 `lib/workflow.ts`（`appendAgentStatus` 与 `stageGuardrail`），`hooks/` 下的文件
+只声明 kind 并指向实现。换来的是两处接线消失：`lib/executor.ts` 不再逐个手工挂 filter，Tool 文件
+不再重复写 `inputGuardrails: [stageGuardrail]`。后者由类型层强制——`defineTool` 的类型里没有
+`inputGuardrails` 字段，Tool 文件写不出 guardrail，也覆盖不掉 registry 挂上的那个。
+
 不采纳的 eve slot 及原因：
 
 - `channels/` — 只有一个 HTTP 面，单文件目录是仪式。
 - `sandbox/` — 没有代码执行需求。
 - `skills/` — eve 的 Skill 是 Markdown；营销策略数据在 SQLite，不是文档。
-- `hooks/` — 这个形状的代码存在，缺的是发现它的运行时。`lib/workflow.ts` 里的
-  `appendAgentStatus` 是 callModelInputFilter，`stageGuardrail` 是 tool input guardrail，
-  两者都是 hook。eve 靠运行时扫描 `hooks/` 把它们接上，chatty 没有这个运行时，接线只能手工做：
-  `appendAgentStatus` 接在 `lib/executor.ts` 的 run 选项上，`stageGuardrail` 接在每个 Tool 的
-  `inputGuardrails` 上。不是没有这个需求，是没有能发现这个 slot 的运行时，实现位置只好换地方。
 - `schedules/` `connections/` `instrumentation.ts` — 均在 MVP 边界外。
 
 空目录不建：用得上的 slot 严格照做，用不上的在这里写明为什么不做。
 
 ## Evals
 
-`evals/` 是 eve 的 slot，chatty 用了，但三处约定与规范不同。
+`evals/` 是 eve 的 slot，chatty 用了，一处约定与规范不同。
 
-**文件命名**。eve 的约定是 `evals/*.eval.ts`，且文件路径即 eval 身份，文件里不写 id 或 name。
-chatty 用的是 `evals/agent.ts` 与 `evals/retrieval.ts`：case 是数组元素，身份写在元素里——
-`agent.ts` 用手写的 `name` 字段，`retrieval.ts` 用 `query` 字符串。这是偏离。现状是 case 数量少
-（7 + 10），按行为拆成多文件的收益暂时不抵结构噪音。
+**文件命名**。`evals/<name>.eval.ts` 就是名为 `<name>` 的 Eval，文件里不写 id 或 name，
+与 `agent/tools/` 是同一条规则：身份来自路径。判别方式不同——`tools/` 下每个 `.ts` 都是 Tool，
+所以装配器必须挪到 `lib/` 才能让「没有例外」成立；`evals/` 认的是 `*.eval.ts` 后缀，
+`lib/` 与 `evals.config.ts` 天然不是 Eval，可以就地并存。
 
-**没有 `evals.config.ts`**。eve 要求每个 `evals/` 根有且仅有一个，但它声明的是 judge model、
-reporters 和 maxConcurrency，全是 eve runner 的配置项。chatty 没有 runner，属不适用。
+**`evals.config.ts`**。eve 在这里放 judge model、reporters 和 maxConcurrency，都是它 runner 的
+配置项。chatty 的 runner 只需要两项：`defaultGate`，Eval 未自带 gate 时的判据，默认要求全部 case
+通过；`onMissingCredentials`，需要 Model 凭据的 Eval 在缺凭据时是跳过还是判失败。
 
-**不打 HTTP 面**。eve 的 eval 会 boot 一个真实 agent server，走用户实际打的 HTTP 面。chatty 的
-eval 在进程内直接 `new Chatty(...).run(...)`，绕过 `server/`。eve 那句话成立的前提是 runner
-替你 boot server；chatty 没有 runner，为 7 个 case 自建启动与关停是负收益。`server/` 层的覆盖由
-`tests/api.test.ts` 负责，分工是清楚的。
+**runner**。`evals/lib/runner.ts` 负责发现、按名字筛选、判 gate 和设退出码。`pnpm eval` 跑全部，
+`pnpm eval:retrieval` 与 `pnpm eval:agent` 是同一个 runner 加筛选参数。退出码 0 表示每个跑过的
+Eval 都过了自己的 gate，与 `eve eval` 的语义一致。
+
+**不打 HTTP 面**。这是与规范的偏离。eve 的 eval 会 boot 一个真实 agent server，走用户实际打的
+HTTP 面。chatty 的 eval 在进程内直接 `new Chatty(...).run(...)`，绕过 `server/`——runner 只做发现
+与判定，不启动进程，为 7 个 case 自建启动与关停是负收益。`server/` 层的覆盖由 `tests/api.test.ts`
+负责，分工是清楚的。
