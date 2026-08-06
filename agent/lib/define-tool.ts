@@ -7,11 +7,14 @@
  * 这个函数在运行时是恒等函数，它唯一的作用是把泛型推断带到定义处——否则 `execute`
  * 的参数拿不到 `parameters` schema 推出来的类型。
  *
+ * 也没有 `inputGuardrails`：调用前裁决属于 `agent/hooks/`，由 registry 统一挂到每个
+ * Tool 上，Tool 文件既不需要重复声明也不能覆盖。
+ *
  * 形状比 SDK 的 `ToolOptions` 窄，只保留 chatty 实际用到的字段。收窄是有意的：
  * `ToolOptions` 是联合类型，`Omit` 会破坏推断；而且这也限定了 Tool 文件能做什么。
  */
 
-import type { RunContext, ToolInputGuardrailDefinition } from "@openai/agents";
+import type { RunContext } from "@openai/agents";
 import type { z } from "zod";
 
 import type { ChattyRunContext } from "./context.ts";
@@ -21,7 +24,6 @@ export type ChattyToolDefinition<TParameters extends z.ZodObject> = {
   parameters: TParameters;
   /** null 表示 Tool 抛错时直接终止，不把异常信息交回模型自行解释。 */
   errorFunction: null;
-  inputGuardrails: ToolInputGuardrailDefinition<ChattyRunContext>[];
   execute: (
     input: z.infer<TParameters>,
     runContext?: RunContext<ChattyRunContext>,

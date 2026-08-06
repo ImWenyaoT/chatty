@@ -12,7 +12,6 @@ import { defineTool } from "../lib/define-tool.ts";
 import { guardRepeatedCall, recordKnowledge } from "../lib/evidence.ts";
 import { stableStringify } from "../lib/stable-stringify.ts";
 import { requireContext } from "../lib/context.ts";
-import { stageGuardrail } from "../lib/workflow.ts";
 
 export default defineTool({
   description: "全文检索政策或商品知识，为回答和推荐理由提供依据。",
@@ -26,7 +25,6 @@ export default defineTool({
       ),
   }),
   errorFunction: null,
-  inputGuardrails: [stageGuardrail],
   execute: async ({ query, limit, scope }, runContext) => {
     const context = requireContext(runContext);
 

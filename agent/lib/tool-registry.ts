@@ -11,6 +11,7 @@
 
 import { tool } from "@openai/agents";
 
+import { BEFORE_TOOL_CALL } from "./hook-registry.ts";
 import { TOOLS_DIR, TOOL_FILES } from "./tool-names.ts";
 
 export const CHATTY_TOOLS = await Promise.all(
@@ -20,6 +21,11 @@ export const CHATTY_TOOLS = await Promise.all(
     if (module.default === undefined) {
       throw new Error(`tool_missing_default_export:${file}`);
     }
-    return tool({ name: file.slice(0, -".ts".length), ...module.default });
+    // guardrail 由 hooks/ 统一提供，Tool 文件不重复声明也不能覆盖。
+    return tool({
+      name: file.slice(0, -".ts".length),
+      ...module.default,
+      inputGuardrails: BEFORE_TOOL_CALL,
+    });
   }),
 );

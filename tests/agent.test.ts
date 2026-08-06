@@ -10,6 +10,7 @@ import {
 } from "../agent/lib/chatty.ts";
 import { createEvidence } from "../agent/lib/evidence.ts";
 import { buildChattyAgent } from "../agent/agent.ts";
+import { HOOK_NAMES } from "../agent/lib/hook-registry.ts";
 import { MODEL_TOOL_NAMES } from "../agent/lib/tool-names.ts";
 import { buildDraftCorrectionAgent } from "../agent/subagents/draft_corrector/agent.ts";
 import { buildTaskFrameAgent } from "../agent/subagents/task_framer/agent.ts";
@@ -188,6 +189,35 @@ describe("主 Agent 契约", () => {
       assert.ok(
         !/^\s*name:\s*"/m.test(source),
         `${name}.ts 不应写 name 字段，名字来自文件名`,
+      );
+    }
+  });
+
+  // 与 tools/ 对称：hooks/ 下每个文件都是一个 Hook，没有例外。guardrail 由 registry
+  // 统一挂到所有 Tool 上，Tool 文件里不该再出现 inputGuardrails。
+  it("Hook 名与 agent/hooks/ 的文件名一一对应，且 guardrail 由 registry 统一挂载", () => {
+    const hooksDir = fileURLToPath(new URL("../agent/hooks/", import.meta.url));
+    const fromDisk = readdirSync(hooksDir)
+      .filter((f) => f.endsWith(".ts"))
+      .map((f) => f.slice(0, -".ts".length))
+      .sort();
+
+    assert.deepStrictEqual([...HOOK_NAMES].sort(), fromDisk);
+    assert.ok(fromDisk.length > 0, "hooks/ 不应为空");
+
+    const agent = buildChattyAgent(providerOf(new ScriptedModel([])));
+    for (const tool of agent.tools) {
+      const guardrails =
+        (tool as { inputGuardrails?: unknown[] }).inputGuardrails ?? [];
+      assert.equal(guardrails.length, 1, `${tool.name} 应挂上 registry 的裁决`);
+    }
+
+    const toolsDir = fileURLToPath(new URL("../agent/tools/", import.meta.url));
+    for (const file of readdirSync(toolsDir)) {
+      const source = readFileSync(`${toolsDir}${file}`, "utf8");
+      assert.ok(
+        !source.includes("inputGuardrails"),
+        `${file} 不应自己声明 guardrail`,
       );
     }
   });
