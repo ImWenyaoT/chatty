@@ -11,7 +11,7 @@
 import { Agent } from "@openai/agents";
 import { z } from "zod";
 
-import { readInstructions } from "../../lib/instructions.ts";
+import { renderInstructions } from "../../lib/instructions.ts";
 import type { ModelProvider } from "../../lib/model-provider.ts";
 
 /**
@@ -28,14 +28,14 @@ export const taskFrameWireSchema = z.object({
 });
 export type TaskFrameWire = z.infer<typeof taskFrameWireSchema>;
 
-const INSTRUCTIONS_TEMPLATE = readInstructions(
-  new URL("./instructions.md", import.meta.url),
-);
+const INSTRUCTIONS_URL = new URL("./instructions.md", import.meta.url);
 
 /** 把 SQLite 中真实存在的商品类目写入 Task Framer Instructions。 */
 export function taskFrameInstructions(categories: readonly string[]): string {
   // join 把 ["耳机", "键盘"] 变成适合给 Model 阅读的“耳机、键盘”。
-  return INSTRUCTIONS_TEMPLATE.replace("{{categories}}", categories.join("、"));
+  return renderInstructions(INSTRUCTIONS_URL, {
+    categories: categories.join("、"),
+  });
 }
 
 /** 使用 Agents SDK structured output 声明 TaskFrame 契约。 */
@@ -44,7 +44,7 @@ export function buildTaskFrameAgent(
   categories: readonly string[],
 ) {
   return new Agent({
-    name: "Chatty Task Framer",
+    name: "task_framer",
     instructions: taskFrameInstructions(categories),
     model: provider.agentModel,
     outputType: taskFrameWireSchema,

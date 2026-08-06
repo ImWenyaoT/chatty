@@ -10,7 +10,8 @@ import {
 } from "../agent/lib/chatty.ts";
 import { createEvidence } from "../agent/lib/evidence.ts";
 import { buildChattyAgent } from "../agent/agent.ts";
-import { MODEL_TOOL_NAMES } from "../agent/tools/names.ts";
+import { HOOK_NAMES } from "../agent/lib/hook-registry.ts";
+import { MODEL_TOOL_NAMES } from "../agent/lib/tool-names.ts";
 import { buildDraftCorrectionAgent } from "../agent/subagents/draft_corrector/agent.ts";
 import { buildTaskFrameAgent } from "../agent/subagents/task_framer/agent.ts";
 import {
@@ -173,7 +174,7 @@ describe("主 Agent 契约", () => {
     const agent = buildChattyAgent(providerOf(new ScriptedModel([])));
     const dir = fileURLToPath(new URL("../agent/tools/", import.meta.url));
     const fromDisk = readdirSync(dir)
-      .filter((f) => f.endsWith(".ts") && f !== "index.ts" && f !== "names.ts")
+      .filter((f) => f.endsWith(".ts"))
       .map((f) => f.slice(0, -".ts".length))
       .sort();
 
@@ -188,6 +189,35 @@ describe("主 Agent 契约", () => {
       assert.ok(
         !/^\s*name:\s*"/m.test(source),
         `${name}.ts 不应写 name 字段，名字来自文件名`,
+      );
+    }
+  });
+
+  // 与 tools/ 对称：hooks/ 下每个文件都是一个 Hook，没有例外。guardrail 由 registry
+  // 统一挂到所有 Tool 上，Tool 文件里不该再出现 inputGuardrails。
+  it("Hook 名与 agent/hooks/ 的文件名一一对应，且 guardrail 由 registry 统一挂载", () => {
+    const hooksDir = fileURLToPath(new URL("../agent/hooks/", import.meta.url));
+    const fromDisk = readdirSync(hooksDir)
+      .filter((f) => f.endsWith(".ts"))
+      .map((f) => f.slice(0, -".ts".length))
+      .sort();
+
+    assert.deepStrictEqual([...HOOK_NAMES].sort(), fromDisk);
+    assert.ok(fromDisk.length > 0, "hooks/ 不应为空");
+
+    const agent = buildChattyAgent(providerOf(new ScriptedModel([])));
+    for (const tool of agent.tools) {
+      const guardrails =
+        (tool as { inputGuardrails?: unknown[] }).inputGuardrails ?? [];
+      assert.equal(guardrails.length, 1, `${tool.name} 应挂上 registry 的裁决`);
+    }
+
+    const toolsDir = fileURLToPath(new URL("../agent/tools/", import.meta.url));
+    for (const file of readdirSync(toolsDir)) {
+      const source = readFileSync(`${toolsDir}${file}`, "utf8");
+      assert.ok(
+        !source.includes("inputGuardrails"),
+        `${file} 不应自己声明 guardrail`,
       );
     }
   });
@@ -300,7 +330,18 @@ describe("Subagent 提示词", () => {
     assert.ok(!rendered.includes("{{"), "渲染后不应残留占位符");
   });
 
-  // 原提示词是 + 拼接、没有换行。加换行就不是逐字搬运，而是改 prompt。
+  // Subagent 的名字来自它自己的目录名。根 Agent 不在此列——它的名字按 eve 规范
+  // 来自 package.json 的 name，而 SDK 要求 Agent 必填 name，这是路径决定身份的唯一例外。
+  it("subagent 的名字等于它所在的目录名", () => {
+    const dirs = readdirSync(
+      fileURLToPath(new URL("../agent/subagents/", import.meta.url)),
+    ).sort();
+
+    assert.deepStrictEqual(dirs, ["draft_corrector", "task_framer"]);
+    assert.equal(buildTaskFrameAgent(provider, ["耳机"]).name, "task_framer");
+    assert.equal(buildDraftCorrectionAgent(provider).name, "draft_corrector");
+  });
+
   it("subagent 提示词保持单行、无末尾换行", () => {
     for (const file of [
       "task_framer/instructions.md",

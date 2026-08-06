@@ -7,7 +7,7 @@
 
 import { Usage } from "@openai/agents";
 
-import { MODEL_TOOL_NAMES } from "../tools/names.ts";
+import { MODEL_TOOL_NAMES } from "./tool-names.ts";
 
 import type {
   KnowledgeHit,

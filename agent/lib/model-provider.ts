@@ -5,7 +5,17 @@ import {
 } from "@openai/agents";
 import OpenAI from "openai";
 
-import { loadSettings, type Settings } from "../../server/settings.ts";
+/**
+ * Agent 层需要的凭据形状。
+ *
+ * 这里刻意不 import `server/settings.ts`：那份 `Settings` 还带着 `port` 这类纯 HTTP 字段，
+ * 而 `agent/` 不该依赖 `server/`。调用方传进来的对象只要结构上满足这三个字段即可。
+ */
+export type ModelCredentials = {
+  readonly apiKey: string;
+  readonly baseUrl: string;
+  readonly model: string;
+};
 
 export class MissingCredentialsError extends Error {}
 
@@ -22,12 +32,12 @@ export class ResponsesModelProvider implements ModelProvider {
   readonly configured: boolean;
   readonly agentModel: Model;
 
-  constructor(settings: Settings = loadSettings()) {
-    this.modelId = settings.model;
-    this.configured = Boolean(settings.apiKey);
+  constructor(credentials: ModelCredentials) {
+    this.modelId = credentials.model;
+    this.configured = Boolean(credentials.apiKey);
     const client = new OpenAI({
-      apiKey: settings.apiKey || "not-configured",
-      baseURL: settings.baseUrl,
+      apiKey: credentials.apiKey || "not-configured",
+      baseURL: credentials.baseUrl,
     });
     this.agentModel = new OpenAIResponsesModel(client, this.modelId);
     // DeepSeek 不接收 OpenAI trace，因此关闭 SDK 默认 tracing。

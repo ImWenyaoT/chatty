@@ -222,7 +222,13 @@ pnpm dev
 
 ```text
 chatty/
-├── agent/lib/           # Chatty Agent：Framing、Loop、Tool、Evidence、Workflow
+├── agent/               # Chatty Agent：路径决定身份，文件名即 Tool 名、Hook 名
+│   ├── agent.ts         # 主 Agent 的 Model、Tool 与输出契约
+│   ├── instructions.md  # 主 Agent 系统提示词
+│   ├── tools/           # 模型可调用的 Tool，一文件一个
+│   ├── hooks/           # 生命周期 Hook，由 registry 按 kind 挂载
+│   ├── subagents/       # 由 Harness 触发的单次 Model 调用
+│   └── lib/             # Framing、Loop、Evidence、Workflow 与装配器
 ├── data/                # SQLite、Catalog 与领域模型
 │   ├── seed.ts          # 种子目录位置，由 data/ 自己解析
 │   └── seed/            # SQLite 初始化种子，不是运行时查询接口
@@ -230,7 +236,7 @@ chatty/
 │   ├── api.ts           # Hono HTTP Adapter
 │   └── settings.ts      # 仓库级 .env 加载与优先级
 ├── web/                 # Frontend：React + Vite 桌面 Demo
-├── evals/               # Retrieval Eval 与真实 DeepSeek Agent Eval
+├── evals/               # `*.eval.ts` 一文件一个 Eval，另有 evals.config.ts 与 lib/runner.ts
 ├── tests/               # node:test 确定性测试与 golden 基线
 └── docs/
     ├── chatty-book/     # 从请求到架构的十章说明
@@ -253,16 +259,20 @@ Agent Eval 调用真实 Model。这样既能快速定位代码和检索回归，
 
 | 层级 | 是否调用 Model | 当前覆盖 / 指标 | 用途 |
 | --- | --- | --- | --- |
-| 确定性测试 | 否 | 32 项测试（含 63 条 golden 基线对拉） | Tool 顺序、Evidence、SQLite、HTTP、会话状态 |
+| 确定性测试 | 否 | 35 项测试（含 63 条 golden 基线对拉） | Tool 顺序、Evidence、SQLite、HTTP、会话状态 |
 | Retrieval Eval | 否 | 10 条标注 Query；HitRate@5 100%，MRR@5 0.8083 | FTS5 + BM25 检索质量 |
 | Agent Eval | 是，真实 DeepSeek | 7 条端到端 Case；5 轮实测 pass_rate 0.714–1.000，平均 0.914 | 推荐、澄清、政策问答、mixed-goal |
 
 ```bash
 pnpm test             # 确定性测试，不联网
+pnpm eval             # evals/ 下全部 Eval
 pnpm eval:retrieval   # FTS5 检索评测，不联网
 pnpm eval:agent       # 真实 DeepSeek + 完整 Chatty.run()
 pnpm run check        # lint、typecheck、test、build
 ```
+
+三条 `eval` 命令走同一个 runner（`evals/lib/runner.ts`），后两条只是加了名字筛选参数；
+退出码 0 表示每个跑过的 Eval 都过了自己的 gate。
 
 `pnpm run check` 与 CI 等价——`.github/workflows/ci.yml` 只跑这一条，本地绿即 CI 绿。
 只有 Agent Eval 需要 Model API key，其余全部离线可跑。

@@ -9,13 +9,11 @@ import { z } from "zod";
 import { defineTool } from "../lib/define-tool.ts";
 
 import { requireContext } from "../lib/context.ts";
-import { stageGuardrail } from "../lib/workflow.ts";
 
 export default defineTool({
   description: "获取画像分群对应的营销语气、写作要求与禁用词。",
   parameters: z.object({}),
   errorFunction: null,
-  inputGuardrails: [stageGuardrail],
   execute: async (_input, runContext) => {
     const context = requireContext(runContext);
     // 营销策略依赖用户分群，因此画像未加载时宁可明确失败，也不使用默认语气。
