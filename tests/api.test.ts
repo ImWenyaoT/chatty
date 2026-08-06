@@ -15,7 +15,7 @@ import { GET as getCatalogData } from "../app/api/catalog/data/route.ts";
 import { GET as getCatalog } from "../app/api/catalog/route.ts";
 import { POST as postSession } from "../app/api/sessions/route.ts";
 import { POST as postTurn } from "../app/api/sessions/[sessionId]/turns/route.ts";
-import { GET as getHealth } from "../app/health/route.ts";
+import { GET as getHealth } from "../app/api/health/route.ts";
 import {
   Chatty,
   type ChattyAgent,
