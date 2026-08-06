@@ -14,6 +14,8 @@ import { tool } from "@openai/agents";
 import { BEFORE_TOOL_CALL } from "./hook-registry.ts";
 import { MODEL_TOOL_NAMES, TOOLS_DIR } from "./tool-names.ts";
 
+// 模块顶层直接 await（不用包在 async 函数里）是 ES 模块的能力，Node 24 原生支持。
+// import 这个文件的地方会等它加载完，所以拿到的 CHATTY_TOOLS 一定是就绪的。
 export const CHATTY_TOOLS = await Promise.all(
   MODEL_TOOL_NAMES.map(async (name) => {
     const module = await import(new URL(`${name}.ts`, TOOLS_DIR).href);

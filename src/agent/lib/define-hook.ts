@@ -24,8 +24,13 @@ export type BeforeToolCallHook = {
   run: ToolInputGuardrailDefinition<ChattyRunContext>;
 };
 
+// `A | B` 是联合类型：一个 ChattyHook 要么是前者要么是后者。
+// 两者都有 kind 字段且取值互不相同，所以 TypeScript 能靠 `hook.kind === "..."`
+// 判断出具体是哪一种——这叫可辨识联合（discriminated union）。
 export type ChattyHook = BeforeModelCallHook | BeforeToolCallHook;
 
+// 泛型写成 <THook extends ChattyHook> 而不是直接用 ChattyHook 做参数类型，
+// 是为了让返回值保留调用方传进来的**具体**那一种，而不是退化成联合类型。
 export function defineHook<THook extends ChattyHook>(hook: THook): THook {
   return hook;
 }

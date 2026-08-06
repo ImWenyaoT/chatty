@@ -16,6 +16,8 @@ export function readInstructions(url: URL): string {
 /** 按 `{{name}}` 占位符插值。除占位符外，其余内容逐字节保留。 */
 export function renderInstructions(
   url: URL,
+  // Record<K, V> 是「键是 K、值是 V 的对象」的简写，这里即 { [名字]: 替换成什么 }。
+  // 外面套 Readonly<> 表示函数不会改动传进来的这个对象。
   vars: Readonly<Record<string, string>>,
 ): string {
   return Object.entries(vars).reduce(

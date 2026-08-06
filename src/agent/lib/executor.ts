@@ -166,11 +166,20 @@ async function correctInvalidDraft(
   return { finalOutput: corrected.finalOutput };
 }
 
-/** 把 Harness 算出的允许 action 收窄成 Zod enum 能吃的非空元组。 */
+/**
+ * 把 Harness 算出的允许 action 收窄成 Zod enum 能吃的非空元组。
+ *
+ * 返回类型 `[DraftAction, ...DraftAction[]]` 读作「至少有一个元素的数组」：
+ * 第一项是 DraftAction，后面 `...` 表示还可以有任意多个同类型的。Zod 的 enum()
+ * 要求至少一个取值，普通的 `DraftAction[]`（可能是空数组）满足不了它。
+ */
 function narrowActions(
   evidence: RecommendationEvidence,
 ): readonly [DraftAction, ...DraftAction[]] {
   const allowed = evidence.allowed_final_actions.filter(
+    // `(action): action is DraftAction =>` 叫类型谓词。普通的 filter 过滤完，
+    // TypeScript 仍然认为元素是 string；写成类型谓词就是在告诉它
+    // 「凡是通过这个函数的，类型就是 DraftAction」，后面才不用再断言。
     (action): action is DraftAction =>
       (DRAFT_ACTIONS as readonly string[]).includes(action),
   );
@@ -182,6 +191,8 @@ function narrowActions(
 
 /** 主 Agent Loop 的执行器；公开方法只有 `respond()`。 */
 export class ChattyExecutor {
+  // 字段名前的 # 是 JavaScript 的私有字段，类外面拿不到，也不是 TS 特有语法。
+  // readonly 则是 TS 的：构造完就不能再赋值。
   readonly #catalog: Catalog;
   readonly #provider: ModelProvider;
 

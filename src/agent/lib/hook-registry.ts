@@ -40,8 +40,12 @@ const HOOKS: readonly ChattyHook[] = await Promise.all(
  * 每次 Model 调用前运行。SDK 只接受一个 filter，所以这里把目录里的多个 Hook 串起来：
  * 前一个的输出作为后一个的 modelData，顺序即文件名字典序。
  */
+// `BeforeModelCallHook["run"]` 是「索引访问类型」：取这个类型里 run 字段的类型，
+// 不用再手写一遍它的函数签名。schema 改了这里自动跟着变。
 const BEFORE_MODEL_CALL_HOOKS: readonly BeforeModelCallHook["run"][] =
   HOOKS.filter(
+    // ChattyHook 是两种 Hook 的联合类型。按 kind 过滤之后用类型谓词告诉
+    // TypeScript「剩下的都是 BeforeModelCallHook」，.map 里才能安全地取 .run。
     (hook): hook is BeforeModelCallHook => hook.kind === "before_model_call",
   ).map((hook) => hook.run);
 
