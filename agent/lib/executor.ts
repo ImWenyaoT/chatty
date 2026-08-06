@@ -143,7 +143,9 @@ async function correctInvalidDraft(
   // 纠正过程也调用了 Model，不能在统计里悄悄漏掉这次费用。
   data.context.context.evidence.usage.add(corrected.state.usage);
   if (corrected.finalOutput === undefined) {
-    throw new RecommendationError("invalid_draft");
+    throw new RecommendationError("invalid_draft", {
+      reason: "correction_agent_failed",
+    });
   }
   return { finalOutput: corrected.finalOutput };
 }
@@ -239,7 +241,9 @@ export class ChattyExecutor {
     );
     recordRunUsage(evidence, result.state.usage);
     if (result.finalOutput === undefined)
-      throw new RecommendationError("invalid_draft");
+      throw new RecommendationError("invalid_draft", {
+        reason: "final_output_missing",
+      });
     return result.finalOutput;
   }
 
@@ -250,7 +254,7 @@ export class ChattyExecutor {
     draft: AgentDraft,
   ): Reply {
     const recommendation = taskContext.recommendation;
-    validateKnowledgeAnswer(taskContext, evidence, draft.answer);
+    validateKnowledgeAnswer(taskContext, evidence, draft.answer, draft.action);
 
     // 路径 1：只有知识问答时才能直接 answer；商品请求不能借此绕过推荐校验。
     if (draft.action === "answer") {
@@ -259,7 +263,13 @@ export class ChattyExecutor {
         recommendation !== null ||
         draft.answer === null
       ) {
-        throw new RecommendationError("invalid_draft");
+        throw new RecommendationError("invalid_draft", {
+          reason: "answer_action_not_allowed",
+          draft_action: draft.action,
+          has_knowledge_query: taskContext.frame.knowledge_query !== null,
+          has_product_request: recommendation !== null,
+          answer_present: draft.answer !== null,
+        });
       }
       return { kind: "answer", answer: draft.answer };
     }
@@ -267,7 +277,12 @@ export class ChattyExecutor {
     // 路径 2：只有存在商品需求时才能 clarify，并且必需 Tool 仍要执行完。
     if (draft.action === "clarify") {
       if (recommendation === null || draft.question === null) {
-        throw new RecommendationError("invalid_draft");
+        throw new RecommendationError("invalid_draft", {
+          reason: "clarify_not_allowed",
+          draft_action: draft.action,
+          has_product_request: recommendation !== null,
+          question_present: draft.question !== null,
+        });
       }
       validateClarificationEvidence(evidence);
       return {
@@ -279,7 +294,12 @@ export class ChattyExecutor {
 
     // 路径 3：剩下的是 recommend。必须同时有 Harness Context 和 Model 推荐项。
     if (recommendation === null || draft.recommendations === null) {
-      throw new RecommendationError("invalid_draft");
+      throw new RecommendationError("invalid_draft", {
+        reason: "recommend_not_allowed",
+        draft_action: draft.action,
+        has_product_request: recommendation !== null,
+        recommendations_present: draft.recommendations !== null,
+      });
     }
     validateRecommendationEvidence(evidence, draft.recommendations);
     if (evidence.profile === null)
@@ -324,10 +344,16 @@ function validateKnowledgeAnswer(
   taskContext: TaskContext,
   evidence: RecommendationEvidence,
   answer: string | null,
+  draftAction: string,
 ): void {
   // 没有知识问题时，这项校验与本轮无关。
   if (taskContext.frame.knowledge_query === null) return;
-  if (!answer) throw new RecommendationError("invalid_draft");
+  // 混合请求最常见的失败：模型给了商品推荐，却把知识问题的 answer 留空。
+  if (!answer)
+    throw new RecommendationError("invalid_draft", {
+      reason: "knowledge_answer_missing",
+      draft_action: draftAction,
+    });
   if (evidence.general_knowledge_hits === 0) {
     throw new RecommendationError("knowledge_not_retrieved");
   }
