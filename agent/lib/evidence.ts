@@ -7,28 +7,30 @@
 
 import { Usage } from "@openai/agents";
 
+import { MODEL_TOOL_NAMES } from "../tools/names.ts";
+
 import type {
   KnowledgeHit,
   RecommendationDraftItem,
   UserProfile,
 } from "../../data/models.ts";
 
-export const TOOL_NAMES = [
+// Harness 确定性执行的步骤。它们不是模型可调用的 Tool，所以没有对应文件；
+// 模型可见的那部分由 agent/tools/ 的目录扫描派生，两者合起来才是 used_tools 的全集。
+export const HARNESS_STEPS = [
   "get_user_profile",
   "search_products",
   "check_inventory",
-  "retrieve_knowledge",
-  "get_marketing_strategy",
 ] as const;
-export type ToolName = (typeof TOOL_NAMES)[number];
 
-// 前三个 Tool 构成业务依赖链。知识检索和营销策略只依赖前三步已完成，
-// 所以这两个 Tool 可以互换顺序。
-export const DEPENDENCY_CHAIN = [
-  "get_user_profile",
-  "search_products",
-  "check_inventory",
-] as const;
+export const TOOL_NAMES: readonly string[] = [
+  ...HARNESS_STEPS,
+  ...MODEL_TOOL_NAMES,
+];
+
+// 依赖链就是这三个 Harness 步骤本身：知识检索和营销策略只要求它们已完成，
+// 彼此之间可以互换顺序。
+export const DEPENDENCY_CHAIN = HARNESS_STEPS;
 
 /** Tool 执行过程中由 Harness 记录、模型看不到的事实。 */
 export type RecommendationEvidence = {
