@@ -8,4 +8,4 @@
 import { join } from "node:path";
 
 /** 目录路径不能写成 `new URL(dir, import.meta.url)`——打包器会当模块引用解析。 */
-export const DATA_DIR = join(process.cwd(), "data/seed");
+export const DATA_DIR = join(process.cwd(), "src/data/seed");

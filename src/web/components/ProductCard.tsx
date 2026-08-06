@@ -1,6 +1,6 @@
 /** 单个商品卡。价格与库存来自 SQLite，本组件只负责显示。 */
-import type { RecommendedProduct } from "../data/models.ts";
-import { yuan } from "../lib/format.ts";
+import type { RecommendedProduct } from "../../data/models.ts";
+import { yuan } from "../format.ts";
 
 export default function ProductCard(product: RecommendedProduct) {
   let stockClassName = "";

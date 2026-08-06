@@ -69,7 +69,7 @@ Model 请求数与 Token Usage，并记录覆盖需求解析与主 Agent 的端�
 粒度决定了能不能归因。
 
 拿到系统性失败模式之后，有两种修法，各跑五轮做对照。软的一种是把约束讲给模型听：在
-`agent/instructions.md` 里解释 `allowed_final_action` 是什么、不含 `answer` 时该怎么办，
+`src/agent/instructions.md` 里解释 `allowed_final_action` 是什么、不含 `answer` 时该怎么办，
 并在状态栏的读数旁边补一行已经算好的结论。硬的一种是把约束写进输出契约：
 `buildAgentDraftSchema(actions)` 按本轮请求类型收窄 `action` 的 enum，存在商品需求时
 outputType 里根本没有 `answer` 这个取值，模型在解码阶段就发不出来。`draft_corrector` 使用
@@ -92,7 +92,7 @@ outputType 里根本没有 `answer` 这个取值，模型在解码阶段就发�
 
 正因为端到端评测既慢又吵，能变成确定性断言的事情就不该留给它。把提示词从 TypeScript 字符串
 搬进 Markdown 是零语义变更的重构，它的正确性用逐字节相等证明：主 Agent 实际使用的
-instructions 必须等于 `agent/instructions.md` 的内容，读取器不做 `trim()`，否则这条断言就成了
+instructions 必须等于 `src/agent/instructions.md` 的内容，读取器不做 `trim()`，否则这条断言就成了
 谎话。同理，“Single Agent：Subagent 对主 Agent 不可见”和“文件名是 Tool 名的唯一真相”这两条
 架构主张也各由一条测试钉住，而不是只写在文档里。输出契约收窄本身也有对应的确定性测试：
 同一份 `action: "answer"` 的草稿，在收窄 schema 下解析失败、在全量 schema 下成功。

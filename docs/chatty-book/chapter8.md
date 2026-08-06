@@ -15,7 +15,7 @@ Chatty 只接受一条简单而明确的更新信号：
 
 例如，用户明确提出购买耳机，而且这一轮成功返回了可信推荐，Chatty 才把“耳机”写入画像。如果 Agent 最终澄清、运行失败，或者用户没有明确说出类目，画像保持不变。
 
-更新发生在 `agent/lib/executor.ts` 的成功路径之后，`data/catalog.ts` 的
+更新发生在 `src/agent/lib/executor.ts` 的成功路径之后，`src/data/catalog.ts` 的
 `update_user_profile_after_success` 负责写入 SQLite 并刷新内存中的画像。当前请求仍然
 优先于更新后的历史偏好，所以用户随时可以表达不同需求。
 

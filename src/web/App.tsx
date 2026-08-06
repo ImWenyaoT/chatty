@@ -11,10 +11,10 @@ import {
   type Product,
   type RunUsage,
   type Turn,
-} from "../../lib/api-client.ts";
-import CatalogBrowser from "../../components/CatalogBrowser.tsx";
-import { ChattyRenderer } from "../../components/registry.tsx";
-import { buildRenderSpec } from "../../lib/render-spec.ts";
+} from "./api-client.ts";
+import CatalogBrowser from "./components/CatalogBrowser.tsx";
+import { ChattyRenderer } from "./components/registry.tsx";
+import { buildRenderSpec } from "./render-spec.ts";
 
 /**
  * 会话里的一条记录。

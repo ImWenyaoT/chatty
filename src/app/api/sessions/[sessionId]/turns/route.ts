@@ -7,8 +7,8 @@
 import { z } from "zod";
 
 import { ChattyError } from "../../../../../agent/lib/chatty.ts";
-import { jsonError, parseJsonBody } from "../../../../../lib/http.ts";
-import { chatty, sessions } from "../../../../../lib/runtime.ts";
+import { jsonError, parseJsonBody } from "../../../../../server/http.ts";
+import { chatty, sessions } from "../../../../../server/runtime.ts";
 
 const turnSchema = z.object({
   text: z

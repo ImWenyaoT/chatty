@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { chattyCatalog } from "../components/catalog.ts";
-import { buildRenderSpec } from "../lib/render-spec.ts";
-import type { RecommendedProduct } from "../data/models.ts";
+import { chattyCatalog } from "../src/web/components/catalog.ts";
+import { buildRenderSpec } from "../src/web/render-spec.ts";
+import type { RecommendedProduct } from "../src/data/models.ts";
 
 function product(id: string, name: string): RecommendedProduct {
   return {

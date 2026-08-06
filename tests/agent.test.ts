@@ -7,27 +7,27 @@ import {
   Chatty,
   ChattyError,
   createChattyContext,
-} from "../agent/lib/chatty.ts";
-import { createEvidence } from "../agent/lib/evidence.ts";
-import { buildChattyAgent } from "../agent/agent.ts";
-import { HOOK_NAMES } from "../agent/lib/hook-registry.ts";
-import { MODEL_TOOL_NAMES } from "../agent/lib/tool-names.ts";
-import { buildDraftCorrectionAgent } from "../agent/subagents/draft_corrector/agent.ts";
-import { buildTaskFrameAgent } from "../agent/subagents/task_framer/agent.ts";
+} from "../src/agent/lib/chatty.ts";
+import { createEvidence } from "../src/agent/lib/evidence.ts";
+import { buildChattyAgent } from "../src/agent/agent.ts";
+import { HOOK_NAMES } from "../src/agent/lib/hook-registry.ts";
+import { MODEL_TOOL_NAMES } from "../src/agent/lib/tool-names.ts";
+import { buildDraftCorrectionAgent } from "../src/agent/subagents/draft_corrector/agent.ts";
+import { buildTaskFrameAgent } from "../src/agent/subagents/task_framer/agent.ts";
 import {
   ChattyExecutor,
   RecommendationError,
   prepareRecommendationContext,
   prepareTaskContext,
-} from "../agent/lib/executor.ts";
-import { Catalog } from "../data/catalog.ts";
-import { DATA_DIR } from "../data/seed.ts";
+} from "../src/agent/lib/executor.ts";
+import { Catalog } from "../src/data/catalog.ts";
+import { DATA_DIR } from "../src/data/seed.ts";
 import {
   agentDraftSchema,
   buildAgentDraftSchema,
   emptyUserContext,
-} from "../data/models.ts";
-import type { ModelProvider } from "../agent/lib/model-provider.ts";
+} from "../src/data/models.ts";
+import type { ModelProvider } from "../src/agent/lib/model-provider.ts";
 import {
   ScriptedModel,
   textOutput,
@@ -172,7 +172,7 @@ describe("主 Agent 契约", () => {
   // 加一个 .ts 文件就是加一个 Tool，删文件就是删 Tool，不需要改任何清单。
   it("Tool 名与 agent/tools/ 的文件名一一对应", () => {
     const agent = buildChattyAgent(providerOf(new ScriptedModel([])));
-    const dir = fileURLToPath(new URL("../agent/tools/", import.meta.url));
+    const dir = fileURLToPath(new URL("../src/agent/tools/", import.meta.url));
     const fromDisk = readdirSync(dir)
       .filter((f) => f.endsWith(".ts"))
       .map((f) => f.slice(0, -".ts".length))
@@ -196,7 +196,9 @@ describe("主 Agent 契约", () => {
   // 与 tools/ 对称：hooks/ 下每个文件都是一个 Hook，没有例外。guardrail 由 registry
   // 统一挂到所有 Tool 上，Tool 文件里不该再出现 inputGuardrails。
   it("Hook 名与 agent/hooks/ 的文件名一一对应，且 guardrail 由 registry 统一挂载", () => {
-    const hooksDir = fileURLToPath(new URL("../agent/hooks/", import.meta.url));
+    const hooksDir = fileURLToPath(
+      new URL("../src/agent/hooks/", import.meta.url),
+    );
     const fromDisk = readdirSync(hooksDir)
       .filter((f) => f.endsWith(".ts"))
       .map((f) => f.slice(0, -".ts".length))
@@ -212,7 +214,9 @@ describe("主 Agent 契约", () => {
       assert.equal(guardrails.length, 1, `${tool.name} 应挂上 registry 的裁决`);
     }
 
-    const toolsDir = fileURLToPath(new URL("../agent/tools/", import.meta.url));
+    const toolsDir = fileURLToPath(
+      new URL("../src/agent/tools/", import.meta.url),
+    );
     for (const file of readdirSync(toolsDir)) {
       const source = readFileSync(`${toolsDir}${file}`, "utf8");
       assert.ok(
@@ -227,7 +231,7 @@ describe("主 Agent 契约", () => {
   it("系统提示词逐字节来自 agent/instructions.md", () => {
     const agent = buildChattyAgent(providerOf(new ScriptedModel([])));
     const onDisk = readFileSync(
-      fileURLToPath(new URL("../agent/instructions.md", import.meta.url)),
+      fileURLToPath(new URL("../src/agent/instructions.md", import.meta.url)),
       "utf8",
     );
 
@@ -307,7 +311,9 @@ describe("Subagent 提示词", () => {
 
   function onDisk(relative: string): string {
     return readFileSync(
-      fileURLToPath(new URL(`../agent/subagents/${relative}`, import.meta.url)),
+      fileURLToPath(
+        new URL(`../src/agent/subagents/${relative}`, import.meta.url),
+      ),
       "utf8",
     );
   }
@@ -334,7 +340,7 @@ describe("Subagent 提示词", () => {
   // 来自 package.json 的 name，而 SDK 要求 Agent 必填 name，这是路径决定身份的唯一例外。
   it("subagent 的名字等于它所在的目录名", () => {
     const dirs = readdirSync(
-      fileURLToPath(new URL("../agent/subagents/", import.meta.url)),
+      fileURLToPath(new URL("../src/agent/subagents/", import.meta.url)),
     ).sort();
 
     assert.deepStrictEqual(dirs, ["draft_corrector", "task_framer"]);

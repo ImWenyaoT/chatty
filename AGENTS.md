@@ -26,16 +26,23 @@
 pnpm install
 ```
 
-顶层六个目录按领域切分，布局理由见 ADR 0004：
+源码全部收进 `src/`，按「前端黑盒 ↔ API ↔ 后端」分层，配置文件全在根。布局理由见 ADR 0004：
 
-- `agent/` — Agent 表面：`agent.ts` + `instructions.md` + `tools/` + `hooks/` + `subagents/` + `lib/`。路径决定身份，文件名即 Tool 名、Hook 名；共享代码只放 `lib/`。
-- `data/` — SQLite 访问层与种子数据。
-- `server/` — HTTP 层与进程入口。
-- `web/` — Vite + React 前端。
-- `evals/` — 行为评测与检索评测，`<name>.eval.ts` 一文件一个 Eval，`evals.config.ts` 与 `lib/` 不是 Eval。
+- `src/app/` — Next.js 路由，只做薄层委托：`layout.tsx` + `page.tsx` + `globals.css` + `api/**/route.ts`。
+- `src/agent/` — Agent 表面，即 `Model + Harness`：`agent.ts` + `instructions.md` + `tools/` + `hooks/` + `subagents/` + `lib/`。路径决定身份，文件名即 Tool 名、Hook 名；共享代码只放 `lib/`。
+- `src/data/` — SQLite 访问层与种子数据。
+- `src/server/` — 后端非路由代码：`runtime.ts` + `session-store.ts` + `settings.ts` + `http.ts`。
+- `src/web/` — React 前端：`App.tsx` + `components/` + `api-client.ts` + `render-spec.ts` + `format.ts`。
+- `src/evals/` — 行为评测与检索评测，`<name>.eval.ts` 一文件一个 Eval，`evals.config.ts` 与 `lib/` 不是 Eval。
 - `tests/` — 单元测试。
 
-Node 24 直跑 `.ts`，靠 Node 原生类型剥离，服务端没有构建步骤也没有 dist。因此 `tsconfig.server.json` 开着
+`src/agent/lib/` 与 `src/evals/lib/` 是各自 slot 内部的共享代码，不是同一个 `lib/`。
+
+依赖方向由分层固定：`src/web/` 只经 `api-client.ts` 打 HTTP，不 import `src/agent/` 与
+`src/server/`；`src/app/api/**` 是唯一的 API 边界；page 委托给 `src/web/App.tsx`，route 委托给
+`src/server/` 与 `src/agent/`。
+
+Node 24 直跑 `.ts`，靠 Node 原生类型剥离。因此 `tsconfig.json` 开着
 `erasableSyntaxOnly`：只写擦除类型后即为合法 JS 的语法。enum、参数属性、`namespace` 需要转译，
 写了就通不过 `pnpm typecheck`。
 
@@ -50,7 +57,7 @@ pnpm run check
 评测 lane：
 
 - `pnpm test` — `tests/` 下的 `node:test` 单元测试，已包含在 `check` 里。
-- `pnpm eval` — `evals/lib/runner.ts` 跑 `evals/` 下全部 Eval，退出码 0 表示每个跑过的 Eval 都过了自己的 gate。
+- `pnpm eval` — `src/evals/lib/runner.ts` 跑 `src/evals/` 下全部 Eval，退出码 0 表示每个跑过的 Eval 都过了自己的 gate。
 - `pnpm eval:retrieval` — 同一个 runner 只跑 `retrieval.eval.ts`。改检索、切块、Query 改写或知识种子后跑。
 - `pnpm eval:agent` — 同一个 runner 只跑 `agent.eval.ts`，调真实模型，需要 API key；缺 key 按 `evals.config.ts` 的 `onMissingCredentials` 处理，当前判失败。
 

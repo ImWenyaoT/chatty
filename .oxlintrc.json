@@ -8,7 +8,11 @@
   },
   "overrides": [
     {
-      "files": ["app/**/layout.tsx", "app/**/page.tsx", "app/**/route.ts"],
+      "files": [
+        "src/app/**/layout.tsx",
+        "src/app/**/page.tsx",
+        "src/app/**/route.ts"
+      ],
       "rules": { "react/only-export-components": "off" }
     }
   ]

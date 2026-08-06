@@ -3,8 +3,8 @@
 import { z } from "zod";
 
 import { DEMO_USER_IDS } from "../../../data/demo-users.ts";
-import { jsonError, parseJsonBody } from "../../../lib/http.ts";
-import { sessions } from "../../../lib/runtime.ts";
+import { jsonError, parseJsonBody } from "../../../server/http.ts";
+import { sessions } from "../../../server/runtime.ts";
 
 const createSessionSchema = z.object({
   user_id: z.string().default("user_active"),

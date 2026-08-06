@@ -11,22 +11,25 @@ import { describe, it } from "node:test";
 
 import { Usage } from "@openai/agents";
 
-import { GET as getCatalogData } from "../app/api/catalog/data/route.ts";
-import { GET as getCatalog } from "../app/api/catalog/route.ts";
-import { POST as postSession } from "../app/api/sessions/route.ts";
-import { POST as postTurn } from "../app/api/sessions/[sessionId]/turns/route.ts";
-import { GET as getHealth } from "../app/api/health/route.ts";
+import { GET as getCatalogData } from "../src/app/api/catalog/data/route.ts";
+import { GET as getCatalog } from "../src/app/api/catalog/route.ts";
+import { POST as postSession } from "../src/app/api/sessions/route.ts";
+import { POST as postTurn } from "../src/app/api/sessions/[sessionId]/turns/route.ts";
+import { GET as getHealth } from "../src/app/api/health/route.ts";
 import {
   Chatty,
   type ChattyAgent,
   type ChattyContext,
   type ChattyTurn,
-} from "../agent/lib/chatty.ts";
-import type { ModelProvider } from "../agent/lib/model-provider.ts";
-import { Catalog } from "../data/catalog.ts";
-import { DATA_DIR } from "../data/seed.ts";
-import { __setRuntimeForTest, type ChattyRuntime } from "../lib/runtime.ts";
-import { SessionStore } from "../lib/session-store.ts";
+} from "../src/agent/lib/chatty.ts";
+import type { ModelProvider } from "../src/agent/lib/model-provider.ts";
+import { Catalog } from "../src/data/catalog.ts";
+import { DATA_DIR } from "../src/data/seed.ts";
+import {
+  __setRuntimeForTest,
+  type ChattyRuntime,
+} from "../src/server/runtime.ts";
+import { SessionStore } from "../src/server/session-store.ts";
 import { ScriptedModel } from "./helpers/scripted-model.ts";
 
 const BASE = "http://localhost";
