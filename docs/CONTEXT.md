@@ -88,8 +88,16 @@ Chatty 根据用户画像、商品信息、检索知识和库存产生的有序�
 
 ## Project Structure
 
-仓库是单包，顶层目录按领域切分（`agent/` `data/` `server/` `web/` `evals/` `tests/`），
-布局理由见 ADR 0004。`agent/` 内部采用 eve 的 Project Layout slot 约定：
+仓库是单包，源码全部收进 `src/`，按领域切分（`src/app/` `src/agent/` `src/data/` `src/server/`
+`src/web/` `src/evals/`），`tests/` 与配置文件留在根，布局理由见 ADR 0004。
+
+切分的依据是「前端黑盒 ↔ API ↔ 后端」这条边界。虽然是 Next.js 全栈，Agent 与 Web 仍然解耦：
+`src/web/` 是前端，只经 `api-client.ts` 打 HTTP，不 import `src/agent/` 与 `src/server/`；
+`src/app/api/**` 是 API 边界；`src/server/`、`src/agent/`、`src/data/` 构成后端，其中
+`src/agent/` 就是 `Model + Harness`。`src/app/` 保持薄——page 委托给 `src/web/App.tsx`，
+route 委托给 `src/server/` 与 `src/agent/`。
+
+`src/agent/` 内部采用 eve 的 Project Layout slot 约定：
 
 | slot | chatty |
 | --- | --- |
@@ -110,9 +118,9 @@ Chatty 根据用户画像、商品信息、检索知识和库存产生的有序�
   （`task_framer`、`draft_corrector`），由 `tests/agent.test.ts` 钉住。根 Agent 的 `name`
   是 `"Chatty"`，对应的不是目录名 `agent`，而是 `package.json` 的 `"chatty"`，大小写不同。
 
-核心约定是**路径决定身份**：`agent/tools/<name>.ts` 就是名为 `<name>` 的 Tool，Tool 文件里
+核心约定是**路径决定身份**：`src/agent/tools/<name>.ts` 就是名为 `<name>` 的 Tool，Tool 文件里
 没有 `name` 字段（`defineTool` 的类型里就没有这个字段）。加一个文件就是加一个 Tool，
-不存在需要同步的注册表。共享代码必须放 `lib/`——`agent/tools/` 下只放 Tool，每个 `.ts`
+不存在需要同步的注册表。共享代码必须放 `lib/`——`src/agent/tools/` 下只放 Tool，每个 `.ts`
 都是一个 Tool，没有例外。
 
 装配器 `lib/tool-registry.ts` 与名字派生 `lib/tool-names.ts` 住在 `lib/` 而不是 `tools/`，
@@ -124,7 +132,7 @@ Chatty 根据用户画像、商品信息、检索知识和库存产生的有序�
 Tool 名。名字只依赖文件名、不依赖文件内容，所以只做 readdir 的那半拆进 `tool-names.ts`，
 evidence 拿名字时不会把 Tool 实现拖进来。
 
-`hooks/` 走同一条约定：`agent/hooks/<name>.ts` 就是名为 `<name>` 的 Hook，文件里不写名字，
+`hooks/` 走同一条约定：`src/agent/hooks/<name>.ts` 就是名为 `<name>` 的 Hook，文件里不写名字，
 只用 `defineHook` 的 `kind` 声明它挂在哪个生命周期点。eve 靠框架扫描这个目录，chatty 没有框架，
 `lib/hook-registry.ts` 就是那个运行时：readdir `hooks/`，按 kind 分发。当前有两个 kind——
 `before_model_call` 映射到 SDK 的 `callModelInputFilter`，多个会被串成一个 filter，前一个的输出
@@ -146,22 +154,22 @@ Hook 实现仍住在 `lib/workflow.ts`（`appendAgentStatus` 与 `stageGuardrail
 
 ## Evals
 
-`evals/` 是 eve 的 slot，chatty 用了，一处约定与规范不同。
+`src/evals/` 是 eve 的 slot，chatty 用了，一处约定与规范不同。
 
-**文件命名**。`evals/<name>.eval.ts` 就是名为 `<name>` 的 Eval，文件里不写 id 或 name，
-与 `agent/tools/` 是同一条规则：身份来自路径。判别方式不同——`tools/` 下每个 `.ts` 都是 Tool，
-所以装配器必须挪到 `lib/` 才能让「没有例外」成立；`evals/` 认的是 `*.eval.ts` 后缀，
+**文件命名**。`src/evals/<name>.eval.ts` 就是名为 `<name>` 的 Eval，文件里不写 id 或 name，
+与 `src/agent/tools/` 是同一条规则：身份来自路径。判别方式不同——`tools/` 下每个 `.ts` 都是 Tool，
+所以装配器必须挪到 `lib/` 才能让「没有例外」成立；`src/evals/` 认的是 `*.eval.ts` 后缀，
 `lib/` 与 `evals.config.ts` 天然不是 Eval，可以就地并存。
 
 **`evals.config.ts`**。eve 在这里放 judge model、reporters 和 maxConcurrency，都是它 runner 的
 配置项。chatty 的 runner 只需要两项：`defaultGate`，Eval 未自带 gate 时的判据，默认要求全部 case
 通过；`onMissingCredentials`，需要 Model 凭据的 Eval 在缺凭据时是跳过还是判失败。
 
-**runner**。`evals/lib/runner.ts` 负责发现、按名字筛选、判 gate 和设退出码。`pnpm eval` 跑全部，
+**runner**。`src/evals/lib/runner.ts` 负责发现、按名字筛选、判 gate 和设退出码。`pnpm eval` 跑全部，
 `pnpm eval:retrieval` 与 `pnpm eval:agent` 是同一个 runner 加筛选参数。退出码 0 表示每个跑过的
 Eval 都过了自己的 gate，与 `eve eval` 的语义一致。
 
 **不打 HTTP 面**。这是与规范的偏离。eve 的 eval 会 boot 一个真实 agent server，走用户实际打的
-HTTP 面。chatty 的 eval 在进程内直接 `new Chatty(...).run(...)`，绕过 `server/`——runner 只做发现
-与判定，不启动进程，为 7 个 case 自建启动与关停是负收益。`server/` 层的覆盖由 `tests/api.test.ts`
-负责，分工是清楚的。
+HTTP 面。chatty 的 eval 在进程内直接 `new Chatty(...).run(...)`，绕过 `src/app/api/**`——runner
+只做发现与判定，不启动进程，为 7 个 case 自建启动与关停是负收益。API 层的覆盖由
+`tests/api.test.ts` 负责，它直接 import Route Handler，分工是清楚的。

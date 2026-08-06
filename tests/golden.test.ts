@@ -14,27 +14,27 @@ import {
   describeTaskFrame,
   parseTaskFrame,
   productContext,
-} from "../agent/lib/framing.ts";
-import { taskFrameWireSchema } from "../agent/subagents/task_framer/agent.ts";
+} from "../src/agent/lib/framing.ts";
+import { taskFrameWireSchema } from "../src/agent/subagents/task_framer/agent.ts";
 import {
   createEvidence,
   validateToolSequence,
   type RecommendationEvidence,
-} from "../agent/lib/evidence.ts";
+} from "../src/agent/lib/evidence.ts";
 import {
   allowedTools,
   planToolBatch,
   renderAgentStatus,
-} from "../agent/lib/workflow.ts";
-import { Catalog, CatalogError } from "../data/catalog.ts";
-import { segmentForIndex, splitIntoChunks } from "../data/database.ts";
-import { DATA_DIR } from "../data/seed.ts";
+} from "../src/agent/lib/workflow.ts";
+import { Catalog, CatalogError } from "../src/data/catalog.ts";
+import { segmentForIndex, splitIntoChunks } from "../src/data/database.ts";
+import { DATA_DIR } from "../src/data/seed.ts";
 import {
   productNeedSchema,
   recommendationDraftItemSchema,
   recommendationRequestSchema,
   userContextSchema,
-} from "../data/models.ts";
+} from "../src/data/models.ts";
 import {
   caseKey,
   loadCases,

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 
-import { loadSettings } from "../lib/settings.ts";
+import { loadSettings } from "../src/server/settings.ts";
 
 function tempRoot(): string {
   return mkdtempSync(join(tmpdir(), "chatty-settings-"));

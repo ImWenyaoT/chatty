@@ -7,7 +7,11 @@ const nextConfig: NextConfig = {
    * 这里带的是 readdir 需要看到的那份文件列表，以及 SQLite 的种子数据。
    */
   outputFileTracingIncludes: {
-    "/api/**": ["./data/seed/**", "./agent/tools/**", "./agent/hooks/**"],
+    "/api/**": [
+      "./src/data/seed/**",
+      "./src/agent/tools/**",
+      "./src/agent/hooks/**",
+    ],
   },
 };
 

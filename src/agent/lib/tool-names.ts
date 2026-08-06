@@ -16,7 +16,7 @@ import { join } from "node:path";
  * `import.meta.dirname` 在打包产物里指向 `.next/server/`，相对路径也失效。
  * 配合 `next.config.ts` 的 `outputFileTracingIncludes`，源文件会被带进产物。
  */
-export const TOOLS_DIR = join(process.cwd(), "agent/tools");
+export const TOOLS_DIR = join(process.cwd(), "src/agent/tools");
 
 /** `agent/tools/` 下的每个 `.ts` 都是一个 Tool，没有例外，因此不需要排除名单。 */
 export const TOOL_FILES: readonly string[] = readdirSync(TOOLS_DIR)

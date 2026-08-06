@@ -1,7 +1,7 @@
 /** 多商品并排对比。字段与 ProductCard 同源，只是换一种排布。 */
-import type { RecommendedProduct } from "../data/models.ts";
+import type { RecommendedProduct } from "../../data/models.ts";
 
-import { yuan } from "../lib/format.ts";
+import { yuan } from "../format.ts";
 
 export default function ProductTable({
   products,

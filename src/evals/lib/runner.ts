@@ -10,7 +10,7 @@
 import { readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { loadSettings } from "../../lib/settings.ts";
+import { loadSettings } from "../../server/settings.ts";
 import config from "../evals.config.ts";
 import type { EvalDefinition } from "./define-eval.ts";
 

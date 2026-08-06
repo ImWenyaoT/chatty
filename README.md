@@ -55,14 +55,14 @@ Chatty 用一条最小闭环解决它们：
 ## 系统架构
 
 系统顶层只分为 Frontend 与 Backend。Frontend 是完整的 React 用户界面；Backend 内部再展开
-Hono、Chatty Agent 与 SQLite，其中 Chatty Agent 才拥有 Model + Harness。
+Next.js Route Handler、Chatty Agent 与 SQLite，其中 Chatty Agent 才拥有 Model + Harness。
 
 ```mermaid
 flowchart LR
-    User["用户"] --> Frontend["Frontend<br/>React + Vite"]
+    User["用户"] --> Frontend["Frontend<br/>React (Next.js)"]
     Frontend -->|"HTTP JSON"| API
     subgraph Backend["Backend"]
-        API["Hono<br/>HTTP Adapter"] -->|"Context In"| Harness
+        API["Route Handler<br/>HTTP Adapter"] -->|"Context In"| Harness
         subgraph Agent["Chatty Agent = Model + Harness"]
             Model["Model"] <--> Harness["Harness<br/>Context / Tools / Loop / Control / Evidence"]
         end
@@ -81,7 +81,7 @@ flowchart LR
 | Module | 负责 | 不负责 |
 | --- | --- | --- |
 | Frontend | 收集输入，展示对话、Trace、Token 与只读数据 | 推导推荐事实 |
-| Backend · Hono | HTTP 校验、Session、错误码、Reply 序列化与前端类型推导 | 调用 Tool 或决定推荐逻辑 |
+| Backend · Route Handler | HTTP 校验、Session、错误码与 Reply 序列化 | 调用 Tool 或决定推荐逻辑 |
 | Backend · Chatty Agent | Task Framing、Agent Loop、Evidence、Context In/Out | HTTP 和页面渲染 |
 | Backend · Chatty Agent · Model | 语义理解、主动检索、Query 改写、理由与文案 | 决定真实价格和库存 |
 | Backend · Chatty Agent · Harness | Context、Tool、Agent Loop、Control、Evidence 与事实裁决 | 开放式语言判断 |
@@ -95,7 +95,7 @@ flowchart LR
 sequenceDiagram
     actor U as User
     participant F as Frontend
-    participant A as Backend · Hono
+    participant A as Backend · Route Handler
     participant H as Chatty Harness
     participant M as DeepSeek Model
     participant D as SQLite
@@ -194,10 +194,11 @@ cp .env.example .env.local
 pnpm dev
 ```
 
-打开 [http://localhost:5173](http://localhost:5173)。`pnpm dev` 会同时启动：
+打开 [http://localhost:3000](http://localhost:3000)。`pnpm dev` 只起一个 Next.js 进程，
+Web GUI 与 Chatty API 同源：
 
-- Web GUI：`http://localhost:5173`
-- Chatty API：`http://127.0.0.1:8000`
+- Web GUI：`http://localhost:3000`
+- Chatty API：`http://localhost:3000/api`
 
 配置优先级为 `.env.local > .env > 系统环境变量`。默认使用 DeepSeek；同时保留
 `OPENAI_API_KEY`、`OPENAI_BASE_URL` 和 `MODEL_ID` 兼容变量。
@@ -222,35 +223,53 @@ pnpm dev
 
 ```text
 chatty/
-├── agent/               # Chatty Agent：路径决定身份，文件名即 Tool 名、Hook 名
-│   ├── agent.ts         # 主 Agent 的 Model、Tool 与输出契约
-│   ├── instructions.md  # 主 Agent 系统提示词
-│   ├── tools/           # 模型可调用的 Tool，一文件一个
-│   ├── hooks/           # 生命周期 Hook，由 registry 按 kind 挂载
-│   ├── subagents/       # 由 Harness 触发的单次 Model 调用
-│   └── lib/             # Framing、Loop、Evidence、Workflow 与装配器
-├── data/                # SQLite、Catalog 与领域模型
-│   ├── seed.ts          # 种子目录位置，由 data/ 自己解析
-│   └── seed/            # SQLite 初始化种子，不是运行时查询接口
-├── server/              # Backend：HTTP 层与进程入口
-│   ├── api.ts           # Hono HTTP Adapter
-│   └── settings.ts      # 仓库级 .env 加载与优先级
-├── web/                 # Frontend：React + Vite 桌面 Demo
-├── evals/               # `*.eval.ts` 一文件一个 Eval，另有 evals.config.ts 与 lib/runner.ts
-├── tests/               # node:test 确定性测试与 golden 基线
+├── src/
+│   ├── app/                 # Next.js 路由，只做薄层委托
+│   │   ├── layout.tsx       # 根布局与页面元数据
+│   │   ├── page.tsx         # 委托给 web/App.tsx
+│   │   ├── globals.css      # 全局样式
+│   │   └── api/             # API 边界：catalog、health、sessions
+│   ├── agent/               # Chatty Agent：路径决定身份，文件名即 Tool 名、Hook 名
+│   │   ├── agent.ts         # 主 Agent 的 Model、Tool 与输出契约
+│   │   ├── instructions.md  # 主 Agent 系统提示词
+│   │   ├── tools/           # 模型可调用的 Tool，一文件一个
+│   │   ├── hooks/           # 生命周期 Hook，由 registry 按 kind 挂载
+│   │   ├── subagents/       # 由 Harness 触发的单次 Model 调用
+│   │   └── lib/             # Framing、Loop、Evidence、Workflow 与装配器
+│   ├── data/                # SQLite、Catalog 与领域模型
+│   │   ├── seed.ts          # 种子目录位置，由 data/ 自己解析
+│   │   └── seed/            # SQLite 初始化种子，不是运行时查询接口
+│   ├── server/              # Backend 非路由代码
+│   │   ├── runtime.ts       # 进程内共享的 Catalog、Chatty 与 SessionStore
+│   │   ├── session-store.ts # 服务端内存会话
+│   │   ├── settings.ts      # 仓库级 .env 加载与优先级
+│   │   └── http.ts          # Route Handler 共用的请求解析与错误响应
+│   ├── web/                 # Frontend：React 桌面 Demo
+│   │   ├── App.tsx          # 页面根组件
+│   │   ├── api-client.ts    # 前端唯一的后端出口
+│   │   └── components/      # 渲染组件与 render-spec 注册表
+│   └── evals/               # `*.eval.ts` 一文件一个 Eval，另有 evals.config.ts 与 lib/runner.ts
+├── tests/                   # node:test 确定性测试与 golden 基线
+├── public/                  # 静态资源
 └── docs/
-    ├── chatty-book/     # 从请求到架构的十章说明
-    └── adr/             # 架构决策记录
+    ├── chatty-book/         # 从请求到架构的十章说明
+    └── adr/                 # 架构决策记录
 ```
+
+目录形状直接对应「Frontend ↔ API ↔ Backend」这条边界。虽然是 Next.js 全栈，Agent 与 Web
+仍然解耦：`src/web/` 是黑盒前端，只经 `api-client.ts` 打 HTTP，不 import `src/agent/`
+与 `src/server/`；`src/app/api/**` 是 API 边界；`src/server/`、`src/agent/`、`src/data/`
+构成 Backend，其中 `src/agent/` 就是那个 `Model + Harness`。`src/app/` 保持薄——page 委托给
+`src/web/App.tsx`，route 委托给 `src/server/` 与 `src/agent/`。
 
 建议代码阅读顺序：
 
-1. [`agent/lib/chatty.ts`](agent/lib/chatty.ts)：单一 `run()` Interface 与 Context In/Out。
-2. [`agent/lib/framing.ts`](agent/lib/framing.ts)：把自然语言映射为 `TaskFrame`。
-3. [`agent/lib/executor.ts`](agent/lib/executor.ts)：生成 Draft，再以 Evidence 收敛为 Reply。
-4. [`agent/lib/workflow.ts`](agent/lib/workflow.ts)：状态栏、批次裁决与 Tool Guardrail。
-5. [`agent/lib/evidence.ts`](agent/lib/evidence.ts)：Harness-owned Evidence 与确定性校验。
-6. [`data/catalog.ts`](data/catalog.ts)：SQLite 查询、BM25 检索与最终事实重查。
+1. [`src/agent/lib/chatty.ts`](src/agent/lib/chatty.ts)：单一 `run()` Interface 与 Context In/Out。
+2. [`src/agent/lib/framing.ts`](src/agent/lib/framing.ts)：把自然语言映射为 `TaskFrame`。
+3. [`src/agent/lib/executor.ts`](src/agent/lib/executor.ts)：生成 Draft，再以 Evidence 收敛为 Reply。
+4. [`src/agent/lib/workflow.ts`](src/agent/lib/workflow.ts)：状态栏、批次裁决与 Tool Guardrail。
+5. [`src/agent/lib/evidence.ts`](src/agent/lib/evidence.ts)：Harness-owned Evidence 与确定性校验。
+6. [`src/data/catalog.ts`](src/data/catalog.ts)：SQLite 查询、BM25 检索与最终事实重查。
 
 ## 评估与验证
 
@@ -265,13 +284,13 @@ Agent Eval 调用真实 Model。这样既能快速定位代码和检索回归，
 
 ```bash
 pnpm test             # 确定性测试，不联网
-pnpm eval             # evals/ 下全部 Eval
+pnpm eval             # src/evals/ 下全部 Eval
 pnpm eval:retrieval   # FTS5 检索评测，不联网
 pnpm eval:agent       # 真实 DeepSeek + 完整 Chatty.run()
 pnpm run check        # lint、typecheck、test、build
 ```
 
-三条 `eval` 命令走同一个 runner（`evals/lib/runner.ts`），后两条只是加了名字筛选参数；
+三条 `eval` 命令走同一个 runner（`src/evals/lib/runner.ts`），后两条只是加了名字筛选参数；
 退出码 0 表示每个跑过的 Eval 都过了自己的 gate。
 
 `pnpm run check` 与 CI 等价——`.github/workflows/ci.yml` 只跑这一条，本地绿即 CI 绿。

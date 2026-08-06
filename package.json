@@ -17,9 +17,9 @@
     "lint": "oxlint && pnpm format:check",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "eval": "node evals/lib/runner.ts",
-    "eval:retrieval": "node evals/lib/runner.ts retrieval",
-    "eval:agent": "node evals/lib/runner.ts agent",
+    "eval": "node src/evals/lib/runner.ts",
+    "eval:retrieval": "node src/evals/lib/runner.ts retrieval",
+    "eval:agent": "node src/evals/lib/runner.ts agent",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "dependencies": {

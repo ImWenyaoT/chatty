@@ -17,7 +17,7 @@ import type {
 } from "./define-hook.ts";
 
 // 与 tool-names.ts 同一个理由：目录路径不能写成 new URL(dir, import.meta.url)。
-const HOOKS_DIR = join(process.cwd(), "agent/hooks");
+const HOOKS_DIR = join(process.cwd(), "src/agent/hooks");
 
 const HOOK_FILES: readonly string[] = readdirSync(HOOKS_DIR)
   .filter((file) => file.endsWith(".ts"))
