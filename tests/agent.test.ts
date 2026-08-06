@@ -51,10 +51,10 @@ function providerOf(model: ScriptedModel): ModelProvider {
 
 const TASK_FRAME_KNOWLEDGE = JSON.stringify({
   product_requested: false,
-  category: [],
-  min_yuan: [],
-  max_yuan: [],
-  knowledge_query: ["快递公司"],
+  category: null,
+  min_yuan: null,
+  max_yuan: null,
+  knowledge_query: "快递公司",
 });
 
 describe("Harness 准备确定性 Context", () => {
