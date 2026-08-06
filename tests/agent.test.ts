@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -10,6 +10,7 @@ import {
 } from "../agent/lib/chatty.ts";
 import { createEvidence } from "../agent/lib/evidence.ts";
 import { buildChattyAgent } from "../agent/agent.ts";
+import { MODEL_TOOL_NAMES } from "../agent/tools/names.ts";
 import { buildDraftCorrectionAgent } from "../agent/subagents/draft_corrector/agent.ts";
 import { buildTaskFrameAgent } from "../agent/subagents/task_framer/agent.ts";
 import {
@@ -154,11 +155,37 @@ describe("主 Agent 契约", () => {
   it("声明结构化输出与两个 Tool", () => {
     const agent = buildChattyAgent(providerOf(new ScriptedModel([])));
 
+    // 顺序是 readdir 的字母序：Tool 清单由目录派生，没有第二处可以排序的注册表。
     assert.deepStrictEqual(
       agent.tools.map((tool) => tool.name),
-      ["retrieve_knowledge", "get_marketing_strategy"],
+      ["get_marketing_strategy", "retrieve_knowledge"],
     );
     assert.equal(agent.modelSettings.toolChoice, "required");
+  });
+
+  // 这条是「路径即身份」这个约定本身：目录里有几个文件，Agent 就有几个同名 Tool。
+  // 加一个 .ts 文件就是加一个 Tool，删文件就是删 Tool，不需要改任何清单。
+  it("Tool 名与 agent/tools/ 的文件名一一对应", () => {
+    const agent = buildChattyAgent(providerOf(new ScriptedModel([])));
+    const dir = fileURLToPath(new URL("../agent/tools/", import.meta.url));
+    const fromDisk = readdirSync(dir)
+      .filter((f) => f.endsWith(".ts") && f !== "index.ts" && f !== "names.ts")
+      .map((f) => f.slice(0, -".ts".length))
+      .sort();
+
+    assert.deepStrictEqual(
+      agent.tools.map((tool) => tool.name).sort(),
+      fromDisk,
+    );
+    assert.deepStrictEqual([...MODEL_TOOL_NAMES].sort(), fromDisk);
+    // 名字既然由文件名派生，就不该有任何 Tool 文件自己写 name。
+    for (const name of fromDisk) {
+      const source = readFileSync(`${dir}${name}.ts`, "utf8");
+      assert.ok(
+        !/^\s*name:\s*"/m.test(source),
+        `${name}.ts 不应写 name 字段，名字来自文件名`,
+      );
+    }
   });
 
   // prompt 的真实内容必须就是 instructions.md 里看到的那份，一个字节都不差。

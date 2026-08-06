@@ -5,6 +5,8 @@
  * 而不是互相依赖——两者各自需要对方的一个类型，直接引用会形成环。
  */
 
+import type { RunContext } from "@openai/agents";
+
 import type { Catalog } from "../../data/catalog.ts";
 import type { RecommendationRequest } from "../../data/models.ts";
 import type { RecommendationEvidence } from "./evidence.ts";
@@ -52,4 +54,12 @@ export function createRunContext(
   evidence: RecommendationEvidence,
 ): ChattyRunContext {
   return { request, catalog, evidence, batch: null };
+}
+
+/** Tool 的运行时依赖只能来自 RunContext，缺失时属于 Harness 装配错误。 */
+export function requireContext(
+  runContext: RunContext<ChattyRunContext> | undefined,
+): ChattyRunContext {
+  if (runContext === undefined) throw new Error("run_context_not_prepared");
+  return runContext.context;
 }

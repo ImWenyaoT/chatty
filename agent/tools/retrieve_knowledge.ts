@@ -1,42 +1,20 @@
 /**
- * 主 Agent 可调用的知识检索与营销策略 Tool。
+ * 全文检索政策或商品知识，为回答和推荐理由提供依据。
  *
- * `tool()` 把普通函数包装成 Model 可见的 Tool Schema。Model 只能看到名称、参数和描述，
- * 真正的 Catalog 与 Evidence 通过 ChattyRunContext 注入，因此 Model 不能替换数据库，
- * 也不能直接修改 Harness Evidence。
+ * 文件名即 Tool 名——本文件不写 `name` 字段，由 `index.ts` 从路径派生。
+ * Model 只能看到参数和描述，Catalog 与 Evidence 通过 ChattyRunContext 注入。
  */
 
-import { type RunContext, tool } from "@openai/agents";
 import { z } from "zod";
 
-import type { ChattyRunContext } from "./context.ts";
-import { guardRepeatedCall, recordKnowledge } from "./evidence.ts";
-import { stageGuardrail } from "./workflow.ts";
+import { defineTool } from "../lib/define-tool.ts";
 
-/** 递归排序 key，让同一组参数总是得到同一个签名。 */
-function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
-  if (value !== null && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>).sort(
-      ([a], [b]) => (a < b ? -1 : a > b ? 1 : 0),
-    );
-    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(",")}}`;
-  }
-  return JSON.stringify(value) ?? "null";
-}
+import { guardRepeatedCall, recordKnowledge } from "../lib/evidence.ts";
+import { stableStringify } from "../lib/stable-stringify.ts";
+import { requireContext } from "../lib/context.ts";
+import { stageGuardrail } from "../lib/workflow.ts";
 
-export { stableStringify };
-
-/** Tool 的运行时依赖只能来自 RunContext，缺失时属于 Harness 装配错误。 */
-function requireContext(
-  runContext: RunContext<ChattyRunContext> | undefined,
-): ChattyRunContext {
-  if (runContext === undefined) throw new Error("run_context_not_prepared");
-  return runContext.context;
-}
-
-const retrieveKnowledge = tool({
-  name: "retrieve_knowledge",
+export default defineTool({
   description: "全文检索政策或商品知识，为回答和推荐理由提供依据。",
   parameters: z.object({
     query: z.string().describe("关键词查询。"),
@@ -108,26 +86,3 @@ const retrieveKnowledge = tool({
     return JSON.stringify(hits);
   },
 });
-
-const getMarketingStrategy = tool({
-  name: "get_marketing_strategy",
-  description: "获取画像分群对应的营销语气、写作要求与禁用词。",
-  parameters: z.object({}),
-  errorFunction: null,
-  inputGuardrails: [stageGuardrail],
-  execute: async (_input, runContext) => {
-    const context = requireContext(runContext);
-    // 营销策略依赖用户分群，因此画像未加载时宁可明确失败，也不使用默认语气。
-    if (context.evidence.profile === null)
-      throw new Error("profile_not_loaded");
-    const strategy = context.catalog.marketingStrategy(
-      context.evidence.profile.segment,
-    );
-    // 只有真实读取成功后才把 Tool 记入 used_tools。
-    context.evidence.used_tools.push("get_marketing_strategy");
-    return JSON.stringify(strategy);
-  },
-});
-
-// 这是主 Agent 唯一可见的 Tool 清单。画像、搜索和库存由 Harness 提前确定性执行。
-export const CHATTY_TOOLS = [retrieveKnowledge, getMarketingStrategy];

@@ -42,7 +42,7 @@ import {
 } from "./evidence.ts";
 import { productContext } from "./framing.ts";
 import { createRunContext, type ChattyRunContext } from "./context.ts";
-import { stableStringify } from "./tools.ts";
+import { stableStringify } from "./stable-stringify.ts";
 import { appendAgentStatus } from "./workflow.ts";
 
 /** 由 Harness 一次完成不需要 Model 判断的画像、搜索和库存步骤。 */
