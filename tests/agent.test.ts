@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   Chatty,
@@ -7,10 +9,10 @@ import {
   createChattyContext,
 } from "../agent/lib/chatty.ts";
 import { createEvidence } from "../agent/lib/evidence.ts";
+import { buildChattyAgent } from "../agent/agent.ts";
 import {
   ChattyExecutor,
   RecommendationError,
-  buildChattyAgent,
   prepareRecommendationContext,
   prepareTaskContext,
 } from "../agent/lib/executor.ts";
@@ -155,6 +157,21 @@ describe("主 Agent 契约", () => {
       ["retrieve_knowledge", "get_marketing_strategy"],
     );
     assert.equal(agent.modelSettings.toolChoice, "required");
+  });
+
+  // prompt 的真实内容必须就是 instructions.md 里看到的那份，一个字节都不差。
+  // 这里不冻结副本——冻结副本会让每次改 prompt 都要同步两个文件。
+  it("系统提示词逐字节来自 agent/instructions.md", () => {
+    const agent = buildChattyAgent(providerOf(new ScriptedModel([])));
+    const onDisk = readFileSync(
+      fileURLToPath(new URL("../agent/instructions.md", import.meta.url)),
+      "utf8",
+    );
+
+    assert.equal(typeof agent.instructions, "string");
+    assert.equal(agent.instructions, onDisk);
+    // 读取不做 trim，所以行首行尾的空白也必须原样保留。
+    assert.ok(onDisk.endsWith("\n"), "instructions.md 应以换行结尾");
   });
 });
 
