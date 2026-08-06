@@ -125,6 +125,9 @@ export function validateToolSequence(
   if (unknown.length > 0) return `调用了未注册的工具：${unknown.join(", ")}`;
 
   for (let index = 1; index < DEPENDENCY_CHAIN.length; index += 1) {
+    // 结尾的 ! 是非空断言：告诉 TypeScript「这里不会是 undefined，别管」。
+    // tsconfig 开了 noUncheckedIndexedAccess，数组下标默认可能取到 undefined；
+    // 这里 index 由 for 循环控制、不会越界，所以用 ! 跳过检查。
     const previous = usedTools.indexOf(DEPENDENCY_CHAIN[index - 1]!);
     const current = usedTools.indexOf(DEPENDENCY_CHAIN[index]!);
     if (current < previous)

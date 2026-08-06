@@ -15,7 +15,11 @@ import type { RecommendationEvidence } from "./evidence.ts";
 export const WorkflowStage = {
   NEED_SUPPORT: "need_support",
   READY_TO_DRAFT: "ready_to_draft",
+  // `as const` 让 TypeScript 把值记成字面量（"need_support" 而不是宽泛的 string），
+  // 下面那行才能从这个对象反推出精确的联合类型。
 } as const;
+// 读作：取 WorkflowStage 这个对象所有字段值的类型，合成一个联合类型，
+// 也就是 "need_support" | "ready_to_draft"。好处是加一个阶段只改上面的对象。
 export type WorkflowStage = (typeof WorkflowStage)[keyof typeof WorkflowStage];
 
 /** 单个 Tool call 的门禁结果。 */

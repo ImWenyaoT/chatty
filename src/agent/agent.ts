@@ -29,6 +29,8 @@ const INSTRUCTIONS = readInstructions(
  */
 export function buildChattyAgent(
   provider: ModelProvider,
+  // `= DRAFT_ACTIONS` 是默认参数：不传就用全集。类型里的 `[T, ...T[]]`
+  // 表示「至少一个元素的数组」，因为 Zod 的 enum 不接受空集合。
   allowedActions: readonly [DraftAction, ...DraftAction[]] = DRAFT_ACTIONS,
 ) {
   const outputType = buildAgentDraftSchema(allowedActions);
@@ -45,4 +47,6 @@ export function buildChattyAgent(
   });
 }
 
+// ReturnType<typeof f> 读作「f 这个函数返回值的类型」。这里不手写 Agent<...> 那一长串
+// 泛型，而是让它跟着 buildChattyAgent 走——函数改了，类型自动跟着改。
 export type ChattyAgentType = ReturnType<typeof buildChattyAgent>;

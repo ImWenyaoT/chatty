@@ -27,6 +27,8 @@ export const taskFrameWireSchema = z.object({
   max_yuan: z.number().min(0).nullable(),
   knowledge_query: z.string().nullable(),
 });
+// 从 Zod schema 反推 TS 类型：schema 里写 z.string().nullable()，这里就得到 string | null。
+// 只维护 schema 一处，类型不会和校验规则脱节。
 export type TaskFrameWire = z.infer<typeof taskFrameWireSchema>;
 
 const INSTRUCTIONS_URL = new URL("./instructions.md", import.meta.url);
