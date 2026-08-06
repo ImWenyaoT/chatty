@@ -137,6 +137,11 @@ export function prepareTaskContext(
   if (frame.product_need !== null) scopes.push("product");
   evidence.required_knowledge_scopes = scopes;
 
+  // 有商品需求就不能用 answer 收尾，哪怕同时还有知识问题——混合请求把答案写进
+  // recommend 的 answer 字段。这里的判据必须和 finalizeReply 的分支完全一致。
+  evidence.allowed_final_actions =
+    recommendation === null ? ["answer"] : ["recommend", "clarify"];
+
   return { frame, recommendation };
 }
 

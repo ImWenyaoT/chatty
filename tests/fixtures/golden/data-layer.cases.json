@@ -484,6 +484,7 @@
           "used_tools": ["get_user_profile", "search_products", "check_inventory"],
           "required_knowledge_scopes": ["product"],
           "completed_knowledge_scopes": [],
+          "allowed_final_actions": ["recommend", "clarify"],
           "blocked_attempts": []
         }
       }
@@ -502,6 +503,7 @@
           ],
           "required_knowledge_scopes": ["general", "product"],
           "completed_knowledge_scopes": ["general"],
+          "allowed_final_actions": ["recommend", "clarify"],
           "blocked_attempts": []
         }
       }
@@ -520,6 +522,7 @@
           ],
           "required_knowledge_scopes": ["product"],
           "completed_knowledge_scopes": ["product"],
+          "allowed_final_actions": ["recommend", "clarify"],
           "blocked_attempts": []
         }
       }
@@ -540,6 +543,7 @@
           ],
           "required_knowledge_scopes": ["product"],
           "completed_knowledge_scopes": ["product"],
+          "allowed_final_actions": ["recommend", "clarify"],
           "blocked_attempts": [
             "need_support:retrieve_knowledge:tool_not_allowed_in_stage"
           ]
@@ -555,6 +559,7 @@
           "required_support_tools": ["retrieve_knowledge"],
           "required_knowledge_scopes": ["general"],
           "completed_knowledge_scopes": ["general"],
+          "allowed_final_actions": ["answer"],
           "blocked_attempts": []
         }
       }

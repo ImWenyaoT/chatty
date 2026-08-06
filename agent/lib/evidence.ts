@@ -47,6 +47,8 @@ export type RecommendationEvidence = {
   usage: Usage;
   completed_knowledge_scopes: Set<string>;
   required_knowledge_scopes: readonly string[];
+  // 本轮最终输出允许的 action。与 finalizeReply 的分支同源，避免状态栏和校验漂移。
+  allowed_final_actions: readonly string[];
 };
 
 export function createEvidence(): RecommendationEvidence {
@@ -66,6 +68,7 @@ export function createEvidence(): RecommendationEvidence {
     usage: new Usage(),
     completed_knowledge_scopes: new Set(),
     required_knowledge_scopes: [],
+    allowed_final_actions: [],
   };
 }
 

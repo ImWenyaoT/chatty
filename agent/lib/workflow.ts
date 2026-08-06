@@ -103,7 +103,7 @@ export function planToolBatch(
 }
 
 /**
- * 只披露进度与下一步，不把 Harness-owned Evidence 交给模型。
+ * 只披露进度、下一步与最终输出契约，不把 Harness-owned Evidence 交给模型。
  *
  * 返回普通字符串而不是对象，因为它会作为 developer message 加入 Model Context。
  * 商品 ID、画像详情等真实 Evidence 不放进去，避免 Model 反过来篡改 Harness 判断。
@@ -126,6 +126,7 @@ export function renderAgentStatus(evidence: RecommendationEvidence): string {
     `required_knowledge_scopes: ${requiredScopes}`,
     `completed_knowledge_scopes: ${completedScopes}`,
     `allowed_next: ${nextSteps.join(", ")}`,
+    `allowed_final_action: ${evidence.allowed_final_actions.join(", ") || "none"}`,
     `blocked_attempts: ${evidence.blocked_attempts.length}`,
     "</agent_status>",
   ].join("\n");
