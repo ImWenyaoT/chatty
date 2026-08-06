@@ -307,10 +307,10 @@
       "input": {
         "wire": {
           "product_requested": true,
-          "category": ["耳机"],
-          "min_yuan": [],
-          "max_yuan": [300],
-          "knowledge_query": []
+          "category": "耳机",
+          "min_yuan": null,
+          "max_yuan": 300,
+          "knowledge_query": null
         }
       }
     },
@@ -320,10 +320,10 @@
       "input": {
         "wire": {
           "product_requested": false,
-          "category": [],
-          "min_yuan": [],
-          "max_yuan": [],
-          "knowledge_query": ["退换货政策"]
+          "category": null,
+          "min_yuan": null,
+          "max_yuan": null,
+          "knowledge_query": "退换货政策"
         }
       }
     },
@@ -333,10 +333,10 @@
       "input": {
         "wire": {
           "product_requested": true,
-          "category": ["耳机"],
-          "min_yuan": [100],
-          "max_yuan": [300],
-          "knowledge_query": ["七天无理由退货"]
+          "category": "耳机",
+          "min_yuan": 100,
+          "max_yuan": 300,
+          "knowledge_query": "七天无理由退货"
         }
       }
     },
@@ -346,10 +346,10 @@
       "input": {
         "wire": {
           "product_requested": true,
-          "category": ["飞机"],
-          "min_yuan": [],
-          "max_yuan": [],
-          "knowledge_query": []
+          "category": "飞机",
+          "min_yuan": null,
+          "max_yuan": null,
+          "knowledge_query": null
         }
       }
     },
@@ -359,10 +359,10 @@
       "input": {
         "wire": {
           "product_requested": true,
-          "category": [],
-          "min_yuan": [500],
-          "max_yuan": [100],
-          "knowledge_query": []
+          "category": null,
+          "min_yuan": 500,
+          "max_yuan": 100,
+          "knowledge_query": null
         }
       }
     },
@@ -372,10 +372,10 @@
       "input": {
         "wire": {
           "product_requested": false,
-          "category": ["耳机"],
-          "min_yuan": [],
-          "max_yuan": [],
-          "knowledge_query": ["退换货"]
+          "category": "耳机",
+          "min_yuan": null,
+          "max_yuan": null,
+          "knowledge_query": "退换货"
         }
       }
     },
@@ -385,10 +385,10 @@
       "input": {
         "wire": {
           "product_requested": false,
-          "category": [],
-          "min_yuan": [],
-          "max_yuan": [],
-          "knowledge_query": ["   "]
+          "category": null,
+          "min_yuan": null,
+          "max_yuan": null,
+          "knowledge_query": "   "
         }
       }
     },

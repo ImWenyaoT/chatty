@@ -15,16 +15,17 @@ import { renderInstructions } from "../../lib/instructions.ts";
 import type { ModelProvider } from "../../lib/model-provider.ts";
 
 /**
- * DeepSeek Responses API 可接受的扁平 structured output。
+ * Task Framer 的输出契约：模型看到的就是这个形状。
  *
- * 数组最多只有一个元素，是为了兼容 provider 的 structured output 能力。
+ * 字段用可空标量而不是「最多一个元素的数组」。早先那种拍平写法是为了绕
+ * provider 的 structured output 限制，实测 DeepSeek 支持可空字段，不需要绕。
  */
 export const taskFrameWireSchema = z.object({
   product_requested: z.boolean(),
-  category: z.array(z.string()).max(1),
-  min_yuan: z.array(z.number().min(0)).max(1),
-  max_yuan: z.array(z.number().min(0)).max(1),
-  knowledge_query: z.array(z.string()).max(1),
+  category: z.string().nullable(),
+  min_yuan: z.number().min(0).nullable(),
+  max_yuan: z.number().min(0).nullable(),
+  knowledge_query: z.string().nullable(),
 });
 export type TaskFrameWire = z.infer<typeof taskFrameWireSchema>;
 

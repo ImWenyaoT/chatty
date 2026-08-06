@@ -70,11 +70,10 @@ export function parseTaskFrame(
   frame: TaskFrameWire,
   categories: readonly string[],
 ): TaskFrame {
-  // Wire 用空数组表示“没有值”；领域对象统一改成更直接的 null。
-  const category =
-    frame.category.length > 0 ? frame.category[0]!.trim() || null : null;
-  const minYuan = frame.min_yuan.length > 0 ? frame.min_yuan[0]! : null;
-  const maxYuan = frame.max_yuan.length > 0 ? frame.max_yuan[0]! : null;
+  // 空字符串也当成"没填"，后面只需要判断 !== null。
+  const category = frame.category?.trim() || null;
+  const minYuan = frame.min_yuan;
+  const maxYuan = frame.max_yuan;
 
   let productNeed: ProductNeed | null;
   if (frame.product_requested) {
@@ -101,11 +100,7 @@ export function parseTaskFrame(
     productNeed = null;
   }
 
-  // 空字符串也归一化成 null，后续只需要判断 `!== null`。
-  const knowledgeQuery =
-    frame.knowledge_query.length > 0
-      ? frame.knowledge_query[0]!.trim() || null
-      : null;
+  const knowledgeQuery = frame.knowledge_query?.trim() || null;
   const parsed = taskFrameSchema.safeParse({
     product_need: productNeed,
     knowledge_query: knowledgeQuery,
