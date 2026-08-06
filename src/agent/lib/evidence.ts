@@ -7,20 +7,24 @@
 
 import { Usage } from "@openai/agents";
 
-import { MODEL_TOOL_NAMES } from "./tool-names.ts";
-
 import type {
   KnowledgeHit,
   RecommendationDraftItem,
   UserProfile,
 } from "../../data/models.ts";
 
-// Harness 确定性执行的步骤。它们不是模型可调用的 Tool，所以没有对应文件；
-// 模型可见的那部分由 agent/tools/ 的目录扫描派生，两者合起来才是 used_tools 的全集。
+// Harness 确定性执行的步骤。它们不是模型可调用的 Tool；与下面两个模型 Tool
+// 合起来才是 used_tools 的全集。
 export const HARNESS_STEPS = [
   "get_user_profile",
   "search_products",
   "check_inventory",
+] as const;
+
+/** Model 可调用的 Tool；实现见 `agent/tools/`，装配见 `agent.ts`。 */
+export const MODEL_TOOL_NAMES = [
+  "get_marketing_strategy",
+  "retrieve_knowledge",
 ] as const;
 
 export const TOOL_NAMES: readonly string[] = [

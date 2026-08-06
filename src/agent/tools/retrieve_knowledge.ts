@@ -1,19 +1,14 @@
-/**
- * 全文检索政策或商品知识，为回答和推荐理由提供依据。
- *
- * 文件名即 Tool 名——本文件不写 `name` 字段，由 `index.ts` 从路径派生。
- * Model 只能看到参数和描述，Catalog 与 Evidence 通过 ChattyRunContext 注入。
- */
+/** 全文检索政策或商品知识，为回答和推荐理由提供依据。 */
 
+import { tool } from "@openai/agents";
 import { z } from "zod";
 
-import { defineTool } from "../lib/define-tool.ts";
-
-import { guardRepeatedCall, recordKnowledge } from "../lib/evidence.ts";
-import { stableStringify } from "../lib/stable-stringify.ts";
 import { requireContext } from "../lib/context.ts";
+import { guardRepeatedCall, recordKnowledge } from "../lib/evidence.ts";
+import { stageGuardrail } from "../lib/workflow.ts";
 
-export default defineTool({
+export const retrieveKnowledge = tool({
+  name: "retrieve_knowledge",
   description: "全文检索政策或商品知识，为回答和推荐理由提供依据。",
   parameters: z.object({
     query: z.string().describe("关键词查询。"),
@@ -25,17 +20,15 @@ export default defineTool({
       ),
   }),
   errorFunction: null,
+  inputGuardrails: [stageGuardrail],
   execute: async ({ query, limit, scope }, runContext) => {
     const context = requireContext(runContext);
 
-    // general 检索不限定商品；product 检索会在下面填入当前类目和有库存商品 ID。
     let categories: string[] = [];
     let productIds: string[] = [];
     if (scope === "product") {
-      // 这是运行时保护：即使类型允许 request 为 null，商品检索也明确禁止这种状态。
       if (context.request === null)
         throw new Error("recommendation_context_not_prepared");
-      // 用户本轮明确类目优先；没有明确类目时才使用历史画像偏好。
       const explicitCategories =
         context.request.context.preferred_categories ?? [];
       const profile = context.evidence.profile;
@@ -46,7 +39,8 @@ export default defineTool({
           : profile.preferred_categories;
       productIds = context.evidence.in_stock_product_order;
     }
-    const signature = stableStringify({
+
+    const signature = JSON.stringify({
       query,
       categories,
       product_ids: productIds,
@@ -61,14 +55,11 @@ export default defineTool({
       limit,
     });
 
-    // general 知识只支撑回答；product 知识还要计算它能够支撑哪些推荐商品。
     const productSpecificIds = new Set<string>();
     const genericCategories = new Set<string>();
     if (scope === "product") {
       for (const hit of hits) {
-        // 商品专属文档只支撑自己的 product_id。
         if (hit.product_id !== null) productSpecificIds.add(hit.product_id);
-        // 类目通用文档可以支撑当前候选中同类目的全部商品。
         else genericCategories.add(hit.category);
       }
     }
@@ -79,7 +70,6 @@ export default defineTool({
         groundedIds.add(product.product_id);
     }
 
-    // 先记录 Harness Evidence，再把同一批命中序列化后返回给 Model。
     recordKnowledge(context.evidence, hits, [...groundedIds].sort(), scope);
     return JSON.stringify(hits);
   },

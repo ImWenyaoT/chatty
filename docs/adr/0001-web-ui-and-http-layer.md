@@ -8,8 +8,8 @@ superseded-in-part-by: 0004-flat-repo-layout
 原先的项目边界写着「不增加前端、外部数据库或向量数据库」，理由是一个月的 MVP 要控重量。
 随着项目转为简历展示，交互入口改为 Web GUI；不再维护 CLI/TUI 作为第二套产品形态。
 
-现在反转前半条：增加 Frontend（`apps/web/`，Vite + React + TypeScript）以及它需要的
-Backend HTTP Adapter。Backend 当前位于 `apps/api/`，并已迁移为 TypeScript + Hono，见
+现在反转前半条：增加 Frontend（`src/web/`，Vite + React + TypeScript）以及它需要的
+Backend HTTP Adapter（`src/server/`，TypeScript + Hono），见
 [ADR 0003](0003-typescript-migration.md)。后半条不变——外部数据库和向量数据库仍然不加。
 
 反转的理由是受众。Web GUI 能直接展示多轮澄清、推荐卡片和错误状态，避免要求体验者理解

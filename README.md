@@ -55,14 +55,14 @@ Chatty 用一条最小闭环解决它们：
 ## 系统架构
 
 系统顶层只分为 Frontend 与 Backend。Frontend 是完整的 React 用户界面；Backend 内部再展开
-Next.js Route Handler、Chatty Agent 与 SQLite，其中 Chatty Agent 才拥有 Model + Harness。
+Hono HTTP Adapter、Chatty Agent 与 SQLite，其中 Chatty Agent 才拥有 Model + Harness。
 
 ```mermaid
 flowchart LR
-    User["用户"] --> Frontend["Frontend<br/>React (Next.js)"]
+    User["用户"] --> Frontend["Frontend<br/>React + Vite"]
     Frontend -->|"HTTP JSON"| API
     subgraph Backend["Backend"]
-        API["Route Handler<br/>HTTP Adapter"] -->|"Context In"| Harness
+        API["Hono<br/>HTTP Adapter"] -->|"Context In"| Harness
         subgraph Agent["Chatty Agent = Model + Harness"]
             Model["Model"] <--> Harness["Harness<br/>Context / Tools / Loop / Control / Evidence"]
         end
@@ -81,7 +81,7 @@ flowchart LR
 | Module | 负责 | 不负责 |
 | --- | --- | --- |
 | Frontend | 收集输入，展示对话、Trace、Token 与只读数据 | 推导推荐事实 |
-| Backend · Route Handler | HTTP 校验、Session、错误码与 Reply 序列化 | 调用 Tool 或决定推荐逻辑 |
+| Backend · HTTP Adapter | HTTP 校验、Session、错误码与 Reply 序列化 | 调用 Tool 或决定推荐逻辑 |
 | Backend · Chatty Agent | Task Framing、Agent Loop、Evidence、Context In/Out | HTTP 和页面渲染 |
 | Backend · Chatty Agent · Model | 语义理解、主动检索、Query 改写、理由与文案 | 决定真实价格和库存 |
 | Backend · Chatty Agent · Harness | Context、Tool、Agent Loop、Control、Evidence 与事实裁决 | 开放式语言判断 |
@@ -95,7 +95,7 @@ flowchart LR
 sequenceDiagram
     actor U as User
     participant F as Frontend
-    participant A as Backend · Route Handler
+    participant A as Backend · HTTP Adapter
     participant H as Chatty Harness
     participant M as DeepSeek Model
     participant D as SQLite
@@ -194,11 +194,12 @@ cp .env.example .env.local
 pnpm dev
 ```
 
-打开 [http://localhost:3000](http://localhost:3000)。`pnpm dev` 只起一个 Next.js 进程，
-Web GUI 与 Chatty API 同源：
+`pnpm dev` 同时启动 Vite 和 Hono：
 
-- Web GUI：`http://localhost:3000`
-- Chatty API：`http://localhost:3000/api`
+- Web GUI：`http://localhost:5173`
+- Chatty API：`http://localhost:8000/api`
+
+开发时 Vite 把 `/api` 代理给 Hono；`pnpm start` 构建前端后由 Hono 同源提供静态页面与 API。
 
 配置优先级为 `.env.local > .env > 系统环境变量`。默认使用 DeepSeek；同时保留
 `OPENAI_API_KEY`、`OPENAI_BASE_URL` 和 `MODEL_ID` 兼容变量。
@@ -224,30 +225,24 @@ Web GUI 与 Chatty API 同源：
 ```text
 chatty/
 ├── src/
-│   ├── app/                 # Next.js 路由，只做薄层委托
-│   │   ├── layout.tsx       # 根布局与页面元数据
-│   │   ├── page.tsx         # 委托给 web/App.tsx
-│   │   ├── globals.css      # 全局样式
-│   │   └── api/             # API 边界：catalog、health、sessions
-│   ├── agent/               # Chatty Agent：路径决定身份，文件名即 Tool 名、Hook 名
+│   ├── agent/               # Chatty Agent：Model + Harness
 │   │   ├── agent.ts         # 主 Agent 的 Model、Tool 与输出契约
 │   │   ├── instructions.md  # 主 Agent 系统提示词
 │   │   ├── tools/           # 模型可调用的 Tool，一文件一个
-│   │   ├── hooks/           # 生命周期 Hook，由 registry 按 kind 挂载
 │   │   ├── subagents/       # 由 Harness 触发的单次 Model 调用
-│   │   └── lib/             # Framing、Loop、Evidence、Workflow 与装配器
+│   │   └── lib/             # Framing、Loop、Evidence 与 Workflow
 │   ├── data/                # SQLite、Catalog 与领域模型
 │   │   ├── seed.ts          # 种子目录位置，由 data/ 自己解析
 │   │   └── seed/            # SQLite 初始化种子，不是运行时查询接口
-│   ├── server/              # Backend 非路由代码
-│   │   ├── runtime.ts       # 进程内共享的 Catalog、Chatty 与 SessionStore
+│   ├── server/              # Hono HTTP 层与服务端进程
+│   │   ├── api.ts           # catalog、health 与 sessions 路由
+│   │   ├── main.ts          # 进程入口
 │   │   ├── session-store.ts # 服务端内存会话
 │   │   ├── settings.ts      # 仓库级 .env 加载与优先级
-│   │   └── http.ts          # Route Handler 共用的请求解析与错误响应
 │   ├── web/                 # Frontend：React 桌面 Demo
 │   │   ├── App.tsx          # 页面根组件
 │   │   ├── api-client.ts    # 前端唯一的后端出口
-│   │   └── components/      # 渲染组件与 render-spec 注册表
+│   │   └── components/      # 商品目录与推荐结果组件
 │   └── evals/               # `*.eval.ts` 一文件一个 Eval，另有 evals.config.ts 与 lib/runner.ts
 ├── tests/                   # node:test 确定性测试与 golden 基线
 ├── public/                  # 静态资源
@@ -256,11 +251,10 @@ chatty/
     └── adr/                 # 架构决策记录
 ```
 
-目录形状直接对应「Frontend ↔ API ↔ Backend」这条边界。虽然是 Next.js 全栈，Agent 与 Web
-仍然解耦：`src/web/` 是黑盒前端，只经 `api-client.ts` 打 HTTP，不 import `src/agent/`
-与 `src/server/`；`src/app/api/**` 是 API 边界；`src/server/`、`src/agent/`、`src/data/`
-构成 Backend，其中 `src/agent/` 就是那个 `Model + Harness`。`src/app/` 保持薄——page 委托给
-`src/web/App.tsx`，route 委托给 `src/server/` 与 `src/agent/`。
+目录形状直接对应「Frontend ↔ API ↔ Backend」这条边界。`src/web/` 是黑盒前端，只经
+`api-client.ts` 打 HTTP，不 import `src/agent/` 与 `src/server/`；`src/server/api.ts` 是唯一
+API seam；`src/server/`、`src/agent/`、`src/data/` 构成 Backend，其中 `src/agent/` 就是
+`Model + Harness`。
 
 建议代码阅读顺序：
 
@@ -320,7 +314,7 @@ Chatty 有意保持在最小可实现范围：
 - [ADR 0002](docs/adr/0002-python-fastapi-agents-sdk.md)：为什么使用 OpenAI Agents SDK 与 DeepSeek Responses API。
 - [ADR 0003](docs/adr/0003-typescript-migration.md)：为什么从 Python 迁移到 TypeScript 全栈。
 - [ADR 0004](docs/adr/0004-flat-repo-layout.md)：为什么扁平化为单包，agent/ 提升为顶层目录。
-- [CONTEXT.md](docs/CONTEXT.md)：项目唯一领域词汇入口，含 Single Agent 判据与 Project Structure 约定。
+- [CONTEXT.md](CONTEXT.md)：项目唯一领域词汇入口，含 Single Agent 判据与 Project Structure 约定。
 
 ## License
 

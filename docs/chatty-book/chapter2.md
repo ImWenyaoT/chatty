@@ -61,7 +61,7 @@ Harness 管理，因此这里不依赖 `previous_response_id`。
 sequenceDiagram
     actor U as User
     participant F as Frontend
-    participant A as Backend · Route Handler
+    participant A as Backend · HTTP Adapter
     participant H as Chatty Harness
     participant M as DeepSeek Model
     participant D as SQLite
@@ -90,7 +90,7 @@ sequenceDiagram
 
 | Context | 所在位置 | 生命周期 |
 | --- | --- | --- |
-| `ChattyContext(pendingUserMessages / history / turns)` | 服务端进程内存中的不透明会话值（`src/server/runtime.ts` 持有） | 待澄清任务与轮次；任务完成后清空内容 |
+| `ChattyContext(pendingUserMessages / history / turns)` | 服务端进程内存中的不透明会话值（`src/server/session-store.ts` 持有） | 待澄清任务与轮次；任务完成后清空内容 |
 | Evidence 与 Tool trace | Agents SDK RunContext | 每轮重新创建，不跨轮复用 |
 | 商品、库存、知识与画像 | SQLite | 运行时业务事实 |
 
@@ -98,7 +98,7 @@ sequenceDiagram
 
 | 层 | 文件 | Context In | Context Out |
 | --- | --- | --- | --- |
-| Backend · HTTP | `src/app/api/**/route.ts` | 用户原话、会话 ID | answer / recommend / clarify / exhausted |
+| Backend · HTTP | `src/server/api.ts` | 用户原话、会话 ID | answer / recommend / clarify / exhausted |
 | Backend · Agent Interface | `src/agent/lib/chatty.ts` | 用户、原话、`ChattyContext` | `ChattyTurn` |
 | Backend · Harness / 输入适配 | `src/agent/lib/framing.ts` | 当前原话、待澄清上下文、可选类目 | `TaskFrame` |
 | Backend · Harness / Agent Loop | `src/agent/lib/executor.ts` | 原始用户输入、`TaskContext` | 可信回答或稳定错误码 |

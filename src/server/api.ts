@@ -156,5 +156,3 @@ export function createApp(dependencies: AppDependencies = {}) {
       },
     );
 }
-
-export type AppType = ReturnType<typeof createApp>;

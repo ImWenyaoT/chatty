@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useRef, useState } from "react";
 import {
   ApiError,
@@ -13,8 +11,8 @@ import {
   type Turn,
 } from "./api-client.ts";
 import CatalogBrowser from "./components/CatalogBrowser.tsx";
-import { ChattyRenderer } from "./components/registry.tsx";
-import { buildRenderSpec } from "./render-spec.ts";
+import ProductCard from "./components/ProductCard.tsx";
+import ProductTable from "./components/ProductTable.tsx";
 
 /**
  * 会话里的一条记录。
@@ -279,7 +277,13 @@ function Bubble({ entry }: { entry: Entry }) {
     case "products":
       return (
         <section className="products">
-          <ChattyRenderer spec={buildRenderSpec(entry.products)} />
+          {entry.products.length > 1 ? (
+            <ProductTable products={entry.products} />
+          ) : (
+            entry.products.map((product) => (
+              <ProductCard key={product.product_id} {...product} />
+            ))
+          )}
           <p className="hint">
             ID、名称、价格与库存均来自 SQLite 重查，并通过 Harness
             六条证据校验；模型只写了理由和文案。

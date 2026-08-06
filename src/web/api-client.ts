@@ -1,9 +1,8 @@
 /**
- * HTTP 客户端：把 `app/api/**` 的 5 个端点包成带稳定错误码的函数。
+ * HTTP 客户端：把 Hono 的 5 个端点包成带稳定错误码的函数。
  *
- * 迁到 Next.js 之后没有了 Hono RPC 的端到端类型推导，响应类型在这里显式声明，
- * 形状复用 `data/models.ts` 的领域类型——契约的真相仍然只有一份，只是从
- * 「路由推导」换成了「领域模型 + 路由各自引用同一批类型」。
+ * 响应类型在这里显式声明，形状复用 `data/models.ts` 的领域类型；
+ * 前端只依赖 HTTP 契约，不 import 后端实现。
  * 字段名保持 snake_case，与 SQLite 列名和 HTTP 契约一致。
  */
 import type { DEMO_USERS } from "../data/demo-users.ts";
