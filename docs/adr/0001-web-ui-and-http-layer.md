@@ -1,5 +1,6 @@
 ---
 status: accepted
+superseded-in-part-by: 0004-flat-repo-layout
 ---
 
 # 加一个 Web 对话界面和它需要的 HTTP 层

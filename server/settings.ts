@@ -9,7 +9,8 @@ import { parseEnv } from "node:util";
 
 import { z } from "zod";
 
-import { REPO_ROOT } from "./paths.ts";
+/** `.env` 与 `.env.local` 是仓库级配置，不属于任何一个顶层目录。 */
+const REPO_ROOT = new URL("../", import.meta.url);
 
 const settingsSchema = z.object({
   apiKey: z.string().default(""),

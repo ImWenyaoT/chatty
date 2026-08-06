@@ -98,13 +98,13 @@ sequenceDiagram
 
 | 层 | 文件 | Context In | Context Out |
 | --- | --- | --- | --- |
-| Backend · HTTP | `apps/api/src/api.ts` | 用户原话、会话 ID | answer / recommend / clarify / exhausted |
-| Backend · Agent Interface | `apps/api/src/agent/chatty.ts` | 用户、原话、`ChattyContext` | `ChattyTurn` |
-| Backend · Harness / 输入适配 | `apps/api/src/agent/framing.ts` | 当前原话、待澄清上下文、可选类目 | `TaskFrame` |
-| Backend · Harness / Agent Loop | `apps/api/src/agent/executor.ts` | 原始用户输入、`TaskContext` | 可信回答或稳定错误码 |
-| Backend · Harness / 控制 | `apps/api/src/agent/workflow.ts` | Evidence、整批 Tool calls | 阶段裁决、`agent_status` |
-| Backend · Harness / Tool | `apps/api/src/agent/tools.ts` | Tool 参数、RunContext | Model-visible Result 与 Harness-owned Evidence |
-| Backend · 数据与检索 | `apps/api/src/data/catalog.ts` | 结构化查询 | SQLite 事实与知识命中 |
+| Backend · HTTP | `server/api.ts` | 用户原话、会话 ID | answer / recommend / clarify / exhausted |
+| Backend · Agent Interface | `agent/lib/chatty.ts` | 用户、原话、`ChattyContext` | `ChattyTurn` |
+| Backend · Harness / 输入适配 | `agent/lib/framing.ts` | 当前原话、待澄清上下文、可选类目 | `TaskFrame` |
+| Backend · Harness / Agent Loop | `agent/lib/executor.ts` | 原始用户输入、`TaskContext` | 可信回答或稳定错误码 |
+| Backend · Harness / 控制 | `agent/lib/workflow.ts` | Evidence、整批 Tool calls | 阶段裁决、`agent_status` |
+| Backend · Harness / Tool | `agent/lib/tools.ts` | Tool 参数、RunContext | Model-visible Result 与 Harness-owned Evidence |
+| Backend · 数据与检索 | `data/catalog.ts` | 结构化查询 | SQLite 事实与知识命中 |
 
 ---
 
