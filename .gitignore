@@ -1,6 +1,6 @@
 # 依赖与构建产物
 node_modules/
-apps/web/dist/
+web/dist/
 .pnpm-store/
 
 # 运行时数据
