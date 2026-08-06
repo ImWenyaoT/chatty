@@ -1,6 +1,6 @@
 # 依赖与构建产物
 node_modules/
-.next/
+dist/
 .pnpm-store/
 
 # 运行时数据
@@ -25,4 +25,3 @@ node_modules/
 *.tsbuildinfo
 
 # Next.js
-next-env.d.ts

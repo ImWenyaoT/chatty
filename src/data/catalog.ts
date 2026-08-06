@@ -1,9 +1,9 @@
 /** 商品、画像、库存、知识与营销数据的统一访问入口。 */
 
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 import { Database, SeedDataError, segmentForIndex } from "./database.ts";
-import { join } from "node:path";
 
 import { DATA_DIR } from "./seed.ts";
 import {
@@ -95,7 +95,7 @@ export class Catalog {
   readonly #templates: Map<string, MarketingStrategy>;
   readonly #synonyms: Map<string, string[]>;
 
-  constructor(databasePath: string = ":memory:", dataDir: string = DATA_DIR) {
+  constructor(databasePath: string = ":memory:", dataDir: URL = DATA_DIR) {
     this.#database = new Database(databasePath, dataDir);
     this.products = this.#listProducts();
     this.profiles = this.#loadProfiles();
@@ -105,7 +105,7 @@ export class Catalog {
       ...new Set(this.products.map((product) => product.category)),
     ].sort();
     this.#synonyms = Catalog.#loadSynonyms(
-      join(dataDir, "query_synonyms.json"),
+      new URL("query_synonyms.json", dataDir),
     );
   }
 
@@ -452,8 +452,8 @@ export class Catalog {
     return sanitized;
   }
 
-  static #loadSynonyms(path: string): Map<string, string[]> {
-    const raw: unknown = JSON.parse(readFileSync(path, "utf8"));
+  static #loadSynonyms(path: URL): Map<string, string[]> {
+    const raw: unknown = JSON.parse(readFileSync(fileURLToPath(path), "utf8"));
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
       throw new SeedDataError("invalid_query_synonyms");
     }

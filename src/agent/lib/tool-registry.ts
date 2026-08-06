@@ -12,13 +12,11 @@
 import { tool } from "@openai/agents";
 
 import { BEFORE_TOOL_CALL } from "./hook-registry.ts";
-import { MODEL_TOOL_NAMES } from "./tool-names.ts";
+import { MODEL_TOOL_NAMES, TOOLS_DIR } from "./tool-names.ts";
 
 export const CHATTY_TOOLS = await Promise.all(
   MODEL_TOOL_NAMES.map(async (name) => {
-    // 静态前缀 + 后缀，打包器据此枚举 `../tools/*.ts` 并全部打进产物。
-    // 换成 import(变量) 或 import(new URL(...)) 会报 "too dynamic"。
-    const module = await import(`../tools/${name}.ts`);
+    const module = await import(new URL(`${name}.ts`, TOOLS_DIR).href);
     // 漏写 default export 会在装配期立刻失败，而不是等模型调用时才发现。
     if (module.default === undefined) {
       throw new Error(`tool_missing_default_export:${name}`);

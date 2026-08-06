@@ -1,19 +1,14 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["react", "typescript", "oxc"],
-  "ignorePatterns": [".next/**"],
+  "ignorePatterns": ["dist/**"],
   "rules": {
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  },
-  "overrides": [
-    {
-      "files": [
-        "src/app/**/layout.tsx",
-        "src/app/**/page.tsx",
-        "src/app/**/route.ts"
-      ],
-      "rules": { "react/only-export-components": "off" }
-    }
-  ]
+    "react/only-export-components": [
+      "warn",
+      {
+        "allowConstantExport": true
+      }
+    ]
+  }
 }

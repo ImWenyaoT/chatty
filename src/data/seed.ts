@@ -5,7 +5,5 @@
  * 路径由这个包自己解析，使用方 import 它而不是拼相对路径。
  */
 
-import { join } from "node:path";
-
-/** 目录路径不能写成 `new URL(dir, import.meta.url)`——打包器会当模块引用解析。 */
-export const DATA_DIR = join(process.cwd(), "src/data/seed");
+/** 相对本文件定位；种子目录属于 data/ 自己，由它解析。 */
+export const DATA_DIR = new URL("seed/", import.meta.url);
