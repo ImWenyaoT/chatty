@@ -7,7 +7,11 @@
 
 import { Agent } from "@openai/agents";
 
-import { agentDraftSchema } from "../../../data/models.ts";
+import {
+  DRAFT_ACTIONS,
+  buildAgentDraftSchema,
+  type DraftAction,
+} from "../../../data/models.ts";
 import { readInstructions } from "../../lib/instructions.ts";
 import type { ModelProvider } from "../../lib/model-provider.ts";
 
@@ -15,13 +19,21 @@ const INSTRUCTIONS = readInstructions(
   new URL("./instructions.md", import.meta.url),
 );
 
-/** 把 provider 未遵守 Schema 的最终文本纠正为同一个结构化契约。 */
-export function buildDraftCorrectionAgent(provider: ModelProvider) {
+/**
+ * 把 provider 未遵守 Schema 的最终文本纠正为同一个结构化契约。
+ *
+ * `allowedActions` 必须与主 Agent 本轮的取值范围一致——否则纠正会把主 Agent 发不出的
+ * action 重新放进来，收窄就形同虚设。
+ */
+export function buildDraftCorrectionAgent(
+  provider: ModelProvider,
+  allowedActions: readonly [DraftAction, ...DraftAction[]] = DRAFT_ACTIONS,
+) {
   return new Agent({
     name: "Chatty Draft Corrector",
     instructions: INSTRUCTIONS,
     model: provider.agentModel,
-    outputType: agentDraftSchema,
+    outputType: buildAgentDraftSchema(allowedActions),
     modelSettings: { reasoning: { effort: "none" } },
   });
 }

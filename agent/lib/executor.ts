@@ -10,6 +10,7 @@
  */
 
 import {
+  ModelBehaviorError,
   extractAllTextOutput,
   run,
   type AgentInputItem,
@@ -19,7 +20,9 @@ import {
 
 import { Catalog, CatalogError } from "../../data/catalog.ts";
 import {
+  DRAFT_ACTIONS,
   type AgentDraft,
+  type DraftAction,
   type RecommendationContext,
   type RecommendationRequest,
   type Reply,
@@ -135,11 +138,27 @@ async function correctInvalidDraft(
   data: RunErrorHandlerInput<ChattyRunContext, ChattyAgentType>,
   provider: ModelProvider,
 ): Promise<RunErrorHandlerResult<ChattyAgentType>> {
-  const corrected = await run(
-    buildDraftCorrectionAgent(provider),
-    extractAllTextOutput(data.runData.newItems),
-    { maxTurns: 1 },
-  );
+  let corrected;
+  try {
+    corrected = await run(
+      buildDraftCorrectionAgent(
+        provider,
+        narrowActions(data.context.context.evidence),
+      ),
+      extractAllTextOutput(data.runData.newItems),
+      { maxTurns: 1 },
+    );
+  } catch (error) {
+    // 纠正结果同样过收窄 schema。它再次不合规时仍属于 invalid_draft，
+    // 不能因为异常来自 SDK 就退化成通用的 recommendation_failed。
+    if (error instanceof ModelBehaviorError) {
+      throw new RecommendationError("invalid_draft", {
+        reason: "correction_agent_rejected",
+        cause: error.message,
+      });
+    }
+    throw error;
+  }
   // 纠正过程也调用了 Model，不能在统计里悄悄漏掉这次费用。
   data.context.context.evidence.usage.add(corrected.state.usage);
   if (corrected.finalOutput === undefined) {
@@ -148,6 +167,20 @@ async function correctInvalidDraft(
     });
   }
   return { finalOutput: corrected.finalOutput };
+}
+
+/** 把 Harness 算出的允许 action 收窄成 Zod enum 能吃的非空元组。 */
+function narrowActions(
+  evidence: RecommendationEvidence,
+): readonly [DraftAction, ...DraftAction[]] {
+  const allowed = evidence.allowed_final_actions.filter(
+    (action): action is DraftAction =>
+      (DRAFT_ACTIONS as readonly string[]).includes(action),
+  );
+  // 空集合意味着 TaskContext 没准备好；此时不收窄，交给既有校验报错。
+  return allowed.length === 0
+    ? DRAFT_ACTIONS
+    : (allowed as [DraftAction, ...DraftAction[]]);
 }
 
 /** 主 Agent Loop 的执行器；公开方法只有 `respond()`。 */
@@ -222,7 +255,7 @@ export class ChattyExecutor {
     const runContext = createRunContext(request, this.#catalog, evidence);
 
     const result = await run(
-      buildChattyAgent(this.#provider),
+      buildChattyAgent(this.#provider, narrowActions(evidence)),
       buildModelInput(taskContext, userText, history),
       {
         context: runContext,

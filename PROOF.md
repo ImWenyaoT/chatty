@@ -97,6 +97,93 @@ pnpm eval:agent    # 需要 API key
 **因此：单次 `eval:agent` 结果不作为改动是否有效的判据。** 任何声称提升通过率的改动，都需要
 多次运行的分布对比；零语义变更的重构（如把提示词搬进 Markdown）则改用确定性断言验证，见下节。
 
+## 5.1 失败归因：从一个错误码到六个
+
+上一节说「失败几乎都落在 `invalid_draft`」——这句话本身就是问题。`invalid_draft` 此前被抛在
+六个语义完全不同的位置，共用一个错误码，`diagnostics` 一律传空对象。看到 `invalid_draft`
+只能知道草稿没过，不知道没过哪一关。
+
+PR #74 给这六处各补一个 `reason`，能拿到模型选择时一并带上 `draft_action`。抛出条件、错误码、
+返回给用户的文案都没动，零行为变更。
+
+```bash
+grep -n "invalid_draft" agent/lib/executor.ts   # 六处
+```
+
+| reason | 含义 |
+| --- | --- |
+| `correction_agent_failed` | `draft_corrector` 改写后仍不符合 schema |
+| `final_output_missing` | run 结束但没有 `finalOutput` |
+| `answer_action_not_allowed` | 选了 answer，但没有知识问题 / 存在商品需求 / answer 为空 |
+| `clarify_not_allowed` | 选了 clarify，但没有商品需求或 question 为空 |
+| `recommend_not_allowed` | 选了 recommend，但没有商品需求或 recommendations 为空 |
+| `knowledge_answer_missing` | 有知识问题，但 answer 留空 |
+
+在 commit `9c34fb7`（含诊断，已在 main）上连跑 5 轮 `pnpm eval:agent`，逐 case 结果：
+
+| case | 通过 / 5 |
+| --- | --- |
+| 200 元耳机没有可售候选 | 5/5 |
+| 300 元耳机可以推荐 | 5/5 |
+| 本轮手机需求覆盖历史画像 | 5/5 |
+| 有可售替代时不会推荐售罄商品 | 4/5 |
+| 价格敏感用户可以买配件 | 3/5 |
+| 配送政策问答 | 4/5 |
+| 商品推荐与退货政策混合请求 | 3/5 |
+
+五轮 pass_rate 依次为 0.857 / 1.000 / 1.000 / 0.714 / 0.571，平均 0.829。
+
+6 次失败的归因分布：
+
+- `answer_action_not_allowed` 4 次——「价格敏感用户可以买配件」2 次，「有可售替代时不会推荐
+  售罄商品」1 次，「商品推荐与退货政策混合请求」1 次
+- `recommendation_failed` 1 次
+- 1 次未捕获到 reason
+
+**结论：`answer_action_not_allowed` 占全部失败的三分之二，且横跨三个不同 case。** 它不是某个
+case 的偶发抖动，而是一个系统性失败模式——存在商品需求时，模型仍倾向输出 `action: "answer"`。
+这个结论在补 `reason` 之前拿不到，因为六种失败共用一个错误码。
+
+方法论：先分类，再计数。错误码的粒度决定了能不能归因；无法归因的失败，再多次运行也只是噪声。
+
+## 5.2 从软约束升级到硬约束
+
+5.1 定位到 `answer_action_not_allowed` 是系统性失败后，按两步验证了两种修法。全部数据均为
+每种变体 5 轮 `eval:agent` 实测。
+
+**第一步：软约束（提示词说明 + 状态栏结论行）。**
+在 `agent/instructions.md` 里解释 `allowed_final_action` 是什么、不含 `answer` 时该怎么办；
+状态栏在读数旁边补一行已算好的结论 `final_action_check`。
+
+**第二步：硬约束（收窄输出契约）。**
+`buildAgentDraftSchema(actions)` 按本轮请求类型收窄 `action` 的 enum。存在商品需求时
+outputType 里没有 `answer` 这个取值，模型在解码阶段就发不出来。`draft_corrector` 使用同一份
+收窄 schema——否则纠正会把主 Agent 发不出的 action 重新放回来。
+
+结果：
+
+| | 基线 | + 软约束 | + 硬约束 |
+| --- | --- | --- | --- |
+| 平均 pass_rate | 0.829 | 0.829 | 0.914 |
+| `answer_action_not_allowed` 次数 | 4 | 3 | **0** |
+| 「商品推荐与退货政策混合请求」 | 3/5 | 2/5 | 5/5 |
+
+**软约束没有可测量的效果**：平均 pass_rate 完全持平，失败总数同为 6，两个 case 涨、两个 case 跌。
+它保留在代码里是因为它解释了字段语义（也面向人类读者），但不能声称它降低了失败率。
+
+**硬约束消除了整类失败。** 注意这里 `answer_action_not_allowed` 归零不是统计结论，而是**结构保证**：
+模型的 outputType 里不存在这个取值，5 轮实测只是确认没有遗漏的路径（例如纠正 Agent）。
+对应的确定性证明见：
+
+```bash
+node --test tests/agent.test.ts   # 「输出契约收窄」两条
+```
+
+同一份 `action: "answer"` 的草稿，在收窄 schema 下 `safeParse` 失败、在全量 schema 下成功；
+并验证收窄没有绕过既有的 `superRefine` 跨字段规则。
+
+pass_rate 0.829 → 0.914 仍是小样本（n=5），不作为独立结论使用；可依赖的是那个归零。
+
 ## 6. 重构不改变模型看到的内容
 
 提示词从 TypeScript 字符串搬进 Markdown 时，正确性用逐字节相等证明，而不是跑模型：

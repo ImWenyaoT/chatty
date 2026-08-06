@@ -158,35 +158,51 @@ export const recommendedProductSchema = z.object({
 });
 export type RecommendedProduct = z.infer<typeof recommendedProductSchema>;
 
-/** 模型生成的草稿；Harness 仍会在之后验证其中的商品。 */
-export const agentDraftSchema = z
-  .object({
-    action: z.enum(["answer", "clarify", "recommend"]),
-    answer: z.string().nullable().default(null),
-    question: z.string().nullable().default(null),
-    recommendations: z
-      .array(recommendationDraftItemSchema)
-      .nullable()
-      .default(null),
-  })
-  .superRefine((draft, ctx) => {
-    const fail = (error: string) => ctx.addIssue({ code: "custom", error });
-    if (draft.action === "answer") {
-      if (!draft.answer?.trim()) fail("answer_required");
-      if (draft.question || draft.recommendations?.length) {
-        fail("answer_must_not_include_product_payload");
+export const DRAFT_ACTIONS = ["answer", "clarify", "recommend"] as const;
+export type DraftAction = (typeof DRAFT_ACTIONS)[number];
+
+/**
+ * 模型生成的草稿；Harness 仍会在之后验证其中的商品。
+ *
+ * action 的取值范围是参数：本轮存在商品需求时收窄成 recommend / clarify，让模型**发不出**
+ * answer，而不是发出来再被拒。这是「约束优先于指导」在输出契约上的执行——提示词说明与
+ * 状态栏结论仍然保留，三者互补。
+ */
+export function buildAgentDraftSchema(
+  actions: readonly [DraftAction, ...DraftAction[]] = DRAFT_ACTIONS,
+) {
+  return z
+    .object({
+      action: z.enum(actions),
+      answer: z.string().nullable().default(null),
+      question: z.string().nullable().default(null),
+      recommendations: z
+        .array(recommendationDraftItemSchema)
+        .nullable()
+        .default(null),
+    })
+    .superRefine((draft, ctx) => {
+      const fail = (error: string) => ctx.addIssue({ code: "custom", error });
+      if (draft.action === "answer") {
+        if (!draft.answer?.trim()) fail("answer_required");
+        if (draft.question || draft.recommendations?.length) {
+          fail("answer_must_not_include_product_payload");
+        }
       }
-    }
-    if (draft.action === "clarify") {
-      if (!draft.question?.trim()) fail("clarify_question_required");
-      if (draft.recommendations?.length) fail("clarify_must_not_recommend");
-    }
-    if (draft.action === "recommend") {
-      if (!draft.recommendations?.length) fail("recommendations_required");
-      if (draft.question) fail("recommend_must_not_ask_question");
-    }
-  });
-export type AgentDraft = z.infer<typeof agentDraftSchema>;
+      if (draft.action === "clarify") {
+        if (!draft.question?.trim()) fail("clarify_question_required");
+        if (draft.recommendations?.length) fail("clarify_must_not_recommend");
+      }
+      if (draft.action === "recommend") {
+        if (!draft.recommendations?.length) fail("recommendations_required");
+        if (draft.question) fail("recommend_must_not_ask_question");
+      }
+    });
+}
+
+/** 全量 action 的草稿契约；draft_corrector 与测试用它。 */
+export const agentDraftSchema = buildAgentDraftSchema();
+export type AgentDraft = z.infer<ReturnType<typeof buildAgentDraftSchema>>;
 
 export type RecommendationResponse = {
   kind: "recommend";
