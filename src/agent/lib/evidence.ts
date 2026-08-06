@@ -48,6 +48,8 @@ export type RecommendationEvidence = {
   required_support_tools: readonly string[];
   usage: Usage;
   completed_knowledge_scopes: Set<string>;
+  // 每个 scope 实际检索过几次。用来区分「还没查」和「查过但一条都没命中」。
+  attempted_knowledge_scopes: Map<string, number>;
   required_knowledge_scopes: readonly string[];
   // 本轮最终输出允许的 action。与 finalizeReply 的分支同源，避免状态栏和校验漂移。
   allowed_final_actions: readonly string[];
@@ -69,6 +71,7 @@ export function createEvidence(): RecommendationEvidence {
     required_support_tools: ["retrieve_knowledge", "get_marketing_strategy"],
     usage: new Usage(),
     completed_knowledge_scopes: new Set(),
+    attempted_knowledge_scopes: new Map(),
     required_knowledge_scopes: [],
     allowed_final_actions: [],
   };
@@ -184,11 +187,12 @@ export function recordKnowledge(
   scope: string,
 ): void {
   evidence.knowledge.push(...hits);
-  // 0 命中不算这个 scope 完成。否则状态栏会告诉模型「你已经查到了」，
-  // 模型据此凭记忆写答案，一直到 finalizeReply 才因为没有依据被拒——
-  // 整轮 Model 开销白花，而且它全程收到的是假信号。
-  // 不标记完成，模型下一轮还能改写 query 再检索。
+  // 0 命中不算这个 scope 完成——否则状态栏会告诉模型「你已经查到了」，
+  // 模型据此凭记忆写答案。但尝试次数要记下来：查过三次仍为空时，
+  // 「尽力了」也是一种完成，模型该被允许如实说没查到（见 stageFor）。
   if (hits.length > 0) evidence.completed_knowledge_scopes.add(scope);
+  const attempts = evidence.attempted_knowledge_scopes.get(scope) ?? 0;
+  evidence.attempted_knowledge_scopes.set(scope, attempts + 1);
   if (scope === "general") evidence.general_knowledge_hits += hits.length;
   for (const productId of groundedProductIds)
     evidence.knowledge_product_ids.add(productId);

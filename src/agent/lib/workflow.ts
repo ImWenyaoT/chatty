@@ -53,6 +53,27 @@ export function gateToolCall(
   return { allowed: true, reason: null };
 }
 
+/** 知识检索的总次数上限。用完之后不再允许检索，未命中的 scope 视为已尽力。 */
+export const MAX_KNOWLEDGE_CALLS = 3;
+
+/** 一个 scope 算不算「查过了」：命中过，或者检索预算已经用完。 */
+function knowledgeScopeSettled(
+  evidence: RecommendationEvidence,
+  scope: string,
+): boolean {
+  if (evidence.completed_knowledge_scopes.has(scope)) return true;
+  // 查了三次一条都没命中，也是一个确定的结论：知识库里没有。
+  // 此时必须让模型收尾并如实说明，否则 allowed_next 为空又不给 final_output，
+  // 模型会被告知它什么都不能做——提示词允许的诚实回答反而成了死局。
+  return knowledgeCallCount(evidence) >= MAX_KNOWLEDGE_CALLS;
+}
+
+/** 已经发起过几次知识检索。 */
+export function knowledgeCallCount(evidence: RecommendationEvidence): number {
+  return evidence.used_tools.filter((tool) => tool === "retrieve_knowledge")
+    .length;
+}
+
 /** Evidence 是唯一状态源；阶段不单独持久化，避免两份状态漂移。 */
 export function stageFor(evidence: RecommendationEvidence): WorkflowStage {
   // 转成 Set 后只关心“是否完成”，不关心同一 Tool 调用了几次。
@@ -62,7 +83,7 @@ export function stageFor(evidence: RecommendationEvidence): WorkflowStage {
   }
   if (
     !evidence.required_knowledge_scopes.every((scope) =>
-      evidence.completed_knowledge_scopes.has(scope),
+      knowledgeScopeSettled(evidence, scope),
     )
   ) {
     return WorkflowStage.NEED_SUPPORT;
@@ -76,10 +97,9 @@ export function allowedTools(evidence: RecommendationEvidence): string[] {
   const allowed: string[] = [];
 
   // 知识检索允许改写 query 重试，但整个 Agent Loop 最多三次。
-  const knowledgeCalls = evidence.used_tools.filter(
-    (tool) => tool === "retrieve_knowledge",
-  ).length;
-  if (knowledgeCalls < 3) allowed.push("retrieve_knowledge");
+  if (knowledgeCallCount(evidence) < MAX_KNOWLEDGE_CALLS) {
+    allowed.push("retrieve_knowledge");
+  }
   if (
     evidence.required_support_tools.includes("get_marketing_strategy") &&
     !used.has("get_marketing_strategy")

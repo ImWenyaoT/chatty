@@ -47,6 +47,7 @@ import { productContext } from "./framing.ts";
 import { createRunContext, type ChattyRunContext } from "./context.ts";
 import { stableStringify } from "./stable-stringify.ts";
 import { BEFORE_MODEL_CALL } from "./hook-registry.ts";
+import { MAX_KNOWLEDGE_CALLS, knowledgeCallCount } from "./workflow.ts";
 
 /** 由 Harness 一次完成不需要 Model 判断的画像、搜索和库存步骤。 */
 export function prepareRecommendationContext(
@@ -387,8 +388,15 @@ function validateKnowledgeAnswer(
       reason: "knowledge_answer_missing",
       draft_action: draftAction,
     });
-  if (evidence.general_knowledge_hits === 0) {
-    throw new RecommendationError("knowledge_not_retrieved");
+  // 检索一条都没命中时，提示词明确允许模型"说明没有查到"——这条出口不能被堵死，
+  // 否则 Harness 就在否决自己允许的行为。只有在还能继续检索时才判死：
+  // 那种情况说明模型没用完机会就下结论。
+  const exhausted = knowledgeCallCount(evidence) >= MAX_KNOWLEDGE_CALLS;
+  if (evidence.general_knowledge_hits === 0 && !exhausted) {
+    throw new RecommendationError("knowledge_not_retrieved", {
+      reason: "answered_without_retrieval",
+      knowledge_calls: knowledgeCallCount(evidence),
+    });
   }
 }
 
