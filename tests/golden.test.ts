@@ -62,6 +62,9 @@ function buildEvidence(spec: Record<string, unknown>): RecommendationEvidence {
       ...(spec["required_support_tools"] as string[]),
     ];
   }
+  evidence.allowed_final_actions = [
+    ...((spec["allowed_final_actions"] as string[] | undefined) ?? []),
+  ];
   return evidence;
 }
 

@@ -93,6 +93,57 @@ describe("Harness 准备确定性 Context", () => {
       assert.deepStrictEqual(evidence.required_knowledge_scopes, ["general"]);
     });
   });
+
+  // 状态栏里的 allowed_final_action 是模型唯一能看到的输出契约。它一旦和
+  // finalizeReply 的分支判据漂移，模型会照着错的那份走——所以判据锁在这里。
+  it("allowed_final_actions 由是否存在商品需求决定", async () => {
+    await withCatalog((catalog) => {
+      const cases = [
+        {
+          name: "纯知识问答",
+          frame: { product_need: null, knowledge_query: "退货政策" },
+          expected: ["answer"],
+        },
+        {
+          name: "纯商品推荐",
+          frame: {
+            product_need: { category: "耳机", min_yuan: null, max_yuan: 300 },
+            knowledge_query: null,
+          },
+          expected: ["recommend", "clarify"],
+        },
+        {
+          name: "混合请求仍然不能用 answer 收尾",
+          frame: {
+            product_need: { category: "耳机", min_yuan: null, max_yuan: 300 },
+            knowledge_query: "七天无理由退货条件",
+          },
+          expected: ["recommend", "clarify"],
+        },
+      ];
+
+      for (const testCase of cases) {
+        const evidence = createEvidence();
+        const context = prepareTaskContext(
+          testCase.frame,
+          "user_active",
+          catalog,
+          evidence,
+        );
+        assert.deepStrictEqual(
+          evidence.allowed_final_actions,
+          testCase.expected,
+          testCase.name,
+        );
+        // finalizeReply 走的是 recommendation 是否为 null，两者必须同源。
+        assert.equal(
+          context.recommendation === null,
+          testCase.expected.includes("answer"),
+          `${testCase.name}：状态栏与 finalizeReply 判据漂移`,
+        );
+      }
+    });
+  });
 });
 
 describe("主 Agent 契约", () => {
