@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useRef, useState } from "react";
 import {
   ApiError,
@@ -9,8 +11,8 @@ import {
   type Product,
   type RunUsage,
   type Turn,
-} from "../lib/api";
-import CatalogBrowser from "../components/CatalogBrowser";
+} from "../lib/api-client.ts";
+import CatalogBrowser from "../components/CatalogBrowser.tsx";
 
 /**
  * 会话里的一条记录。

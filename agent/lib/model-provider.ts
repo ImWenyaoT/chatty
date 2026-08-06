@@ -8,8 +8,8 @@ import OpenAI from "openai";
 /**
  * Agent 层需要的凭据形状。
  *
- * 这里刻意不 import `server/settings.ts`：那份 `Settings` 还带着 `port` 这类纯 HTTP 字段，
- * 而 `agent/` 不该依赖 `server/`。调用方传进来的对象只要结构上满足这三个字段即可。
+ * 这里刻意不 import 应用层的 `lib/settings.ts`：那份 `Settings` 还带着与 Agent 无关的字段，
+ * 而 `agent/` 不该依赖应用层。调用方传进来的对象只要结构上满足这三个字段即可。
  */
 export type ModelCredentials = {
   readonly apiKey: string;

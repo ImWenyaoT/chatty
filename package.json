@@ -9,40 +9,33 @@
   },
   "scripts": {
     "setup": "pnpm install --frozen-lockfile",
-    "dev": "concurrently -k -n api,web \"pnpm dev:api\" \"pnpm dev:web\"",
-    "dev:api": "node --watch server/main.ts",
-    "dev:web": "vite --config web/vite.config.ts",
-    "build": "vite build --config web/vite.config.ts",
-    "start": "pnpm build && node server/main.ts",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
     "test": "node --test \"tests/**/*.test.ts\"",
-    "typecheck": "tsc -b --pretty false",
+    "typecheck": "tsc --noEmit --pretty false",
     "lint": "oxlint && pnpm format:check",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "eval": "node evals/lib/runner.ts",
     "eval:retrieval": "node evals/lib/runner.ts retrieval",
     "eval:agent": "node evals/lib/runner.ts agent",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
-    "eval": "node evals/lib/runner.ts"
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "dependencies": {
-    "@hono/node-server": "^2.1.0",
-    "@hono/zod-validator": "^0.9.0",
     "@openai/agents": "^0.14.2",
-    "hono": "^4.13.0",
     "openai": "^6.49.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "next": "^16.3.0"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.4",
-    "concurrently": "^10.0.4",
     "oxlint": "^1.75.0",
     "prettier": "^3.9.6",
-    "typescript": "~7.0.2",
-    "vite": "^8.2.0"
+    "typescript": "~7.0.2"
   }
 }

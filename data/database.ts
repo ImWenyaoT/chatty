@@ -2,7 +2,7 @@
 
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import type { z } from "zod";
 
 import { DATA_DIR } from "./seed.ts";
@@ -85,12 +85,12 @@ CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_documents_fts USING fts5(
 
 export class SeedDataError extends Error {}
 
-function readText(dataDir: URL, name: string): string {
-  return readFileSync(fileURLToPath(new URL(name, dataDir)), "utf8");
+function readText(dataDir: string, name: string): string {
+  return readFileSync(join(dataDir, name), "utf8");
 }
 
 function readJsonLines<TSchema extends z.ZodType>(
-  dataDir: URL,
+  dataDir: string,
   name: string,
   schema: TSchema,
 ): z.infer<TSchema>[] {
@@ -104,7 +104,7 @@ function readJsonLines<TSchema extends z.ZodType>(
 export class Database {
   readonly connection: DatabaseSync;
 
-  constructor(path: string = ":memory:", dataDir: URL = DATA_DIR) {
+  constructor(path: string = ":memory:", dataDir: string = DATA_DIR) {
     this.connection = new DatabaseSync(path);
 
     try {
@@ -121,7 +121,7 @@ export class Database {
     this.connection.close();
   }
 
-  #seed(dataDir: URL): void {
+  #seed(dataDir: string): void {
     const products = readJsonLines(dataDir, "products.jsonl", productSchema);
     const profiles = readJsonLines(
       dataDir,

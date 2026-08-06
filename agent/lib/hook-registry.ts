@@ -6,7 +6,7 @@
  */
 
 import { readdirSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
 import type { CallModelInputFilter } from "@openai/agents";
 
@@ -16,9 +16,10 @@ import type {
   ChattyHook,
 } from "./define-hook.ts";
 
-const HOOKS_DIR = new URL("../hooks/", import.meta.url);
+// 与 tool-names.ts 同一个理由：目录路径不能写成 new URL(dir, import.meta.url)。
+const HOOKS_DIR = join(process.cwd(), "agent/hooks");
 
-const HOOK_FILES: readonly string[] = readdirSync(fileURLToPath(HOOKS_DIR))
+const HOOK_FILES: readonly string[] = readdirSync(HOOKS_DIR)
   .filter((file) => file.endsWith(".ts"))
   .sort();
 
@@ -27,10 +28,10 @@ export const HOOK_NAMES: readonly string[] = HOOK_FILES.map((file) =>
 );
 
 const HOOKS: readonly ChattyHook[] = await Promise.all(
-  HOOK_FILES.map(async (file) => {
-    const module = await import(new URL(file, HOOKS_DIR).href);
+  HOOK_NAMES.map(async (name) => {
+    const module = await import(`../hooks/${name}.ts`);
     if (module.default === undefined) {
-      throw new Error(`hook_missing_default_export:${file}`);
+      throw new Error(`hook_missing_default_export:${name}`);
     }
     return module.default as ChattyHook;
   }),
