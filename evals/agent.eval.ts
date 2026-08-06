@@ -11,7 +11,7 @@ import {
 import { Catalog } from "../data/catalog.ts";
 import type { Product, Reply } from "../data/models.ts";
 import { ResponsesModelProvider } from "../agent/lib/model-provider.ts";
-import { loadSettings } from "../server/settings.ts";
+import { loadSettings } from "../lib/settings.ts";
 import { round } from "../data/round.ts";
 import { defineEval, type EvalResult } from "./lib/define-eval.ts";
 

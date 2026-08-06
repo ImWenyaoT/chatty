@@ -1,8 +1,17 @@
-/** Hono 从服务端路由推导请求与响应类型；前端不再维护第二份 HTTP 契约。 */
-import type { AppType } from "../../server/api.ts";
-import { hc, parseResponse, type ClientResponse } from "hono/client";
-
-const client = hc<AppType>("/");
+/**
+ * HTTP 客户端：把 `app/api/**` 的 5 个端点包成带稳定错误码的函数。
+ *
+ * 迁到 Next.js 之后没有了 Hono RPC 的端到端类型推导，响应类型在这里显式声明，
+ * 形状复用 `data/models.ts` 的领域类型——契约的真相仍然只有一份，只是从
+ * 「路由推导」换成了「领域模型 + 路由各自引用同一批类型」。
+ * 字段名保持 snake_case，与 SQLite 列名和 HTTP 契约一致。
+ */
+import type { DEMO_USERS } from "../data/demo-users.ts";
+import type {
+  Product as DomainProduct,
+  RecommendedProduct,
+  UserProfile,
+} from "../data/models.ts";
 
 /**
  * 带稳定错误码的失败。
@@ -26,10 +35,11 @@ const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 };
 
-async function request<T extends ClientResponse<unknown>>(pending: Promise<T>) {
-  let response: T;
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  let response: Response;
   try {
-    response = await pending;
+    // 第一类失败：请求根本没到后端。fetch 只在网络层失败时抛 TypeError。
+    response = await fetch(path, init);
   } catch (error: unknown) {
     if (error instanceof TypeError) throw new ApiError("network_error");
     throw error;
@@ -49,40 +59,88 @@ async function request<T extends ClientResponse<unknown>>(pending: Promise<T>) {
     throw new ApiError(code);
   }
   try {
-    return await parseResponse(response);
+    return (await response.json()) as T;
   } catch {
     throw new ApiError("invalid_response");
   }
 }
 
+const postJson = <T>(path: string, body: unknown) => {
+  return request<T>(path, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+};
+
+/** `GET /api/catalog`：启动时的一次性概览。 */
+export type DemoUser = (typeof DEMO_USERS)[number];
+
+export type CatalogInfo = {
+  categories: string[];
+  users: DemoUser[];
+  product_count: number;
+  model_id: string;
+};
+
+/** `GET /api/catalog/data`：数据页的只读快照。 */
+export type CatalogProduct = DomainProduct;
+export type CatalogProfile = UserProfile & {
+  display_name: string;
+  profile_label: string;
+};
+export type CatalogData = {
+  products: CatalogProduct[];
+  profiles: CatalogProfile[];
+};
+
+export type Session = { session_id: string };
+
+export type RunUsage = {
+  model_requests: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+};
+
+export type Product = RecommendedProduct;
+
+/**
+ * `POST /api/sessions/{id}/turns`：一轮的完整观察面。
+ *
+ * 四种 kind 共用同一组字段，不用的位置由后端填 null / 空数组——前端不再自行推导，
+ * 也不需要按 kind 拆成判别联合。
+ */
+export type Turn = {
+  understood_as: string;
+  answer: string | null;
+  latency_ms: number;
+  turns_left: number;
+  trace: string[];
+  usage: RunUsage;
+  kind: "answer" | "clarify" | "recommend" | "exhausted";
+  question: string | null;
+  products: Product[];
+};
+
 export const fetchCatalog = () => {
-  return request(client.api.catalog.$get());
+  return request<CatalogInfo>("/api/catalog");
 };
 
 export const fetchCatalogData = () => {
-  return request(client.api.catalog.data.$get());
+  return request<CatalogData>("/api/catalog/data");
 };
 
 export const createSession = (userId: string) => {
-  return request(client.api.sessions.$post({ json: { user_id: userId } }));
+  return postJson<Session>("/api/sessions", { user_id: userId });
 };
 
 export const takeTurn = (sessionId: string, text: string) => {
-  return request(
-    client.api.sessions[":sessionId"].turns.$post({
-      param: { sessionId },
-      json: { text },
-    }),
+  return postJson<Turn>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/turns`,
+    { text },
   );
 };
-
-export type CatalogInfo = Awaited<ReturnType<typeof fetchCatalog>>;
-export type CatalogData = Awaited<ReturnType<typeof fetchCatalogData>>;
-export type CatalogProduct = CatalogData["products"][number];
-export type CatalogProfile = CatalogData["profiles"][number];
-export type Turn = Awaited<ReturnType<typeof takeTurn>>;
-export type Product = Turn["products"][number];
-export type RunUsage = Turn["usage"];
 
 /** 错误码 → 人话。没收录的码原样显示，总比吞掉强。 */
 const MESSAGES: Record<string, string> = {

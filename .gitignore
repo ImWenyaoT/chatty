@@ -1,6 +1,6 @@
 # 依赖与构建产物
 node_modules/
-web/dist/
+.next/
 .pnpm-store/
 
 # 运行时数据
@@ -23,3 +23,6 @@ web/dist/
 
 # TypeScript 增量构建缓存
 *.tsbuildinfo
+
+# Next.js
+next-env.d.ts
