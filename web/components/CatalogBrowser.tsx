@@ -6,7 +6,7 @@ import {
   type CatalogData,
   type CatalogProduct,
   type CatalogProfile,
-} from "./api";
+} from "../lib/api";
 
 const yuan = (cents: number) => (cents / 100).toFixed(2);
 

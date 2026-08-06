@@ -9,8 +9,8 @@ import {
   type Product,
   type RunUsage,
   type Turn,
-} from "./api";
-import CatalogBrowser from "./CatalogBrowser";
+} from "../lib/api";
+import CatalogBrowser from "../components/CatalogBrowser";
 
 /**
  * 会话里的一条记录。

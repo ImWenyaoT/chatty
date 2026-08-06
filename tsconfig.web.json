@@ -22,5 +22,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["web/src"]
+  "include": ["web/app", "web/components", "web/lib"]
 }
