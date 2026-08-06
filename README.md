@@ -277,7 +277,10 @@ Chatty 有意保持在最小可实现范围：
 - [ADR 0001](docs/adr/0001-web-ui-and-http-layer.md)：为什么增加 React Frontend 与 HTTP Adapter。
 - [ADR 0002](docs/adr/0002-python-fastapi-agents-sdk.md)：为什么使用 OpenAI Agents SDK 与 DeepSeek Responses API。
 - [ADR 0003](docs/adr/0003-typescript-migration.md)：为什么从 Python 迁移到 TypeScript 全栈。
-- [CONTEXT.md](CONTEXT.md)：项目唯一领域词汇入口。
+- [ADR 0004](docs/adr/0004-flat-repo-layout.md)：为什么扁平化为单包，agent/ 提升为顶层目录。
+- [CONTEXT.md](CONTEXT.md)：项目唯一领域词汇入口，含 Single Agent 判据与 Project Structure 约定。
+- [DEMO.md](DEMO.md)：5 分钟演示脚本，每一步说明它在证明什么。
+- [PROOF.md](PROOF.md)：每条主张怎么自己验一遍，含端到端评测的已知方差。
 
 ## License
 
