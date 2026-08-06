@@ -20,8 +20,6 @@ import {
 } from "./models.ts";
 import { round } from "./round.ts";
 
-export const MAX_PRICE_CENTS = 1_000_000;
-
 /** Catalog 输入或业务结果无效。 */
 export class CatalogError extends Error {}
 
@@ -111,6 +109,15 @@ export class Catalog {
     );
   }
 
+  /** 库里最贵商品的价格。给「只说下限」的请求兜一个真实存在的上限。 */
+  #maxProductPriceCents(): number {
+    let max = 0;
+    for (const product of this.products) {
+      if (product.price_cents > max) max = product.price_cents;
+    }
+    return max;
+  }
+
   close(): void {
     this.#database.close();
   }
@@ -136,10 +143,14 @@ export class Catalog {
 
     let maxPriceCents = overrides.max_price_cents;
     if (maxPriceCents === null) {
+      // 用户只说了下限（"一万五以上的电脑"）时，上限取库里实际最贵的商品价。
+      // 之前这里用固定的 MAX_PRICE_CENTS，下限一旦超过它就会算出 min > max，
+      // search() 抛 invalid_product_search_price_range——那是个内部错误码，
+      // 会原样甩给用户。正确行为是「这个价位没有商品」，走澄清。
       maxPriceCents =
         overrides.min_price_cents === null
           ? base.max_price_cents
-          : MAX_PRICE_CENTS;
+          : Math.max(this.#maxProductPriceCents(), overrides.min_price_cents);
     }
 
     return {

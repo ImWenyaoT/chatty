@@ -435,7 +435,7 @@
   },
   "user_profile::只给下限时上限开放到最大值": {
     "ok": {
-      "max_price_cents": 1000000,
+      "max_price_cents": 999900,
       "min_price_cents": 200000,
       "preferred_categories": ["配件", "平板"],
       "recent_purchases": ["配件"],
