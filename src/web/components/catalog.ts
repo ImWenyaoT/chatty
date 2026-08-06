@@ -42,14 +42,7 @@ export const chattyCatalog = defineCatalog(elementTreeSchema, {
       description: "把若干子元素纵向排列",
       props: z.object({}),
     },
-    /** 政策/知识回答：混合请求里那半段文字。 */
-    policy_note: {
-      description: "展示一段有知识检索依据的政策或事实说明",
-      props: z.object({ text: z.string() }),
-    },
   },
   // chatty 的卡片是只读展示，不给模型任何可触发的动作。
   actions: {},
 });
-
-export type ChattyCatalog = typeof chattyCatalog;

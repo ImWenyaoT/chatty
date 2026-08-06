@@ -98,7 +98,6 @@ export const knowledgeDocumentSchema = z.object({
   product_id: z.string().nullable(),
   source: z.string(),
 });
-export type KnowledgeDocument = z.infer<typeof knowledgeDocumentSchema>;
 
 export const knowledgeHitSchema = knowledgeDocumentSchema.extend({
   chunk_ordinal: z.number().int(),

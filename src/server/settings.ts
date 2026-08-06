@@ -22,7 +22,6 @@ const settingsSchema = z.object({
   apiKey: z.string().default(""),
   baseUrl: z.string().default("https://api.deepseek.com"),
   model: z.string().default("deepseek-v4-flash"),
-  port: z.coerce.number().int().default(8000),
 });
 export type Settings = z.infer<typeof settingsSchema>;
 
@@ -57,6 +56,5 @@ export function loadSettings(root: string = REPO_ROOT): Settings {
     apiKey: pick(values, "DEEPSEEK_API_KEY", "OPENAI_API_KEY"),
     baseUrl: pick(values, "DEEPSEEK_BASE_URL", "OPENAI_BASE_URL"),
     model: pick(values, "DEEPSEEK_MODEL", "MODEL_ID"),
-    port: pick(values, "PORT"),
   });
 }
