@@ -15,7 +15,8 @@ import {
 import type { ChattyRunContext } from "./lib/context.ts";
 import { readInstructions } from "./lib/instructions.ts";
 import type { ModelProvider } from "./lib/model-provider.ts";
-import { CHATTY_TOOLS } from "./lib/tool-registry.ts";
+import { getMarketingStrategy } from "./tools/get_marketing_strategy.ts";
+import { retrieveKnowledge } from "./tools/retrieve_knowledge.ts";
 
 const INSTRUCTIONS = readInstructions(
   new URL("./instructions.md", import.meta.url),
@@ -38,7 +39,7 @@ export function buildChattyAgent(
     name: "Chatty",
     instructions: INSTRUCTIONS,
     model: provider.agentModel,
-    tools: CHATTY_TOOLS,
+    tools: [getMarketingStrategy, retrieveKnowledge],
     // SDK 会把最终输出交给 Zod，运行时验证是否符合 AgentDraft。
     outputType,
     // toolChoice="required" 强制第一轮先调用 Tool，不能跳过事实准备直接生成答案。

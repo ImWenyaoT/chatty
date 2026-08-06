@@ -1,6 +1,6 @@
 ## Domain docs
 
-工程工作开始前先读取 `docs/CONTEXT.md`。它是当前唯一的领域词汇入口。
+工程工作开始前先读取根 `CONTEXT.md`。它是当前唯一的领域词汇入口。
 
 ## Vocabulary
 
@@ -28,10 +28,10 @@ pnpm install
 
 源码全部收进 `src/`，按「前端黑盒 ↔ API ↔ 后端」分层，配置文件全在根。布局理由见 ADR 0004：
 
-- `src/agent/` — Agent 表面，即 `Model + Harness`：`agent.ts` + `instructions.md` + `tools/` + `hooks/` + `subagents/` + `lib/`。路径决定身份，文件名即 Tool 名、Hook 名；共享代码只放 `lib/`。
+- `src/agent/` — Agent 表面，即 `Model + Harness`：`agent.ts` + `instructions.md` + `tools/` + `subagents/` + `lib/`。`tools/` 一文件一个模型 Tool，由 `agent.ts` 静态 import；不使用目录扫描或 registry。
 - `src/data/` — SQLite 访问层与种子数据。
 - `src/server/` — 后端：`api.ts`（Hono 路由）+ `main.ts`（进程入口）+ `session-store.ts` + `settings.ts`。
-- `src/web/` — React 前端：`App.tsx` + `main.tsx` + `globals.css` + `components/` + `api-client.ts` + `render-spec.ts` + `format.ts`。
+- `src/web/` — React 前端：`App.tsx` + `main.tsx` + `globals.css` + `components/` + `api-client.ts` + `format.ts`。
 - `src/evals/` — 行为评测与检索评测，`<name>.eval.ts` 一文件一个 Eval，`evals.config.ts` 与 `lib/` 不是 Eval。
 - `tests/` — 单元测试。
 
@@ -68,7 +68,7 @@ pnpm run check
 ## PR instructions
 
 - commit 标题格式：conventional commits 英文前缀 + 中文标题。例：
-  `refactor: 扁平化仓库布局，agent/ 提升为顶层目录`
+  `refactor: 收敛 Agent 装配与前端渲染抽象`
 - 前缀取 `feat` / `fix` / `refactor` / `docs` / `chore` / `test` 之一。
 - 提交前跑 `pnpm run check`。
 
@@ -89,4 +89,4 @@ Issues/PRD 存于本仓库 GitHub Issues，用 `gh` CLI 读写。See `docs/agent
 
 ### Domain docs
 
-单上下文：`docs/CONTEXT.md` 是唯一的领域词汇入口。See `docs/agents/domain.md`.
+单上下文：根 `CONTEXT.md` 是唯一的领域词汇入口。See `docs/agents/domain.md`.

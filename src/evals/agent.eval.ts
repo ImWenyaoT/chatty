@@ -13,7 +13,7 @@ import type { Product, Reply } from "../data/models.ts";
 import { ResponsesModelProvider } from "../agent/lib/model-provider.ts";
 import { loadSettings } from "../server/settings.ts";
 import { round } from "../data/round.ts";
-import { defineEval, type EvalResult } from "./lib/define-eval.ts";
+import type { EvalDefinition, EvalResult } from "./lib/runner.ts";
 
 export type AgentCase = {
   name: string;
@@ -139,11 +139,11 @@ export function caseSucceeds(
   );
 }
 
-export default defineEval({
+export default {
   description: "7 条端到端 Case：推荐、澄清、政策问答与混合请求",
   requiresModel: true,
   run: main,
-});
+} satisfies EvalDefinition;
 
 async function main(): Promise<EvalResult> {
   const provider = new ResponsesModelProvider(loadSettings());

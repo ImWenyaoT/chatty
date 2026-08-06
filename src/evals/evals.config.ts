@@ -5,7 +5,7 @@
  * chatty 的 runner 只需要两件事：默认 gate，以及缺少凭据时怎么处理需要 Model 的 Eval。
  */
 
-import type { EvalResult } from "./lib/define-eval.ts";
+import type { EvalResult } from "./lib/runner.ts";
 
 export type EvalsConfig = {
   /** 每个 Eval 未自带 gate 时用它判定。默认要求全部 case 通过。 */

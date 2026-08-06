@@ -8,10 +8,8 @@ import {
   ChattyError,
   createChattyContext,
 } from "../src/agent/lib/chatty.ts";
-import { createEvidence } from "../src/agent/lib/evidence.ts";
+import { createEvidence, MODEL_TOOL_NAMES } from "../src/agent/lib/evidence.ts";
 import { buildChattyAgent } from "../src/agent/agent.ts";
-import { HOOK_NAMES } from "../src/agent/lib/hook-registry.ts";
-import { MODEL_TOOL_NAMES } from "../src/agent/lib/tool-names.ts";
 import { buildDraftCorrectionAgent } from "../src/agent/subagents/draft_corrector/agent.ts";
 import { buildTaskFrameAgent } from "../src/agent/subagents/task_framer/agent.ts";
 import {
@@ -160,7 +158,6 @@ describe("主 Agent 契约", () => {
   it("声明结构化输出与两个 Tool", () => {
     const agent = buildChattyAgent(providerOf(new ScriptedModel([])));
 
-    // 顺序是 readdir 的字母序：Tool 清单由目录派生，没有第二处可以排序的注册表。
     assert.deepStrictEqual(
       agent.tools.map((tool) => tool.name),
       ["get_marketing_strategy", "retrieve_knowledge"],
@@ -168,61 +165,16 @@ describe("主 Agent 契约", () => {
     assert.equal(agent.modelSettings.toolChoice, "required");
   });
 
-  // 这条是「路径即身份」这个约定本身：目录里有几个文件，Agent 就有几个同名 Tool。
-  // 加一个 .ts 文件就是加一个 Tool，删文件就是删 Tool，不需要改任何清单。
-  it("Tool 名与 agent/tools/ 的文件名一一对应", () => {
+  it("Evidence 与 Agent 使用同一组 Tool 名，且每个 Tool 都有阶段裁决", () => {
     const agent = buildChattyAgent(providerOf(new ScriptedModel([])));
-    const dir = fileURLToPath(new URL("../src/agent/tools/", import.meta.url));
-    const fromDisk = readdirSync(dir)
-      .filter((f) => f.endsWith(".ts"))
-      .map((f) => f.slice(0, -".ts".length))
-      .sort();
-
     assert.deepStrictEqual(
       agent.tools.map((tool) => tool.name).sort(),
-      fromDisk,
+      [...MODEL_TOOL_NAMES].sort(),
     );
-    assert.deepStrictEqual([...MODEL_TOOL_NAMES].sort(), fromDisk);
-    // 名字既然由文件名派生，就不该有任何 Tool 文件自己写 name。
-    for (const name of fromDisk) {
-      const source = readFileSync(`${dir}${name}.ts`, "utf8");
-      assert.ok(
-        !/^\s*name:\s*"/m.test(source),
-        `${name}.ts 不应写 name 字段，名字来自文件名`,
-      );
-    }
-  });
-
-  // 与 tools/ 对称：hooks/ 下每个文件都是一个 Hook，没有例外。guardrail 由 registry
-  // 统一挂到所有 Tool 上，Tool 文件里不该再出现 inputGuardrails。
-  it("Hook 名与 agent/hooks/ 的文件名一一对应，且 guardrail 由 registry 统一挂载", () => {
-    const hooksDir = fileURLToPath(
-      new URL("../src/agent/hooks/", import.meta.url),
-    );
-    const fromDisk = readdirSync(hooksDir)
-      .filter((f) => f.endsWith(".ts"))
-      .map((f) => f.slice(0, -".ts".length))
-      .sort();
-
-    assert.deepStrictEqual([...HOOK_NAMES].sort(), fromDisk);
-    assert.ok(fromDisk.length > 0, "hooks/ 不应为空");
-
-    const agent = buildChattyAgent(providerOf(new ScriptedModel([])));
     for (const tool of agent.tools) {
       const guardrails =
         (tool as { inputGuardrails?: unknown[] }).inputGuardrails ?? [];
-      assert.equal(guardrails.length, 1, `${tool.name} 应挂上 registry 的裁决`);
-    }
-
-    const toolsDir = fileURLToPath(
-      new URL("../src/agent/tools/", import.meta.url),
-    );
-    for (const file of readdirSync(toolsDir)) {
-      const source = readFileSync(`${toolsDir}${file}`, "utf8");
-      assert.ok(
-        !source.includes("inputGuardrails"),
-        `${file} 不应自己声明 guardrail`,
-      );
+      assert.equal(guardrails.length, 1, `${tool.name} 应挂上阶段裁决`);
     }
   });
 

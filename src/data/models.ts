@@ -24,13 +24,13 @@ export const productSchema = z.object({
   product_id: z.string(),
   name: z.string(),
   category: z.string(),
-  price_cents: z.number().int(),
+  price_cents: z.number().int().positive(),
   description: z.string(),
   brand: z.string(),
   seller_id: z.string(),
-  stock: z.number().int(),
+  stock: z.number().int().nonnegative(),
   tags: z.array(z.string()),
-  popularity_score: z.number(),
+  popularity_score: z.number().min(0).max(1),
   image_url: z.string(),
   source: z.string(),
 });
@@ -40,8 +40,8 @@ export const userContextSchema = z.object({
   recent_views: z.array(z.string()).nullable().default(null),
   recent_purchases: z.array(z.string()).nullable().default(null),
   preferred_categories: z.array(z.string()).nullable().default(null),
-  min_price_cents: z.number().int().nullable().default(null),
-  max_price_cents: z.number().int().nullable().default(null),
+  min_price_cents: z.number().int().nonnegative().nullable().default(null),
+  max_price_cents: z.number().int().nonnegative().nullable().default(null),
 });
 export type UserContext = z.infer<typeof userContextSchema>;
 
@@ -79,15 +79,19 @@ export const taskFrameSchema = z
     },
   );
 
-export const userProfileSchema = z.object({
-  user_id: z.string(),
-  segment: userSegmentSchema,
-  preferred_categories: z.array(z.string()),
-  min_price_cents: z.number().int(),
-  max_price_cents: z.number().int(),
-  recent_views: z.array(z.string()),
-  recent_purchases: z.array(z.string()),
-});
+export const userProfileSchema = z
+  .object({
+    user_id: z.string(),
+    segment: userSegmentSchema,
+    preferred_categories: z.array(z.string()),
+    min_price_cents: z.number().int().nonnegative(),
+    max_price_cents: z.number().int().nonnegative(),
+    recent_views: z.array(z.string()),
+    recent_purchases: z.array(z.string()),
+  })
+  .refine((profile) => profile.min_price_cents <= profile.max_price_cents, {
+    error: "invalid_profile_price_range",
+  });
 export type UserProfile = z.infer<typeof userProfileSchema>;
 
 export const knowledgeDocumentSchema = z.object({

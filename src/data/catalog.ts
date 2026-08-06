@@ -193,24 +193,21 @@ export class Catalog {
       throw new CatalogError("invalid_product_search_categories");
     }
 
-    const matches = this.products.filter((product) => {
-      if (
-        product.price_cents < minPriceCents ||
-        product.price_cents > maxPriceCents
-      ) {
-        return false;
-      }
-      return (
-        normalizedCategories.size === 0 ||
-        normalizedCategories.has(product.category.toLowerCase())
-      );
-    });
+    const matches = this.products
+      .filter((product) => {
+        const insidePriceRange =
+          product.price_cents >= minPriceCents &&
+          product.price_cents <= maxPriceCents;
+        const matchesCategory =
+          normalizedCategories.size === 0 ||
+          normalizedCategories.has(product.category.toLowerCase());
+        return insidePriceRange && matchesCategory;
+      })
+      .map((product) => ({ product, score: this.#score(product, profile) }));
 
-    // Python 的 sort(reverse=True) 与 JS 的比较器排序都是稳定的，分数相同则保持原顺序。
-    matches.sort(
-      (left, right) => this.#score(right, profile) - this.#score(left, profile),
-    );
-    return matches.slice(0, limit);
+    // 每件商品只算一次分数；稳定排序让同分商品继续保持原顺序。
+    matches.sort((left, right) => right.score - left.score);
+    return matches.slice(0, limit).map((match) => match.product);
   }
 
   inventory(productIds: string[]): Product[] {

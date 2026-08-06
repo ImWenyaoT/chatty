@@ -6,8 +6,7 @@ supersedes: 0002-python-fastapi-agents-sdk
 # 从 Python 迁移到 TypeScript 全栈
 
 Chatty 原本是 Python Backend 加 TypeScript Frontend。现在整个仓库统一为 TypeScript：
-`apps/api/` 是 Backend，承担 HTTP、Agent、Tool、Harness 与 SQLite；`apps/web/` 是 Frontend，
-保持 React + Vite。
+`src/server/`、`src/agent/` 与 `src/data/` 构成 Backend；`src/web/` 是 Frontend，保持 React + Vite。
 
 ADR 0002 中与技术栈无关的结论全部继续有效：Chatty 仍然是 Single Agent，五项能力仍然是
 Tool，SQLite 仍然是商品、库存和知识检索的运行时事实源，配置优先级仍然是
@@ -15,14 +14,15 @@ Tool，SQLite 仍然是商品、库存和知识检索的运行时事实源，配
 
 ## 决策
 
-- 运行方式是 `node` 直跑 `.ts`，没有构建步骤、没有 dist 目录。Node 从 22.18 起默认启用
-  类型剥离，仓库要求 Node 24+，因此不需要 `--experimental-strip-types` flag。
+- Backend 由 `node` 直跑 `.ts`，不编译服务端产物；Frontend 由 Vite 构建到 `dist/`，再由 Hono
+  托管静态文件。Node 从 22.18 起默认启用类型剥离，仓库要求 Node 24+，因此不需要
+  `--experimental-strip-types` flag。
   TypeScript 只做类型检查（`tsc --noEmit`），因此 `tsconfig.json` 打开 `erasableSyntaxOnly`，
   代码里不使用 enum、参数属性等需要代码生成的语法。
 - Backend 的 HTTP Adapter 用 Hono 替代 FastAPI，职责完全不变：校验、Session、错误码、Reply 序列化。
   Wire 格式保持 snake_case，Frontend 代码零改动。
-- Frontend 通过 Hono RPC 从 Backend 路由推导请求与响应类型，不再手写第二份 HTTP 契约；Zod
-  validator 同时负责请求校验和客户端输入类型推导。
+- Frontend 只通过 HTTP 调用 Backend，复用 `src/data/models.ts` 的领域类型；Zod validator
+  负责请求校验，HTTP 契约由 `tests/api.test.ts` 覆盖。
 - Schema 用 zod 替代 Pydantic，同时作为 Agents SDK 的 tool parameters 与 structured output。
 - 数据层用 Node 内置 `node:sqlite` 的 `DatabaseSync` 替代 `sqlite3`；FTS5、`unicode61`
   分词器与 `bm25()` 排序全部可用，检索行为不变。
@@ -32,8 +32,8 @@ Tool，SQLite 仍然是商品、库存和知识检索的运行时事实源，配
 ## 为什么
 
 单语言仓库消除了两套包管理器、两套 lint/format 工具链和两套 CI 依赖缓存。
-更重要的是领域模型只需要定义一次：`apps/api/src/data/models.ts` 保存领域定义，HTTP
-请求与响应类型由 Hono 路由直接推导到 Frontend，不再靠两份手写类型保持同步。
+更重要的是领域模型只需要定义一次：`src/data/models.ts` 保存领域定义，Frontend 和 Backend
+复用同一组商品、画像与回复类型。
 
 Node 的内置能力已经覆盖了原先需要第三方依赖的部分（SQLite、测试、类型剥离、env 解析），
 所以这次迁移在减少语言的同时也减少了依赖数量。
@@ -41,7 +41,7 @@ Node 的内置能力已经覆盖了原先需要第三方依赖的部分（SQLite
 ## 迁移是如何被验证的
 
 数据层是纯函数与纯 SQL，两种语言必须给出逐字节相同的结果。为此先建立
-`apps/api/tests/fixtures/golden/` 跨语言基线：63 条 case 覆盖分词、切块、Query 改写、FTS 表达式构造、
+`tests/fixtures/golden/` 跨语言基线：63 条 case 覆盖分词、切块、Query 改写、FTS 表达式构造、
 画像、搜索、打分、库存、知识检索、营销策略、最终重查、TaskFrame 解析与批次裁决。
 基线由 Python 实现生成并冻结，TypeScript 实现必须逐条匹配才算迁移完成。
 
@@ -74,5 +74,5 @@ Runner，因此阶段门禁、状态栏注入和 draft correction 都被真正�
 ## 影响
 
 - 旧 Python Backend、`pyproject.toml`、`uv.lock` 已删除，CI 不再安装 uv 与 Python。
-- 根 `package.json` 的 `dev`/`start`/`test`/`typecheck`/`lint`/`eval:*` 全部指向 `apps/*`。
+- 根 `package.json` 的 `dev`/`start`/`test`/`typecheck`/`lint`/`eval:*` 统一编排 `src/` 下的代码。
 - 服务端口、HTTP 路径、错误码与 JSON 字段名保持不变，Frontend 与 `.env.example` 无需改动。

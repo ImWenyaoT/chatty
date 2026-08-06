@@ -44,8 +44,11 @@ import {
 } from "./evidence.ts";
 import { productContext } from "./framing.ts";
 import { createRunContext, type ChattyRunContext } from "./context.ts";
-import { BEFORE_MODEL_CALL } from "./hook-registry.ts";
-import { MAX_KNOWLEDGE_CALLS, knowledgeCallCount } from "./workflow.ts";
+import {
+  appendAgentStatus,
+  MAX_KNOWLEDGE_CALLS,
+  knowledgeCallCount,
+} from "./workflow.ts";
 
 /** 由 Harness 一次完成不需要 Model 判断的画像、搜索和库存步骤。 */
 export function prepareRecommendationContext(
@@ -270,7 +273,7 @@ export class ChattyExecutor {
         // 一个 turn 指一次 Model 请求，不是一次用户对话。Tool Loop 最多 12 次。
         maxTurns: 12,
         // 每次调用 Model 前，都根据最新 Evidence 追加 agent_status。
-        callModelInputFilter: BEFORE_MODEL_CALL,
+        callModelInputFilter: appendAgentStatus,
         // Tool 串行执行，保证后一个 Tool 看见前一个 Tool 写入的 Evidence。
         toolExecution: { maxFunctionToolConcurrency: 1 },
         // 如果最终 JSON 不符合 AgentDraft，SDK 会调用这个纠正函数一次。

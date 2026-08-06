@@ -12,7 +12,19 @@ import { fileURLToPath } from "node:url";
 
 import { loadSettings } from "../../server/settings.ts";
 import config from "../evals.config.ts";
-import type { EvalDefinition } from "./define-eval.ts";
+
+export type EvalResult = {
+  passed: number;
+  total: number;
+  metrics?: Readonly<Record<string, number>>;
+};
+
+export type EvalDefinition = {
+  description: string;
+  requiresModel?: boolean;
+  gate?: (result: EvalResult) => boolean;
+  run: () => Promise<EvalResult> | EvalResult;
+};
 
 const EVALS_DIR = new URL("../", import.meta.url);
 const SUFFIX = ".eval.ts";

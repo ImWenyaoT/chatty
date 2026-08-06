@@ -2,7 +2,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  // 配置文件不在仓库根，Vite 的 root 默认取 cwd，这里显式指回 web/。
+  // 配置文件与 index.html 都在仓库根，开发和构建使用同一个入口。
   root: import.meta.dirname,
   plugins: [react()],
   server: {

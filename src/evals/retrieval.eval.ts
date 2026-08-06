@@ -4,7 +4,7 @@
  */
 
 import { Catalog } from "../data/catalog.ts";
-import { defineEval } from "./lib/define-eval.ts";
+import type { EvalDefinition } from "./lib/runner.ts";
 import { round } from "../data/round.ts";
 
 export type RetrievalCase = {
@@ -107,7 +107,7 @@ export function runRetrievalEval(catalog: KnowledgeSource): number {
   return metrics.hit_rate_at_5 < 1 ? 1 : 0;
 }
 
-export default defineEval({
+export default {
   description: "10 条标注 Query 上的 FTS5 + BM25 检索质量",
   run: () => {
     const catalog = new Catalog();
@@ -124,4 +124,4 @@ export default defineEval({
       catalog.close();
     }
   },
-});
+} satisfies EvalDefinition;

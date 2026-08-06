@@ -65,7 +65,8 @@ CREATE TABLE IF NOT EXISTS products (
 CREATE TABLE IF NOT EXISTS user_profiles (
   user_id TEXT PRIMARY KEY, segment TEXT NOT NULL,
   preferred_categories_json TEXT NOT NULL,
-  min_price_cents INTEGER NOT NULL, max_price_cents INTEGER NOT NULL,
+  min_price_cents INTEGER NOT NULL CHECK (min_price_cents >= 0),
+  max_price_cents INTEGER NOT NULL CHECK (max_price_cents >= min_price_cents),
   recent_views_json TEXT NOT NULL, recent_purchases_json TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS marketing_templates (
@@ -75,7 +76,8 @@ CREATE TABLE IF NOT EXISTS forbidden_words (word TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS knowledge_documents (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   doc_id TEXT NOT NULL UNIQUE, title TEXT NOT NULL,
-  content TEXT NOT NULL, category TEXT NOT NULL, product_id TEXT, source TEXT NOT NULL
+  content TEXT NOT NULL, category TEXT NOT NULL,
+  product_id TEXT REFERENCES products(product_id), source TEXT NOT NULL
 );
 CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_documents_fts USING fts5(
   doc_id UNINDEXED, chunk_ordinal UNINDEXED, title, content, raw_content UNINDEXED,
@@ -109,8 +111,9 @@ export class Database {
 
     try {
       this.connection.exec("PRAGMA journal_mode = WAL");
+      this.connection.exec("PRAGMA foreign_keys = ON");
       this.connection.exec(SCHEMA);
-      this.#seed(dataDir);
+      if (this.#isEmpty()) this.#seed(dataDir);
     } catch (error) {
       this.connection.close();
       throw error;
@@ -119,6 +122,14 @@ export class Database {
 
   close(): void {
     this.connection.close();
+  }
+
+  /** 新数据库才从种子初始化；已有业务数据在重启后继续保留。 */
+  #isEmpty(): boolean {
+    const row = this.connection
+      .prepare("SELECT COUNT(*) AS count FROM products")
+      .get() as { count: number };
+    return row.count === 0;
   }
 
   #seed(dataDir: URL): void {
@@ -149,8 +160,8 @@ export class Database {
     }
 
     const connection = this.connection;
+    connection.exec("BEGIN IMMEDIATE");
     try {
-      connection.exec("BEGIN IMMEDIATE");
       for (const table of [
         "knowledge_documents_fts",
         "knowledge_documents",
@@ -163,7 +174,10 @@ export class Database {
       }
 
       const insertProduct = connection.prepare(
-        "INSERT INTO products VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        `INSERT INTO products
+           (product_id, name, category, price_cents, description, brand,
+            seller_id, stock, tags_json, popularity_score, image_url, source)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
       for (const product of products) {
         insertProduct.run(
@@ -183,7 +197,10 @@ export class Database {
       }
 
       const insertProfile = connection.prepare(
-        "INSERT INTO user_profiles VALUES (?, ?, ?, ?, ?, ?, ?)",
+        `INSERT INTO user_profiles
+           (user_id, segment, preferred_categories_json, min_price_cents,
+            max_price_cents, recent_views_json, recent_purchases_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       );
       for (const profile of profiles) {
         insertProfile.run(
@@ -198,13 +215,14 @@ export class Database {
       }
 
       const insertTemplate = connection.prepare(
-        "INSERT INTO marketing_templates VALUES (?, ?, ?)",
+        `INSERT INTO marketing_templates (segment, tone, instructions)
+         VALUES (?, ?, ?)`,
       );
       for (const [segment, template] of Object.entries(templates)) {
         insertTemplate.run(segment, template.tone, template.instructions);
       }
       const insertWord = connection.prepare(
-        "INSERT INTO forbidden_words VALUES (?)",
+        "INSERT INTO forbidden_words (word) VALUES (?)",
       );
       for (const word of forbiddenWords) insertWord.run(word);
 

@@ -16,9 +16,9 @@ Model 擅长理解自然语言、选择 Tool、组织推荐理由和营销文案
 
 ```mermaid
 flowchart LR
-    UI["Frontend<br/>React (Next.js)"] --> API
+    UI["Frontend<br/>React + Vite"] --> API
     subgraph Backend["Backend"]
-        API["Route Handler<br/>HTTP Adapter"] --> A
+        API["Hono<br/>HTTP Adapter"] --> A
         subgraph A["Chatty Agent = Model + Harness"]
             M["Model"] <--> H["Harness<br/>Context / Agent Loop / Control"]
             H --> F["三个固定 Tool<br/>画像 / 搜索 / 库存"]
@@ -54,7 +54,7 @@ Chatty 因此既保留了 Agent 处理开放问题的能力，也让关键业务
 - `src/agent/lib/chatty.ts`：Chatty Agent 对外唯一的一轮接口 `run()`。
 - `src/agent/lib/executor.ts`：准备三个确定性步骤的 Context，并让 Agents SDK 执行开放 Tool Loop。
 - `src/agent/lib/workflow.ts`：Harness 的阶段机、批次门禁和上下文末尾状态栏。
-- `src/agent/tools/`：Harness 暴露给 Model 的知识检索与营销策略 function tools，一文件一个。
+- `src/agent/tools/`：Harness 暴露给 Model 的知识检索与营销策略 function tools。
 - `src/agent/lib/evidence.ts`：Harness 的调用顺序与事实集合校验。
 - `src/data/catalog.ts`：隔离 Tool 与 SQLite 查询。
 
