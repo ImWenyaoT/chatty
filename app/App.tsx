@@ -13,6 +13,8 @@ import {
   type Turn,
 } from "../lib/api-client.ts";
 import CatalogBrowser from "../components/CatalogBrowser.tsx";
+import { ChattyRenderer } from "../components/registry.tsx";
+import { buildRenderSpec } from "../lib/render-spec.ts";
 
 /**
  * 会话里的一条记录。
@@ -29,8 +31,6 @@ type Entry =
   | { kind: "run"; trace: string[]; latencyMs: number; usage: RunUsage }
   | { kind: "products"; products: Product[] }
   | { kind: "error"; code: string };
-
-const yuan = (cents: number) => (cents / 100).toFixed(2);
 
 export default function App() {
   const [view, setView] = useState<"chat" | "data">("chat");
@@ -279,9 +279,7 @@ function Bubble({ entry }: { entry: Entry }) {
     case "products":
       return (
         <section className="products">
-          {entry.products.map((product) => (
-            <ProductCard key={product.product_id} product={product} />
-          ))}
+          <ChattyRenderer spec={buildRenderSpec(entry.products, null)} />
           <p className="hint">
             ID、名称、价格与库存均来自 SQLite 重查，并通过 Harness
             六条证据校验；模型只写了理由和文案。
@@ -329,35 +327,5 @@ function RunTrace({
         {tokenNumber.format(usage.output_tokens)} tokens
       </p>
     </details>
-  );
-}
-
-function ProductCard({ product }: { product: Product }) {
-  let stockClassName = "";
-  let stockLabel = "有货";
-  if (product.low_stock) {
-    stockClassName = "low";
-    stockLabel = "库存紧张";
-  }
-
-  return (
-    <article className="card">
-      <div className="card-head">
-        <span className="name">{product.name}</span>
-        <span className="price">¥{yuan(product.price_cents)}</span>
-      </div>
-      <p className="meta">
-        <span className="id">{product.product_id}</span>
-        <span>{product.brand}</span>
-        <span className={stockClassName}>{stockLabel}</span>
-        {product.tags.map((tag) => (
-          <span key={tag} className="tag">
-            {tag}
-          </span>
-        ))}
-      </p>
-      <p className="reason">{product.reason}</p>
-      <p className="copy">{product.marketing_copy}</p>
-    </article>
   );
 }
