@@ -13,6 +13,7 @@ import type { Product, Reply } from "../data/models.ts";
 import { ResponsesModelProvider } from "../agent/lib/model-provider.ts";
 import { loadSettings } from "../server/settings.ts";
 import { round } from "../data/round.ts";
+import { defineEval, type EvalResult } from "./lib/define-eval.ts";
 
 export type AgentCase = {
   name: string;
@@ -138,12 +139,14 @@ export function caseSucceeds(
   );
 }
 
-async function main(): Promise<void> {
-  const provider = new ResponsesModelProvider(loadSettings());
-  if (!provider.configured) {
-    throw new Error("请在 .env.local、.env 或系统环境配置 DEEPSEEK_API_KEY");
-  }
+export default defineEval({
+  description: "7 条端到端 Case：推荐、澄清、政策问答与混合请求",
+  requiresModel: true,
+  run: main,
+});
 
+async function main(): Promise<EvalResult> {
+  const provider = new ResponsesModelProvider(loadSettings());
   let passed = 0;
   for (const testCase of CASES) {
     const catalog = new Catalog();
@@ -193,7 +196,5 @@ async function main(): Promise<void> {
       pass_rate: passed / CASES.length,
     }),
   );
-  if (passed !== CASES.length) process.exitCode = 1;
+  return { passed, total: CASES.length };
 }
-
-if (import.meta.main) await main();

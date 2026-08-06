@@ -4,6 +4,7 @@
  */
 
 import { Catalog } from "../data/catalog.ts";
+import { defineEval } from "./lib/define-eval.ts";
 import { round } from "../data/round.ts";
 
 export type RetrievalCase = {
@@ -106,11 +107,21 @@ export function runRetrievalEval(catalog: KnowledgeSource): number {
   return metrics.hit_rate_at_5 < 1 ? 1 : 0;
 }
 
-if (import.meta.main) {
-  const catalog = new Catalog();
-  try {
-    process.exitCode = runRetrievalEval(catalog);
-  } finally {
-    catalog.close();
-  }
-}
+export default defineEval({
+  description: "10 条标注 Query 上的 FTS5 + BM25 检索质量",
+  run: () => {
+    const catalog = new Catalog();
+    try {
+      const metrics = evaluateRetrieval(catalog);
+      console.log(JSON.stringify(metrics, null, 2));
+      // 命中率回退到 1 以下即视为失败，与 runRetrievalEval 的判据一致。
+      return {
+        passed: metrics.hit_rate_at_5 < 1 ? 0 : CASES.length,
+        total: CASES.length,
+        metrics,
+      };
+    } finally {
+      catalog.close();
+    }
+  },
+});

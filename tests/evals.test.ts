@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync, readdirSync } from "node:fs";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import type {
   KnowledgeReply,
@@ -10,16 +12,40 @@ import {
   answerContains,
   caseSucceeds,
   type AgentCase,
-} from "../evals/agent.ts";
+} from "../evals/agent.eval.ts";
 import {
   evaluateRetrieval,
   runRetrievalEval,
   type KnowledgeSource,
-} from "../evals/retrieval.ts";
+} from "../evals/retrieval.eval.ts";
+import { discoverEvalNames } from "../evals/lib/runner.ts";
 import { Catalog } from "../data/catalog.ts";
 import { DATA_DIR } from "../data/seed.ts";
 
 const emptySource: KnowledgeSource = { retrieveKnowledge: () => [] };
+
+describe("Eval 发现", () => {
+  // 与 tools/ hooks/ 同一条规则，只是判别方式是 `*.eval.ts` 后缀而不是「每个文件」——
+  // 所以 evals/ 下可以并存 lib/ 与 evals.config.ts。
+  it("Eval 名与 *.eval.ts 的文件名一一对应", () => {
+    const dir = fileURLToPath(new URL("../evals/", import.meta.url));
+    const fromDisk = readdirSync(dir)
+      .filter((f) => f.endsWith(".eval.ts"))
+      .map((f) => f.slice(0, -".eval.ts".length))
+      .sort();
+
+    assert.deepStrictEqual(discoverEvalNames(), fromDisk);
+    assert.ok(fromDisk.length > 0, "evals/ 不应为空");
+    // 身份来自路径，所以 Eval 文件里不该写 id 或 name。
+    for (const name of fromDisk) {
+      const source = readFileSync(`${dir}${name}.eval.ts`, "utf8");
+      assert.ok(
+        !/defineEval\(\{[^}]*\b(id|name):/s.test(source),
+        `${name}.eval.ts 不应写 id 或 name`,
+      );
+    }
+  });
+});
 
 describe("离线评测", () => {
   it("命中率回退时退出码非 0", (t) => {

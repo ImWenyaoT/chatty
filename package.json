@@ -19,9 +19,10 @@
     "lint": "oxlint && pnpm format:check",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "eval:retrieval": "node evals/retrieval.ts",
-    "eval:agent": "node evals/agent.ts",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "eval:retrieval": "node evals/lib/runner.ts retrieval",
+    "eval:agent": "node evals/lib/runner.ts agent",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "eval": "node evals/lib/runner.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.0",
