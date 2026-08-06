@@ -7,19 +7,15 @@
  */
 
 import { readdirSync } from "node:fs";
-import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-/**
- * 目录路径用 `process.cwd()` 拼，不用 `new URL(dir, import.meta.url)`。
- *
- * 打包器会把后者当成模块引用去解析，目录解析不了就报 Module not found；而
- * `import.meta.dirname` 在打包产物里指向 `.next/server/`，相对路径也失效。
- * 配合 `next.config.ts` 的 `outputFileTracingIncludes`，源文件会被带进产物。
- */
-export const TOOLS_DIR = join(process.cwd(), "src/agent/tools");
+/** 相对本文件定位，不依赖进程从哪个目录启动。 */
+export const TOOLS_DIR = new URL("../tools/", import.meta.url);
 
 /** `agent/tools/` 下的每个 `.ts` 都是一个 Tool，没有例外，因此不需要排除名单。 */
-export const TOOL_FILES: readonly string[] = readdirSync(TOOLS_DIR)
+export const TOOL_FILES: readonly string[] = readdirSync(
+  fileURLToPath(TOOLS_DIR),
+)
   .filter((file) => file.endsWith(".ts"))
   .sort();
 
