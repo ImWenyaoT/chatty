@@ -28,19 +28,18 @@ pnpm install
 
 源码全部收进 `src/`，按「前端黑盒 ↔ API ↔ 后端」分层，配置文件全在根。布局理由见 ADR 0004：
 
-- `src/app/` — Next.js 路由，只做薄层委托：`layout.tsx` + `page.tsx` + `globals.css` + `api/**/route.ts`。
 - `src/agent/` — Agent 表面，即 `Model + Harness`：`agent.ts` + `instructions.md` + `tools/` + `hooks/` + `subagents/` + `lib/`。路径决定身份，文件名即 Tool 名、Hook 名；共享代码只放 `lib/`。
 - `src/data/` — SQLite 访问层与种子数据。
-- `src/server/` — 后端非路由代码：`runtime.ts` + `session-store.ts` + `settings.ts` + `http.ts`。
-- `src/web/` — React 前端：`App.tsx` + `components/` + `api-client.ts` + `render-spec.ts` + `format.ts`。
+- `src/server/` — 后端：`api.ts`（Hono 路由）+ `main.ts`（进程入口）+ `session-store.ts` + `settings.ts`。
+- `src/web/` — React 前端：`App.tsx` + `main.tsx` + `globals.css` + `components/` + `api-client.ts` + `render-spec.ts` + `format.ts`。
 - `src/evals/` — 行为评测与检索评测，`<name>.eval.ts` 一文件一个 Eval，`evals.config.ts` 与 `lib/` 不是 Eval。
 - `tests/` — 单元测试。
 
 `src/agent/lib/` 与 `src/evals/lib/` 是各自 slot 内部的共享代码，不是同一个 `lib/`。
 
 依赖方向由分层固定：`src/web/` 只经 `api-client.ts` 打 HTTP，不 import `src/agent/` 与
-`src/server/`；`src/app/api/**` 是唯一的 API 边界；page 委托给 `src/web/App.tsx`，route 委托给
-`src/server/` 与 `src/agent/`。
+`src/server/`；`src/server/api.ts` 是唯一的 API 边界，它委托给 `src/agent/` 与 `src/data/`，
+自己不含业务规则。
 
 Node 24 直跑 `.ts`，靠 Node 原生类型剥离。因此 `tsconfig.json` 开着
 `erasableSyntaxOnly`：只写擦除类型后即为合法 JS 的语法。enum、参数属性、`namespace` 需要转译，
@@ -91,13 +90,3 @@ Issues/PRD 存于本仓库 GitHub Issues，用 `gh` CLI 读写。See `docs/agent
 ### Domain docs
 
 单上下文：`docs/CONTEXT.md` 是唯一的领域词汇入口。See `docs/agents/domain.md`.
-
-<!-- BEGIN:nextjs-agent-rules -->
-
-# This is NOT the Next.js you know
-
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
-
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
-
-<!-- END:nextjs-agent-rules -->

@@ -34,7 +34,6 @@ import { buildDraftCorrectionAgent } from "../subagents/draft_corrector/agent.ts
 import type { ModelProvider } from "./model-provider.ts";
 import {
   EvidenceError,
-  guardRepeatedCall,
   recordInventory,
   recordRunUsage,
   recordSearch,
@@ -45,7 +44,6 @@ import {
 } from "./evidence.ts";
 import { productContext } from "./framing.ts";
 import { createRunContext, type ChattyRunContext } from "./context.ts";
-import { stableStringify } from "./stable-stringify.ts";
 import { BEFORE_MODEL_CALL } from "./hook-registry.ts";
 import { MAX_KNOWLEDGE_CALLS, knowledgeCallCount } from "./workflow.ts";
 
@@ -61,8 +59,6 @@ export function prepareRecommendationContext(
   // Evidence 是 Harness 自己的账本。记录 profile 后，Model 不能声称没执行过的步骤。
   evidence.profile = profile;
   evidence.used_tools.push("get_user_profile");
-
-  guardRepeatedCall(evidence, "search_products", stableStringify(request));
 
   // candidates 包含符合画像和预算的候选商品，此时还没有确认库存。
   const candidates = catalog.search({
