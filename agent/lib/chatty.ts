@@ -35,11 +35,11 @@ import {
 } from "./executor.ts";
 import {
   TaskFrameParseError,
-  buildTaskFrameAgent,
   describeTaskFrame,
   parseTaskFrame,
   recoverInvalidTaskFrame,
 } from "./framing.ts";
+import { buildTaskFrameAgent } from "../subagents/task_framer/agent.ts";
 
 export const MAX_TURNS = 3;
 

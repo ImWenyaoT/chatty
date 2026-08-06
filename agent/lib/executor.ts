@@ -10,7 +10,6 @@
  */
 
 import {
-  Agent,
   extractAllTextOutput,
   run,
   type AgentInputItem,
@@ -20,7 +19,6 @@ import {
 
 import { Catalog, CatalogError } from "../../data/catalog.ts";
 import {
-  agentDraftSchema,
   type AgentDraft,
   type RecommendationContext,
   type RecommendationRequest,
@@ -29,6 +27,7 @@ import {
   type TaskFrame,
 } from "../../data/models.ts";
 import { buildChattyAgent, type ChattyAgentType } from "../agent.ts";
+import { buildDraftCorrectionAgent } from "../subagents/draft_corrector/agent.ts";
 import type { ModelProvider } from "./model-provider.ts";
 import {
   EvidenceError,
@@ -129,18 +128,6 @@ export class RecommendationError extends Error {
     this.code = code;
     this.diagnostics = diagnostics;
   }
-}
-
-/** 把 provider 未遵守 Schema 的最终文本纠正为同一个结构化契约。 */
-function buildDraftCorrectionAgent(provider: ModelProvider) {
-  return new Agent({
-    name: "Chatty Draft Corrector",
-    instructions:
-      "把输入改写为指定的结构化输出。只保留输入已有事实，不增加商品、优惠或折扣。",
-    model: provider.agentModel,
-    outputType: agentDraftSchema,
-    modelSettings: { reasoning: { effort: "none" } },
-  });
 }
 
 /** 读取失败响应中的文本，执行一次受限纠正，并把 Usage 计入主流程。 */
