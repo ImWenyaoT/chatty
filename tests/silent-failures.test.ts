@@ -2,6 +2,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { createEvidence, recordKnowledge } from "../src/agent/lib/evidence.ts";
+import {
+  MAX_KNOWLEDGE_CALLS,
+  allowedTools,
+  renderAgentStatus,
+  stageFor,
+} from "../src/agent/lib/workflow.ts";
+import { WorkflowStage } from "../src/agent/lib/context.ts";
 import { Catalog } from "../src/data/catalog.ts";
 import { DATA_DIR } from "../src/data/seed.ts";
 
@@ -63,5 +70,36 @@ describe("不把失败伪装成成功", () => {
     } finally {
       catalog.close();
     }
+  });
+
+  // 检索三次仍 0 命中时，提示词允许模型"说明没有查到"。此前 stageFor 永远停在
+  // NEED_SUPPORT，allowed_next 为空又不给 final_output——模型被告知它什么都不能做，
+  // 只能撞满 maxTurns。这是提示词与 Harness 互相矛盾的死局。
+  it("检索次数用尽后允许收尾，不把模型困在无事可做的状态", () => {
+    const evidence = createEvidence();
+    evidence.required_support_tools = ["retrieve_knowledge"];
+    evidence.required_knowledge_scopes = ["general"];
+
+    for (let i = 0; i < MAX_KNOWLEDGE_CALLS; i += 1) {
+      recordKnowledge(evidence, [], [], "general");
+    }
+
+    // 一条都没命中，所以 scope 不算"查到了"。
+    assert.equal(evidence.completed_knowledge_scopes.has("general"), false);
+    // 但检索预算已经用完，必须让模型收尾。
+    assert.equal(allowedTools(evidence).includes("retrieve_knowledge"), false);
+    assert.equal(stageFor(evidence), WorkflowStage.READY_TO_DRAFT);
+    assert.match(renderAgentStatus(evidence), /final_output/);
+  });
+
+  it("还有检索机会时不提前放行，避免模型没查完就下结论", () => {
+    const evidence = createEvidence();
+    evidence.required_support_tools = ["retrieve_knowledge"];
+    evidence.required_knowledge_scopes = ["general"];
+
+    recordKnowledge(evidence, [], [], "general");
+
+    assert.equal(stageFor(evidence), WorkflowStage.NEED_SUPPORT);
+    assert.equal(allowedTools(evidence).includes("retrieve_knowledge"), true);
   });
 });
