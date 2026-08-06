@@ -301,7 +301,7 @@ Chatty 有意保持在最小可实现范围：
 - [ADR 0002](docs/adr/0002-python-fastapi-agents-sdk.md)：为什么使用 OpenAI Agents SDK 与 DeepSeek Responses API。
 - [ADR 0003](docs/adr/0003-typescript-migration.md)：为什么从 Python 迁移到 TypeScript 全栈。
 - [ADR 0004](docs/adr/0004-flat-repo-layout.md)：为什么扁平化为单包，agent/ 提升为顶层目录。
-- [CONTEXT.md](CONTEXT.md)：项目唯一领域词汇入口，含 Single Agent 判据与 Project Structure 约定。
+- [CONTEXT.md](docs/CONTEXT.md)：项目唯一领域词汇入口，含 Single Agent 判据与 Project Structure 约定。
 
 ## License
 

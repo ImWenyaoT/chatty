@@ -1,6 +1,6 @@
 ## Domain docs
 
-工程工作开始前先读取根 `CONTEXT.md`。它是当前唯一的领域词汇入口。
+工程工作开始前先读取 `docs/CONTEXT.md`。它是当前唯一的领域词汇入口。
 
 ## Vocabulary
 
@@ -83,7 +83,7 @@ Issues/PRD 存于本仓库 GitHub Issues，用 `gh` CLI 读写。See `docs/agent
 
 ### Domain docs
 
-单上下文：根 `CONTEXT.md` 是唯一的领域词汇入口。See `docs/agents/domain.md`.
+单上下文：`docs/CONTEXT.md` 是唯一的领域词汇入口。See `docs/agents/domain.md`.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
