@@ -16,6 +16,7 @@ import {
   WorkflowStage,
   type ChattyRunContext,
   type GateDecision,
+  type KnowledgeScope,
   type ToolBatchState,
 } from "./context.ts";
 import type { RecommendationEvidence } from "./evidence.ts";
@@ -53,25 +54,27 @@ export function gateToolCall(
   return { allowed: true, reason: null };
 }
 
-/** 知识检索的总次数上限。用完之后不再允许检索，未命中的 scope 视为已尽力。 */
-export const MAX_KNOWLEDGE_CALLS = 3;
+/** 每个知识范围各自的检索上限；一个 scope 不能耗尽另一个 scope 的预算。 */
+export const MAX_KNOWLEDGE_CALLS_PER_SCOPE = 3;
 
 /** 一个 scope 算不算「查过了」：命中过，或者检索预算已经用完。 */
 function knowledgeScopeSettled(
   evidence: RecommendationEvidence,
-  scope: string,
+  scope: KnowledgeScope,
 ): boolean {
   if (evidence.completed_knowledge_scopes.has(scope)) return true;
   // 查了三次一条都没命中，也是一个确定的结论：知识库里没有。
   // 此时必须让模型收尾并如实说明，否则 allowed_next 为空又不给 final_output，
   // 模型会被告知它什么都不能做——提示词允许的诚实回答反而成了死局。
-  return knowledgeCallCount(evidence) >= MAX_KNOWLEDGE_CALLS;
+  return knowledgeCallCount(evidence, scope) >= MAX_KNOWLEDGE_CALLS_PER_SCOPE;
 }
 
-/** 已经发起过几次知识检索。 */
-export function knowledgeCallCount(evidence: RecommendationEvidence): number {
-  return evidence.used_tools.filter((tool) => tool === "retrieve_knowledge")
-    .length;
+/** 指定 scope 已经发起过几次知识检索。 */
+export function knowledgeCallCount(
+  evidence: RecommendationEvidence,
+  scope: KnowledgeScope,
+): number {
+  return evidence.attempted_knowledge_scopes.get(scope) ?? 0;
 }
 
 /** Evidence 是唯一状态源；阶段不单独持久化，避免两份状态漂移。 */
@@ -96,8 +99,12 @@ export function allowedTools(evidence: RecommendationEvidence): string[] {
   const used = new Set(evidence.used_tools);
   const allowed: string[] = [];
 
-  // 知识检索允许改写 query 重试，但整个 Agent Loop 最多三次。
-  if (knowledgeCallCount(evidence) < MAX_KNOWLEDGE_CALLS) {
+  // 只要还有必需 scope 未完成且未用尽自己的预算，就允许继续检索。
+  if (
+    evidence.required_knowledge_scopes.some(
+      (scope) => !knowledgeScopeSettled(evidence, scope),
+    )
+  ) {
     allowed.push("retrieve_knowledge");
   }
   if (
@@ -145,6 +152,13 @@ export function renderAgentStatus(evidence: RecommendationEvidence): string {
     evidence.required_knowledge_scopes.join(", ") || "none";
   const completedScopes =
     [...evidence.completed_knowledge_scopes].sort().join(", ") || "none";
+  const knowledgeCalls =
+    evidence.required_knowledge_scopes
+      .map(
+        (scope) =>
+          `${scope} ${knowledgeCallCount(evidence, scope)}/${MAX_KNOWLEDGE_CALLS_PER_SCOPE}`,
+      )
+      .join(", ") || "none";
   const nextSteps = allowedTools(evidence);
   if (stage === WorkflowStage.READY_TO_DRAFT) nextSteps.push("final_output");
   // version 不是数据库版本，只是让 Model 看出状态是否比上一轮有进展。
@@ -155,6 +169,7 @@ export function renderAgentStatus(evidence: RecommendationEvidence): string {
     `completed_steps: ${completed}`,
     `required_knowledge_scopes: ${requiredScopes}`,
     `completed_knowledge_scopes: ${completedScopes}`,
+    `knowledge_calls: ${knowledgeCalls}`,
     `allowed_next: ${nextSteps.join(", ")}`,
     `allowed_final_action: ${evidence.allowed_final_actions.join(", ") || "none"}`,
     // 读数旁边给结论：模型信状态栏，但「信」不等于「知道该怎么用」。

@@ -8,9 +8,7 @@ Chatty Agent 由 Model 和 Harness 组成：
 Agent = Model + Harness
 ```
 
-Model 擅长理解自然语言、选择 Tool、组织推荐理由和营销文案。Harness 是 Agent
-中位于 Model 外面的运行环境，负责准备 Context、提供并执行 Tool、保存调用证据、
-限制循环次数并校验最终结果。Tool 属于 Harness，不是与 Model、Harness 并列的第三部分。
+Model 擅长理解自然语言、选择 Tool、组织推荐理由和营销文案。Harness 是 Agent 中位于 Model 外面的运行环境，负责准备 Context、提供并执行 Tool、保存调用证据、限制循环次数并校验最终结果。Tool 属于 Harness，不是与 Model、Harness 并列的第三部分。
 
 一次运行会经过这些代码：
 
@@ -21,8 +19,8 @@ flowchart LR
         API["Hono<br/>HTTP Adapter"] --> A
         subgraph A["Chatty Agent = Model + Harness"]
             M["Model"] <--> H["Harness<br/>Context / Agent Loop / Control"]
-            H --> F["三个固定 Tool<br/>画像 / 搜索 / 库存"]
-            H --> T["两个 function tools<br/>知识 / 营销"]
+            H --> F["三个固定步骤<br/>画像 / 搜索 / 库存"]
+            H --> T["两个 Model Tool<br/>知识 / 营销"]
             F --> E
             T --> E[("Harness Evidence<br/>Model 不可见")]
             M --> D["AgentDraft"]
@@ -60,7 +58,5 @@ Chatty 因此既保留了 Agent 处理开放问题的能力，也让关键业务
 
 Agents SDK 负责循环和 Tool 调用，Chatty 自己的 Harness 负责业务约束、Evidence
 与最终裁决。这样标准运行循环不用重复实现，电商事实规则也不会被藏进 SDK adapter。
-
----
 
 [返回目录](README.md) · [下一章：Context 如何流动 →](chapter2.md)

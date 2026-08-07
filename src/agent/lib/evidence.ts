@@ -12,6 +12,7 @@ import type {
   RecommendationDraftItem,
   UserProfile,
 } from "../../data/models.ts";
+import type { KnowledgeScope } from "./context.ts";
 
 // Harness 确定性执行的步骤。它们不是模型可调用的 Tool；与下面两个模型 Tool
 // 合起来才是 used_tools 的全集。
@@ -47,14 +48,13 @@ export type RecommendationEvidence = {
   in_stock_product_order: string[];
   knowledge_product_ids: Set<string>;
   used_tools: string[];
-  call_log: string[];
   blocked_attempts: string[];
   required_support_tools: readonly string[];
   usage: Usage;
-  completed_knowledge_scopes: Set<string>;
+  completed_knowledge_scopes: Set<KnowledgeScope>;
   // 每个 scope 实际检索过几次。用来区分「还没查」和「查过但一条都没命中」。
-  attempted_knowledge_scopes: Map<string, number>;
-  required_knowledge_scopes: readonly string[];
+  attempted_knowledge_scopes: Map<KnowledgeScope, number>;
+  required_knowledge_scopes: readonly KnowledgeScope[];
   // 本轮最终输出允许的 action。与 finalizeReply 的分支同源，避免状态栏和校验漂移。
   allowed_final_actions: readonly string[];
 };
@@ -70,7 +70,6 @@ export function createEvidence(): RecommendationEvidence {
     in_stock_product_order: [],
     knowledge_product_ids: new Set(),
     used_tools: [],
-    call_log: [],
     blocked_attempts: [],
     required_support_tools: ["retrieve_knowledge", "get_marketing_strategy"],
     usage: new Usage(),
@@ -89,7 +88,6 @@ export type EvidenceSnapshot = {
   in_stock_product_ids: string[];
   grounded_product_ids: string[];
   knowledge_hits: number;
-  call_log: string[];
 };
 
 /** 只复制定位错误需要的字段，避免日志带出整段业务内容。 */
@@ -103,7 +101,6 @@ export function snapshotEvidence(
     in_stock_product_ids: [...evidence.in_stock_product_ids].sort(),
     grounded_product_ids: [...evidence.knowledge_product_ids].sort(),
     knowledge_hits: evidence.knowledge.length,
-    call_log: [...evidence.call_log],
   };
 }
 
@@ -141,23 +138,6 @@ export function validateToolSequence(
   return null;
 }
 
-/** 同一参数最多调用三次，防止模型陷入没有进展的循环。 */
-export function guardRepeatedCall(
-  evidence: RecommendationEvidence,
-  toolName: string,
-  signature: string,
-): void {
-  const call = `${toolName}(${signature})`;
-  evidence.call_log.push(call);
-
-  const repeated = evidence.call_log.filter((logged) => logged === call).length;
-  if (repeated > 3) {
-    throw new Error(
-      `相同参数调用 ${toolName} 已达 3 次，请改变参数后重试或使用现有结果`,
-    );
-  }
-}
-
 /** 记录商品搜索真正返回过的商品 ID。 */
 export function recordSearch(
   evidence: RecommendationEvidence,
@@ -191,7 +171,7 @@ export function recordKnowledge(
   evidence: RecommendationEvidence,
   hits: readonly KnowledgeHit[],
   groundedProductIds: readonly string[],
-  scope: string,
+  scope: KnowledgeScope,
 ): void {
   evidence.knowledge.push(...hits);
   // 0 命中不算这个 scope 完成——否则状态栏会告诉模型「你已经查到了」，

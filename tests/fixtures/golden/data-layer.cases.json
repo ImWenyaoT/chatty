@@ -303,9 +303,9 @@
 
     {
       "name": "只有商品需求",
-      "op": "parse_task_frame",
+      "op": "parse_request",
       "input": {
-        "wire": {
+        "output": {
           "product_requested": true,
           "category": "耳机",
           "min_yuan": null,
@@ -316,9 +316,9 @@
     },
     {
       "name": "只有知识问题",
-      "op": "parse_task_frame",
+      "op": "parse_request",
       "input": {
-        "wire": {
+        "output": {
           "product_requested": false,
           "category": null,
           "min_yuan": null,
@@ -329,9 +329,9 @@
     },
     {
       "name": "混合请求",
-      "op": "parse_task_frame",
+      "op": "parse_request",
       "input": {
-        "wire": {
+        "output": {
           "product_requested": true,
           "category": "耳机",
           "min_yuan": 100,
@@ -342,9 +342,9 @@
     },
     {
       "name": "类目不在目录内",
-      "op": "parse_task_frame",
+      "op": "parse_request",
       "input": {
-        "wire": {
+        "output": {
           "product_requested": true,
           "category": "飞机",
           "min_yuan": null,
@@ -355,9 +355,9 @@
     },
     {
       "name": "价格区间颠倒",
-      "op": "parse_task_frame",
+      "op": "parse_request",
       "input": {
-        "wire": {
+        "output": {
           "product_requested": true,
           "category": null,
           "min_yuan": 500,
@@ -368,9 +368,9 @@
     },
     {
       "name": "未请求商品却带上商品字段",
-      "op": "parse_task_frame",
+      "op": "parse_request",
       "input": {
-        "wire": {
+        "output": {
           "product_requested": false,
           "category": "耳机",
           "min_yuan": null,
@@ -381,9 +381,9 @@
     },
     {
       "name": "两部分都为空",
-      "op": "parse_task_frame",
+      "op": "parse_request",
       "input": {
-        "wire": {
+        "output": {
           "product_requested": false,
           "category": null,
           "min_yuan": null,
@@ -411,9 +411,9 @@
 
     {
       "name": "商品加知识的展示文本",
-      "op": "describe_task_frame",
+      "op": "describe_request",
       "input": {
-        "frame": {
+        "request": {
           "product_need": { "category": "耳机", "min_yuan": 100, "max_yuan": 300 },
           "knowledge_query": "退换货政策"
         }
@@ -421,9 +421,9 @@
     },
     {
       "name": "不限类目的展示文本",
-      "op": "describe_task_frame",
+      "op": "describe_request",
       "input": {
-        "frame": {
+        "request": {
           "product_need": { "category": null, "min_yuan": null, "max_yuan": null },
           "knowledge_query": null
         }
@@ -503,6 +503,7 @@
           ],
           "required_knowledge_scopes": ["general", "product"],
           "completed_knowledge_scopes": ["general"],
+          "attempted_knowledge_scopes": { "general": 1 },
           "allowed_final_actions": ["recommend", "clarify"],
           "blocked_attempts": []
         }
@@ -522,6 +523,7 @@
           ],
           "required_knowledge_scopes": ["product"],
           "completed_knowledge_scopes": ["product"],
+          "attempted_knowledge_scopes": { "product": 1 },
           "allowed_final_actions": ["recommend", "clarify"],
           "blocked_attempts": []
         }
@@ -543,6 +545,7 @@
           ],
           "required_knowledge_scopes": ["product"],
           "completed_knowledge_scopes": ["product"],
+          "attempted_knowledge_scopes": { "product": 3 },
           "allowed_final_actions": ["recommend", "clarify"],
           "blocked_attempts": [
             "need_support:retrieve_knowledge:tool_not_allowed_in_stage"
@@ -559,6 +562,7 @@
           "required_support_tools": ["retrieve_knowledge"],
           "required_knowledge_scopes": ["general"],
           "completed_knowledge_scopes": ["general"],
+          "attempted_knowledge_scopes": { "general": 1 },
           "allowed_final_actions": ["answer"],
           "blocked_attempts": []
         }
@@ -598,6 +602,7 @@
           ],
           "required_knowledge_scopes": ["product"],
           "completed_knowledge_scopes": ["product"],
+          "attempted_knowledge_scopes": { "product": 3 },
           "blocked_attempts": []
         },
         "calls": [

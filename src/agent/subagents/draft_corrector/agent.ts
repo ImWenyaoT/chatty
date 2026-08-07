@@ -1,7 +1,7 @@
 /**
  * Draft Corrector：provider 未遵守 schema 时，把最终文本改写回结构化契约。
  *
- * 与 task_framer 一样由 Harness 确定性调用（挂在 SDK 的 invalidFinalOutput 钩子上），
+ * 与 request_parser 一样由 Harness 确定性调用（挂在 SDK 的 invalidFinalOutput 钩子上），
  * 主 Agent 看不到它。它只允许改写，不允许引入新事实——收敛仍由 finalizeReply 负责。
  */
 

@@ -11,12 +11,12 @@ import {
 import { createEvidence, MODEL_TOOL_NAMES } from "../src/agent/lib/evidence.ts";
 import { buildChattyAgent } from "../src/agent/agent.ts";
 import { buildDraftCorrectionAgent } from "../src/agent/subagents/draft_corrector/agent.ts";
-import { buildTaskFrameAgent } from "../src/agent/subagents/task_framer/agent.ts";
+import { buildRequestParser } from "../src/agent/subagents/request_parser/agent.ts";
 import {
   ChattyExecutor,
   RecommendationError,
   prepareRecommendationContext,
-  prepareTaskContext,
+  prepareRequestContext,
 } from "../src/agent/lib/executor.ts";
 import { Catalog } from "../src/data/catalog.ts";
 import { DATA_DIR } from "../src/data/seed.ts";
@@ -47,7 +47,7 @@ function providerOf(model: ScriptedModel): ModelProvider {
   return { agentModel: model, configured: true, modelId: "scripted" };
 }
 
-const TASK_FRAME_KNOWLEDGE = JSON.stringify({
+const PARSED_REQUEST_KNOWLEDGE = JSON.stringify({
   product_requested: false,
   category: null,
   min_yuan: null,
@@ -88,7 +88,7 @@ describe("Harness 准备确定性 Context", () => {
   it("纯知识问答只要求知识检索", async () => {
     await withCatalog((catalog) => {
       const evidence = createEvidence();
-      prepareTaskContext(
+      prepareRequestContext(
         { product_need: null, knowledge_query: "退货政策" },
         "user_active",
         catalog,
@@ -109,12 +109,12 @@ describe("Harness 准备确定性 Context", () => {
       const cases = [
         {
           name: "纯知识问答",
-          frame: { product_need: null, knowledge_query: "退货政策" },
+          request: { product_need: null, knowledge_query: "退货政策" },
           expected: ["answer"],
         },
         {
           name: "纯商品推荐",
-          frame: {
+          request: {
             product_need: { category: "耳机", min_yuan: null, max_yuan: 300 },
             knowledge_query: null,
           },
@@ -122,7 +122,7 @@ describe("Harness 准备确定性 Context", () => {
         },
         {
           name: "混合请求仍然不能用 answer 收尾",
-          frame: {
+          request: {
             product_need: { category: "耳机", min_yuan: null, max_yuan: 300 },
             knowledge_query: "七天无理由退货条件",
           },
@@ -132,8 +132,8 @@ describe("Harness 准备确定性 Context", () => {
 
       for (const testCase of cases) {
         const evidence = createEvidence();
-        const context = prepareTaskContext(
-          testCase.frame,
+        const context = prepareRequestContext(
+          testCase.request,
           "user_active",
           catalog,
           evidence,
@@ -199,7 +199,7 @@ describe("主 Agent 契约", () => {
     const agent = buildChattyAgent(providerOf(new ScriptedModel([])));
     // 两个 subagent 名，外加 eve / Agents SDK 用来表示「委派」的通用 tool 名。
     const delegationToolNames = [
-      "task_framer",
+      "request_parser",
       "draft_corrector",
       "agent",
       "handoff",
@@ -278,10 +278,10 @@ describe("Subagent 提示词", () => {
   });
 
   // 这份是模板：唯一的动态位是 SQLite 里真实存在的类目。
-  it("task_framer 只替换 {{categories}}，其余逐字节保留", () => {
-    const template = onDisk("task_framer/instructions.md");
+  it("request_parser 只替换 {{categories}}，其余逐字节保留", () => {
+    const template = onDisk("request_parser/instructions.md");
     const categories = ["耳机", "键盘"];
-    const rendered = buildTaskFrameAgent(provider, categories).instructions;
+    const rendered = buildRequestParser(provider, categories).instructions;
 
     assert.ok(template.includes("{{categories}}"), "模板应保留占位符");
     assert.equal(rendered, template.replace("{{categories}}", "耳机、键盘"));
@@ -295,14 +295,14 @@ describe("Subagent 提示词", () => {
       fileURLToPath(new URL("../src/agent/subagents/", import.meta.url)),
     ).sort();
 
-    assert.deepStrictEqual(dirs, ["draft_corrector", "task_framer"]);
-    assert.equal(buildTaskFrameAgent(provider, ["耳机"]).name, "task_framer");
+    assert.deepStrictEqual(dirs, ["draft_corrector", "request_parser"]);
+    assert.equal(buildRequestParser(provider, ["耳机"]).name, "request_parser");
     assert.equal(buildDraftCorrectionAgent(provider).name, "draft_corrector");
   });
 
   it("subagent 提示词保持单行、无末尾换行", () => {
     for (const file of [
-      "task_framer/instructions.md",
+      "request_parser/instructions.md",
       "draft_corrector/instructions.md",
     ]) {
       assert.ok(!onDisk(file).includes("\n"), `${file} 应保持单行`);
@@ -313,7 +313,7 @@ describe("Subagent 提示词", () => {
 describe("Chatty 端到端", () => {
   it("知识问答完成一轮 Context In / Context Out", async () => {
     const model = new ScriptedModel([
-      textOutput(TASK_FRAME_KNOWLEDGE),
+      textOutput(PARSED_REQUEST_KNOWLEDGE),
       toolCalls([
         {
           callId: "call_1",
@@ -345,7 +345,7 @@ describe("Chatty 端到端", () => {
       });
       assert.equal(turn.understoodAs, "知识 · 快递公司");
       assert.deepStrictEqual(turn.trace, [
-        "task_framing",
+        "request_parsing",
         "retrieve_knowledge",
         "response_generation",
         "evidence_validation",
@@ -360,7 +360,7 @@ describe("Chatty 端到端", () => {
 
   it("阶段外的 Tool 调用被门禁拦截并要求纠正", async () => {
     const model = new ScriptedModel([
-      textOutput(TASK_FRAME_KNOWLEDGE),
+      textOutput(PARSED_REQUEST_KNOWLEDGE),
       // 纯知识问答不需要营销策略，这次调用应当被拒绝且不执行。
       toolCalls([
         { callId: "call_1", name: "get_marketing_strategy", args: {} },
@@ -391,7 +391,7 @@ describe("Chatty 端到端", () => {
       assert.equal(turn.reply.kind, "answer");
       // 被拦截的 Tool 不会进入 Trace。
       assert.deepStrictEqual(turn.trace, [
-        "task_framing",
+        "request_parsing",
         "retrieve_knowledge",
         "response_generation",
         "evidence_validation",
@@ -449,7 +449,7 @@ describe("草稿收敛", () => {
     await withCatalog(async (catalog) => {
       const evidence = createEvidence();
       evidence.general_knowledge_hits = 1;
-      const taskContext = prepareTaskContext(
+      const requestContext = prepareRequestContext(
         {
           product_need: { category: "耳机", min_yuan: null, max_yuan: 300 },
           knowledge_query: "七天无理由退货条件",
@@ -461,7 +461,7 @@ describe("草稿收敛", () => {
       const executor = new ChattyExecutor(catalog, providerOf(model));
 
       await assert.rejects(
-        executor.respond(taskContext, evidence, "推荐耳机并说明退货政策"),
+        executor.respond(requestContext, evidence, "推荐耳机并说明退货政策"),
         (error: unknown) =>
           error instanceof RecommendationError &&
           error.code === "invalid_draft",
@@ -487,7 +487,7 @@ describe("草稿收敛", () => {
     await withCatalog(async (catalog) => {
       const evidence = createEvidence();
       evidence.general_knowledge_hits = 1;
-      const taskContext = prepareTaskContext(
+      const requestContext = prepareRequestContext(
         { product_need: null, knowledge_query: "快递公司" },
         "user_active",
         catalog,
@@ -495,7 +495,11 @@ describe("草稿收敛", () => {
       );
       const executor = new ChattyExecutor(catalog, providerOf(model));
 
-      const reply = await executor.respond(taskContext, evidence, "快递公司");
+      const reply = await executor.respond(
+        requestContext,
+        evidence,
+        "快递公司",
+      );
 
       assert.equal(reply.kind, "answer");
       assert.match(reply.answer, /合作快递/);
@@ -510,7 +514,7 @@ describe("草稿收敛", () => {
 
     await withCatalog(async (catalog) => {
       const evidence = createEvidence();
-      const taskContext = prepareTaskContext(
+      const requestContext = prepareRequestContext(
         { product_need: null, knowledge_query: "退货政策" },
         "user_active",
         catalog,
@@ -519,7 +523,7 @@ describe("草稿收敛", () => {
       const executor = new ChattyExecutor(catalog, providerOf(model));
 
       await assert.rejects(
-        executor.respond(taskContext, evidence, "退货政策"),
+        executor.respond(requestContext, evidence, "退货政策"),
         (error: unknown) => {
           assert.ok(error instanceof RecommendationError);
           assert.equal(error.code, "recommendation_failed");

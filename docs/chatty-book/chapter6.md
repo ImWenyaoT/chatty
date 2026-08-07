@@ -29,7 +29,7 @@ pnpm eval:retrieval
 pnpm eval:agent
 ```
 
-它通过 `Chatty.run()` 调用真实 DeepSeek，让完整的 Task Framer、`Model + Harness` 处理
+它通过 `Chatty.run()` 调用真实 DeepSeek，让完整的 Request Parser、`Model + Harness` 处理
 商品推荐、政策问答和混合请求。
 每条任务都用代码检查：应该推荐、回答还是澄清，商品类目和预算是否正确、库存是否
 大于零，以及最终字段是否与 SQLite 一致。评估直接复用 Agents SDK `RunResult` 汇总的
@@ -58,14 +58,14 @@ Model 请求数与 Token Usage，并记录覆盖需求解析与主 Agent 的端�
 
 多轮要有意义，失败得先能归因。Chatty 早期把草稿阶段的失败几乎都收敛成一个错误码
 `invalid_draft`，它被抛在六个语义完全不同的位置，`diagnostics` 一律传空对象。看到
-`invalid_draft` 只知道草稿没过，不知道没过哪一关——无法归因的失败，跑再多轮也只是噪声。
+`invalid_draft` 只知道草稿没过，不知道没过哪一关。无法归因的失败，跑再多轮也只是噪声。
 后来给这六处各补一个 `reason`（抛出条件、错误码、返回给用户的文案都不动，零行为变更），
 上面那五轮的六次失败立刻能分类：`answer_action_not_allowed` 四次、`recommendation_failed`
 一次，还有一次没有捕获到 reason。
 
 `answer_action_not_allowed` 占全部失败的三分之二，并且横跨三个不同用例。它不是某个用例的
 偶发抖动，而是一个系统性失败模式：本轮存在商品需求时，模型仍然倾向输出 `action: "answer"`。
-这个结论在补 `reason` 之前拿不到，因为六种失败共用一个错误码。先分类，再计数——错误码的
+这个结论在补 `reason` 之前拿不到，因为六种失败共用一个错误码。先分类，再计数：错误码的
 粒度决定了能不能归因。
 
 拿到系统性失败模式之后，有两种修法，各跑五轮做对照。软的一种是把约束讲给模型听：在
@@ -99,7 +99,5 @@ instructions 必须等于 `src/agent/instructions.md` 的内容，读取器不�
 这些都不需要调用模型。
 
 评估的作用是形成一个短循环：观察失败用例，提出原因，只修改一个变量，然后重新执行同一组用例。小型合成数据不能代表真实电商业务效果，但可以防止 Chatty 在继续开发时破坏已经拥有的能力。
-
----
 
 [← 上一章：用代码守住事实](chapter5.md) · [返回目录](README.md) · [下一章：什么时候才需要训练模型 →](chapter7.md)

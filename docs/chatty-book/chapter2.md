@@ -2,7 +2,7 @@
 
 Model 每次只能根据当前收到的 Context 作出判断。对 Chatty 来说，Context 不只是一句用户原话，还包括会话历史、当前请求约束和 Tool Result。
 
-用户输入首先经过 Task Framer。它把自然语言转换成两个可组合的 Context Requirement：
+用户输入首先经过 Request Parser。它把自然语言转换成两个可组合的请求字段：
 
 ```text
 “我要一个 300 元的蓝牙耳机”
@@ -12,8 +12,8 @@ Model 每次只能根据当前收到的 Context 作出判断。对 Chatty 来说
 
 这里把“300 元的”理解为预算上限；“300 元以上”才表示下限，“200 到 300 元”表示区间。价格统一转换成分，后续代码不再处理模糊的中文金额。
 
-Task Framer 对 Model 使用无 `anyOf` 的扁平 `TaskFrameWire`，再由 Harness 映射为领域
-`TaskFrame(product_need?, knowledge_query?)`。Wire 中可缺省的 scalar 用 0/1 元素数组表达，
+Request Parser 对 Model 使用扁平的 `RequestParseOutput`，再由 Harness 映射为领域
+`ParsedRequest(product_need?, knowledge_query?)`。可缺省字段使用 nullable scalar，
 以兼容 DeepSeek Responses API 的 JSON Schema 子集。两者都仍通过 Agents SDK 的
 `outputType` 管理；DeepSeek 偶尔把实例包在 `properties` 时，只在 SDK
 `invalidFinalOutput` handler 中确定性解包和校验，不再次调用 Model。
@@ -25,7 +25,7 @@ Task Framer 对 Model 使用无 `anyOf` 的扁平 `TaskFrameWire`，再由 Harne
 
 随后，Chatty 的 `run()` 只把尚未完成的澄清请求保存成 Agents SDK 使用的结构化
 `user` / `assistant` 消息，而不是把所有聊天都继续塞给下一轮。任务成功或失败后会清空
-TaskFrame 上下文；Tool Result 与 Evidence 也只属于当前 Agent run，不跨轮累积。
+`ParsedRequest` 上下文；Tool Result 与 Evidence 也只属于当前 Agent run，不跨轮累积。
 
 Harness 执行 Tool 后同时更新两类不同用途的 Context：
 
@@ -44,11 +44,11 @@ Model 可以看到商品列表、库存状态和知识内容，从而继续推�
 
 进入 Agent Loop 前，Harness 只同步完成确定性的画像、搜索和库存，并将结果组成
 `RecommendationContext`；知识不提前检索。进入循环后，Model 根据 `knowledge_query` 与
-候选商品调用 `retrieve_knowledge`，观察结果后可以改写 Query，最多三次。推荐路径还必须
+候选商品调用 `retrieve_knowledge`，观察结果后可以改写 Query。每个必需 scope 最多检索三次。推荐路径还必须
 调用营销策略；纯知识路径不调用营销策略。Harness 仍按批次开始时的状态裁决重复或未知调用。
 
 Chatty 的会话最多三轮，并保存在服务端内存中。只有未完成的澄清跨轮继承任务约束；
-普通任务完成后，下一条消息会形成新的 TaskFrame。这个范围不需要上下文压缩或长期轨迹系统：
+普通任务完成后，下一条消息会形成新的 `ParsedRequest`。这个范围不需要上下文压缩或长期轨迹系统：
 会话结束或服务重启后，临时历史自然消失。
 
 DeepSeek Responses API 不负责保存 Chatty 的业务会话。结构化 history 由服务端内存和
@@ -100,12 +100,10 @@ sequenceDiagram
 | --- | --- | --- | --- |
 | Backend · HTTP | `src/server/api.ts` | 用户原话、会话 ID | answer / recommend / clarify / exhausted |
 | Backend · Agent Interface | `src/agent/lib/chatty.ts` | 用户、原话、`ChattyContext` | `ChattyTurn` |
-| Backend · Harness / 输入适配 | `src/agent/lib/framing.ts` | 当前原话、待澄清上下文、可选类目 | `TaskFrame` |
-| Backend · Harness / Agent Loop | `src/agent/lib/executor.ts` | 原始用户输入、`TaskContext` | 可信回答或稳定错误码 |
+| Backend · Harness / 输入适配 | `src/agent/lib/framing.ts` | 当前原话、待澄清上下文、可选类目 | `ParsedRequest` |
+| Backend · Harness / Agent Loop | `src/agent/lib/executor.ts` | 原始用户输入、`RequestContext` | 可信回答或稳定错误码 |
 | Backend · Harness / 控制 | `src/agent/lib/workflow.ts` | Evidence、整批 Tool calls | 阶段裁决、`agent_status` |
 | Backend · Harness / Tool | `src/agent/tools/` | Tool 参数、RunContext | Model-visible Result 与 Harness-owned Evidence |
 | Backend · 数据与检索 | `src/data/catalog.ts` | 结构化查询 | SQLite 事实与知识命中 |
-
----
 
 [← 上一章：Agent 与 Harness](chapter1.md) · [返回目录](README.md) · [下一章：用户画像与知识检索 →](chapter3.md)

@@ -4,8 +4,8 @@
  * 一次请求的数据流：
  *
  * 用户原话 + 上一轮待澄清内容
- *     -> Task Framer 把自然语言整理成 TaskFrame
- *     -> Harness 从 SQLite 准备确定性的 TaskContext
+ *     -> Request Parser 把自然语言整理成 ParsedRequest
+ *     -> Harness 从 SQLite 准备确定性的 RequestContext
  *     -> ChattyExecutor 运行主 Agent，调用 Tool 并校验 Evidence
  *     -> ChattyTurn 把回复、新 Context、Trace 和 Usage 一起交还 HTTP 层
  *
@@ -31,22 +31,22 @@ import { createEvidence, type RecommendationEvidence } from "./evidence.ts";
 import {
   ChattyExecutor,
   RecommendationError,
-  prepareTaskContext,
+  prepareRequestContext,
 } from "./executor.ts";
 import {
-  TaskFrameParseError,
-  describeTaskFrame,
-  parseTaskFrame,
-  recoverInvalidTaskFrame,
+  RequestParseError,
+  describeRequest,
+  parseRequest,
+  recoverInvalidRequest,
 } from "./framing.ts";
-import { buildTaskFrameAgent } from "../subagents/task_framer/agent.ts";
+import { buildRequestParser } from "../subagents/request_parser/agent.ts";
 
 export const MAX_TURNS = 3;
 
 /**
  * 一次会话中需要带入下一轮的最小状态。
  *
- * pendingUserMessages 给 Task Framer 看，让“200 元左右”这种短回答能补全上一轮问题；
+ * pendingUserMessages 给 Request Parser 看，让“200 元左右”这种短回答能补全上一轮问题；
  * history 给主 Agent 看，避免它忘记自己问过什么；turns 用来限制澄清次数。
  * 一旦给出完整回答或推荐，这些内容就会清空。
  */
@@ -64,7 +64,7 @@ export function createChattyContext(): ChattyContext {
 export type ChattyTurn = {
   // reply 是用户真正看到的领域结果：回答、推荐或澄清问题。
   reply: Reply;
-  // understoodAs 用于 UI 展示 Task Framer 怎样理解了用户原话。
+  // understoodAs 用于 UI 展示 Request Parser 怎样理解了用户原话。
   understoodAs: string;
   // context 必须由调用方保存，并在下一轮原样传回。
   context: ChattyContext;
@@ -123,14 +123,14 @@ export class Chatty implements ChattyAgent {
     text: string,
     context: ChattyContext,
   ): Promise<ChattyTurn> {
-    // 计时覆盖 Task Framer 和主 Agent，表示用户等待这一整轮的时间。
+    // 计时覆盖 Request Parser 和主 Agent，表示用户等待这一整轮的时间。
     const started = performance.now();
 
     // turns 在进入模型前检查，避免已经耗尽的会话继续产生费用。
     if (context.turns >= MAX_TURNS)
       throw new ChattyError("conversation_exhausted");
 
-    // Task Framer 需要看到所有待补全的原话；主 Agent 仍只接收当前 text 和 history。
+    // Request Parser 需要看到所有待补全的原话；主 Agent 仍只接收当前 text 和 history。
     const pendingMessages = [...context.pendingUserMessages, text];
     // Evidence 是本轮新建的 Harness 账本。它不会跨轮累积，也不会由 Model 填写。
     const evidence = createEvidence();
@@ -140,41 +140,41 @@ export class Chatty implements ChattyAgent {
         throw new MissingCredentialsError("llm_not_configured");
 
       // 第一步只把自然语言整理成业务字段，不搜索商品，也不生成答案。
-      const frameResult = await run(
-        buildTaskFrameAgent(this.#provider, this.#catalog.categories),
+      const parseResult = await run(
+        buildRequestParser(this.#provider, this.#catalog.categories),
         pendingMessages
           .map((message, index) => `用户第${index + 1}轮：${message}`)
           .join("\n"),
         {
           maxTurns: 1,
-          errorHandlers: { invalidFinalOutput: recoverInvalidTaskFrame },
+          errorHandlers: { invalidFinalOutput: recoverInvalidRequest },
         },
       );
-      if (frameResult.finalOutput === undefined) {
-        throw new TaskFrameParseError("invalid_task_frame_output");
+      if (parseResult.finalOutput === undefined) {
+        throw new RequestParseError("invalid_request_parse_output");
       }
-      const frame = parseTaskFrame(
-        frameResult.finalOutput,
+      const parsedRequest = parseRequest(
+        parseResult.finalOutput,
         this.#catalog.categories,
       );
 
       // 第二步先从 SQLite 准备画像、候选和库存等确定性 Context，再运行主 Agent。
-      const taskContext = prepareTaskContext(
-        frame,
+      const requestContext = prepareRequestContext(
+        parsedRequest,
         userId,
         this.#catalog,
         evidence,
       );
       const reply = await this.#executor.respond(
-        taskContext,
+        requestContext,
         evidence,
         text,
         context.history,
       );
 
-      // 一轮会调用两个 Model：Task Framer 和主 Agent，所以在这里合并 Usage。
+      // 一轮会调用两个 Model：Request Parser 和主 Agent，所以在这里合并 Usage。
       const usage = new Usage();
-      usage.add(frameResult.state.usage);
+      usage.add(parseResult.state.usage);
       usage.add(evidence.usage);
 
       // 默认清空 Context。只有澄清尚未完成时，才保留待补全内容。
@@ -192,7 +192,7 @@ export class Chatty implements ChattyAgent {
 
       return {
         reply,
-        understoodAs: describeTaskFrame(frame),
+        understoodAs: describeRequest(parsedRequest),
         context: nextContext,
         turnsLeft: MAX_TURNS - nextContext.turns,
         trace: traceSteps(evidence),
@@ -212,12 +212,12 @@ function toChattyError(error: unknown): ChattyError {
     return new ChattyError("llm_not_configured", {}, error);
   }
   if (
-    error instanceof TaskFrameParseError ||
+    error instanceof RequestParseError ||
     error instanceof MaxTurnsExceededError ||
     error instanceof ModelBehaviorError ||
     error instanceof ModelRefusalError
   ) {
-    return new ChattyError("task_frame_parse_failed", {}, error);
+    return new ChattyError("request_parse_failed", {}, error);
   }
   if (error instanceof RecommendationError) {
     return new ChattyError(error.code, error.diagnostics, error);
@@ -230,7 +230,7 @@ function toChattyError(error: unknown): ChattyError {
 /** 把 Harness 真实记录过的 Tool 整理成适合 UI 展示的简短 Trace。 */
 function traceSteps(evidence: RecommendationEvidence): string[] {
   // 同一个 Tool 可能重试多次，UI 只展示它是否参与过，不展示重复名称。
-  const steps = ["task_framing", ...new Set(evidence.used_tools)];
+  const steps = ["request_parsing", ...new Set(evidence.used_tools)];
   steps.push("response_generation", "evidence_validation");
   return steps;
 }

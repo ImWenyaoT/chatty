@@ -1,4 +1,4 @@
-# 第 4 章：五个 Tool
+# 第 4 章：Tool 如何分工
 
 Tool 属于 Harness。Chatty 有五项 Tool 能力：其中三个由 Harness 固定执行，两个通过
 Agents SDK 的 `tool()` 开放给 Model。每个 Tool 只回答一个明确的问题。
@@ -38,9 +38,7 @@ Model 提出的参数并不会直接成为业务事实。Harness 会用用户本
 
 如果商品搜索返回空数组，库存 Tool 仍会接收空数组。这一步看似没有查询内容，却形成了明确证据：当前条件下没有候选商品可以继续检查。完成其余 Tool 后，Agent 才能向用户提出放宽预算的澄清问题。
 
-Model 可以根据初次检索结果改写 Query，再次调用知识 Tool；每轮最多三次检索。同一批重复
+Model 可以根据初次检索结果改写 Query，再次调用知识 Tool；每个必需 scope 最多检索三次。同一批重复
 调用仍会被拒绝，防止并行调用读取不一致的 Evidence。
-
----
 
 [← 上一章：用户画像与知识检索](chapter3.md) · [返回目录](README.md) · [下一章：用代码守住事实 →](chapter5.md)

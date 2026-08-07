@@ -10,12 +10,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
-  TaskFrameParseError,
-  describeTaskFrame,
-  parseTaskFrame,
+  RequestParseError,
+  describeRequest,
+  parseRequest,
   productContext,
 } from "../src/agent/lib/framing.ts";
-import { taskFrameWireSchema } from "../src/agent/subagents/task_framer/agent.ts";
+import { requestParseOutputSchema } from "../src/agent/subagents/request_parser/agent.ts";
 import {
   createEvidence,
   validateToolSequence,
@@ -26,6 +26,7 @@ import {
   planToolBatch,
   renderAgentStatus,
 } from "../src/agent/lib/workflow.ts";
+import type { KnowledgeScope } from "../src/agent/lib/context.ts";
 import { Catalog, CatalogError } from "../src/data/catalog.ts";
 import { segmentForIndex, splitIntoChunks } from "../src/data/database.ts";
 import { DATA_DIR } from "../src/data/seed.ts";
@@ -52,11 +53,18 @@ function buildEvidence(spec: Record<string, unknown>): RecommendationEvidence {
     ...((spec["blocked_attempts"] as string[] | undefined) ?? []),
   ];
   evidence.completed_knowledge_scopes = new Set(
-    (spec["completed_knowledge_scopes"] as string[] | undefined) ?? [],
+    (spec["completed_knowledge_scopes"] as KnowledgeScope[] | undefined) ?? [],
   );
   evidence.required_knowledge_scopes = [
-    ...((spec["required_knowledge_scopes"] as string[] | undefined) ?? []),
+    ...((spec["required_knowledge_scopes"] as KnowledgeScope[] | undefined) ??
+      []),
   ];
+  evidence.attempted_knowledge_scopes = new Map(
+    Object.entries(
+      (spec["attempted_knowledge_scopes"] as
+        Partial<Record<KnowledgeScope, number>> | undefined) ?? {},
+    ) as [KnowledgeScope, number][],
+  );
   if ("required_support_tools" in spec) {
     evidence.required_support_tools = [
       ...(spec["required_support_tools"] as string[]),
@@ -155,24 +163,24 @@ function run(goldenCase: GoldenCase, catalog: Catalog): unknown {
       return catalog.finalize(draft, request, profile);
     }
 
-    case "parse_task_frame":
-      return parseTaskFrame(
-        taskFrameWireSchema.parse(data["wire"]),
+    case "parse_request":
+      return parseRequest(
+        requestParseOutputSchema.parse(data["output"]),
         catalog.categories,
       );
     case "product_context":
       return productContext(productNeedSchema.parse(data["need"]));
-    case "describe_task_frame": {
-      const frame = data["frame"] as {
+    case "describe_request": {
+      const request = data["request"] as {
         product_need: unknown;
         knowledge_query: string | null;
       };
-      return describeTaskFrame({
+      return describeRequest({
         product_need:
-          frame.product_need === null
+          request.product_need === null
             ? null
-            : productNeedSchema.parse(frame.product_need),
-        knowledge_query: frame.knowledge_query,
+            : productNeedSchema.parse(request.product_need),
+        knowledge_query: request.knowledge_query,
       });
     }
 
@@ -207,7 +215,7 @@ function outcome(goldenCase: GoldenCase, catalog: Catalog): unknown {
   try {
     return { ok: run(goldenCase, catalog) };
   } catch (error) {
-    if (error instanceof CatalogError || error instanceof TaskFrameParseError) {
+    if (error instanceof CatalogError || error instanceof RequestParseError) {
       return { error: error.message };
     }
     throw error;

@@ -18,10 +18,10 @@ Trace 展示“理解需求、检索知识、生成回答、校验 Evidence”�
 隐藏的 Chain-of-Thought。数据页只读展示 SQLite 中实际查询的商品和演示画像，方便 Demo
 时核对价格与库存；JSON/JSONL 仍只是初始化种子。
 
-下面两张图来自同一次真实 DeepSeek Demo。第一张展示 mixed-goal 对话与运行指标，第二张
+下面两张图来自同一次真实 DeepSeek 演示。第一张展示混合请求与运行指标，第二张
 展示运行时 SQLite 数据：
 
-![Chatty mixed-goal 对话与运行指标](../assets/chatty-conversation.png)
+![Chatty 混合请求与运行指标](../assets/chatty-conversation.png)
 
 ![Chatty 只读 SQLite 商品与用户画像](../assets/chatty-catalog.png)
 
@@ -35,7 +35,5 @@ Frontend 位于 `src/web/`，唯一的后端出口是 `src/web/api-client.ts`：
 `src/agent/` 与 `src/server/`，只按 HTTP 契约拿结果。Backend 路由位于
 `src/server/api.ts`。前后端共同引用 `src/data/models.ts` 的领域类型，
 契约的真相仍然只有一份。
-
----
 
 [← 上一章：用户画像如何逐步更新](chapter8.md) · [返回目录](README.md) · [下一章：为什么 Chatty 只有一个 Agent →](chapter10.md)

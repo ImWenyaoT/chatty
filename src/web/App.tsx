@@ -294,7 +294,7 @@ function Bubble({ entry }: { entry: Entry }) {
 }
 
 const TRACE_LABELS: Record<string, string> = {
-  task_framing: "理解需求",
+  request_parsing: "理解需求",
   get_user_profile: "读取用户画像",
   search_products: "搜索商品",
   check_inventory: "确认库存",

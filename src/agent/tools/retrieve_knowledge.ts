@@ -4,12 +4,13 @@ import { tool } from "@openai/agents";
 import { z } from "zod";
 
 import { requireContext } from "../lib/context.ts";
-import { guardRepeatedCall, recordKnowledge } from "../lib/evidence.ts";
+import { recordKnowledge } from "../lib/evidence.ts";
 import { stageGuardrail } from "../lib/workflow.ts";
 
 export const retrieveKnowledge = tool({
   name: "retrieve_knowledge",
-  description: "全文检索政策或商品知识，为回答和推荐理由提供依据。",
+  description:
+    "检索政策或商品知识。知识问题使用 general；商品推荐使用 product。0 命中时改写 query 后重试，不要原样重复。",
   parameters: z.object({
     query: z.string().describe("关键词查询。"),
     limit: z.number().int().min(1).max(8).describe("最多返回的知识块数量。"),
@@ -40,14 +41,6 @@ export const retrieveKnowledge = tool({
       productIds = context.evidence.in_stock_product_order;
     }
 
-    const signature = JSON.stringify({
-      query,
-      categories,
-      product_ids: productIds,
-      limit,
-      scope,
-    });
-    guardRepeatedCall(context.evidence, "retrieve_knowledge", signature);
     const hits = context.catalog.retrieveKnowledge({
       query,
       categories,

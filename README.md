@@ -2,7 +2,7 @@
 
 # 🛒 Chatty
 
-**面向电商推荐与政策问答的中文 Single Agent。**
+面向电商推荐与政策问答的中文 Single Agent。
 
 <sub>Model 负责理解需求、主动检索与生成表达；Harness + SQLite 负责流程、事实与可信输出。</sub>
 
@@ -15,25 +15,23 @@
 
 </div>
 
----
-
 Chatty 不是“让模型直接推荐商品”的聊天壳。它把一次请求拆成结构化需求、确定性业务准备、
 Model 主导的 Tool Loop、Evidence 校验与领域输出：商品 ID、价格和库存必须来自 SQLite，
 知识问答必须经过检索，模型只负责它擅长的语义理解、检索决策和自然语言表达。
 
 > 给 Model 自由度，但不把业务事实也交给 Model。
 
-## 效果
+## 运行效果
 
-下面是一次真实 DeepSeek mixed-goal 请求：既推荐 300 元内耳机，也回答七天无理由退货条件。
+下面是一次真实的 DeepSeek 混合请求：既推荐 300 元内耳机，也回答七天无理由退货条件。
 界面同时展示理解结果、耗时、Model 请求数、Token Usage 与事实来源说明。展开 trace 可以逐步
 看到哪些步骤由 Harness 确定性执行、哪些是 Model 自己发起的 Tool 调用。
 
 <a href="docs/assets/chatty-conversation.png">
-  <img src="docs/assets/chatty-conversation.png" alt="Chatty 完成耳机推荐与退货政策 mixed-goal 请求" width="920">
+  <img src="docs/assets/chatty-conversation.png" alt="Chatty 完成耳机推荐与退货政策混合请求" width="920">
 </a>
 
-Demo 还提供只读 SQLite 数据页。这里展示的是运行时实际查询的商品和画像，不是前端直接读取
+演示界面还提供只读 SQLite 数据页。这里展示的是运行时实际查询的商品和画像，不是前端直接读取
 JSON/JSONL 后伪造的数据面板。
 
 <a href="docs/assets/chatty-catalog.png">
@@ -42,12 +40,12 @@ JSON/JSONL 后伪造的数据面板。
 
 ## 为什么需要 Chatty
 
-纯 Model 推荐很容易产生三个问题：需求结构不稳定、Tool 调用失序、商品事实不可验证。
+让 Model 直接推荐会产生三个问题：需求结构不稳定、Tool 调用失序、商品事实不可验证。
 Chatty 用一条最小闭环解决它们：
 
 | 问题 | Chatty 的处理方式 | 最终约束 |
 | --- | --- | --- |
-| “200 元耳机”是预算、类目还是一句普通问答？ | Task Framer 输出结构化 `TaskFrame` | 商品需求与知识问题可以同时保留 |
+| “200 元耳机”是预算、类目还是一句普通问答？ | Request Parser 输出 `ParsedRequest` | 商品需求与知识问题可以同时保留 |
 | 商品搜索、库存与知识检索谁先执行？ | Harness 固定业务依赖，Agent Loop 只开放需要语义判断的 Tool | 不让 Model 重复决定确定步骤 |
 | Model 会不会编造商品、价格或库存？ | Harness-owned Evidence + 输出前 SQLite 重查 | 不一致直接失败，不做静默降级 |
 | 政策答案有没有依据？ | Agentic RAG 主动检索，通用与商品知识分域 | 缺少检索依据时拒绝产出 |
@@ -138,7 +136,7 @@ flowchart TB
     end
 
     subgraph Online["在线：Model 主动检索"]
-        Input["TaskFrame + 当前候选商品"] --> Decide["Model 选择 scope / Query"]
+        Input["ParsedRequest + 当前候选商品"] --> Decide["Model 选择 scope / Query"]
         Decide --> Tool["retrieve_knowledge"]
         Tool --> Rank["FTS5 + BM25"]
         FTS --> Rank
@@ -210,7 +208,7 @@ pnpm dev
 | --- | --- | --- |
 | 商品推荐 | `推荐 300 元以内的耳机` | 预算、库存和 SQLite 重查 |
 | 政策问答 | `你们使用哪家快递公司？` | general 知识检索 |
-| Mixed goal | `推荐耳机，并告诉我七天无理由退货条件` | general / product 双 scope |
+| 混合请求 | `推荐耳机，并告诉我七天无理由退货条件` | `general` / `product` 双 scope |
 | 无候选商品 | `推荐 200 元以内的耳机` | 澄清而不是编造商品 |
 | 画像覆盖 | 切换用户后提出同一需求 | 本轮明确约束优先于历史画像 |
 
@@ -218,7 +216,7 @@ pnpm dev
 用户 D 新客型、用户 E 流失风险型。同一句话在不同画像下的候选和文案都不同。
 
 某一轮失败是预期内的：端到端通过率存在波动，见[评估与验证](#评估与验证)。失败时界面返回
-稳定错误码，而不是一段编造的回答——宁可失败，也不返回没有事实支撑的内容。
+稳定错误码，而不是一段编造的回答。宁可失败，也不返回没有事实支撑的内容。
 
 ## 目录与阅读路径
 
@@ -259,7 +257,7 @@ API seam；`src/server/`、`src/agent/`、`src/data/` 构成 Backend，其中 `s
 建议代码阅读顺序：
 
 1. [`src/agent/lib/chatty.ts`](src/agent/lib/chatty.ts)：单一 `run()` Interface 与 Context In/Out。
-2. [`src/agent/lib/framing.ts`](src/agent/lib/framing.ts)：把自然语言映射为 `TaskFrame`。
+2. [`src/agent/lib/framing.ts`](src/agent/lib/framing.ts)：把自然语言解析为 `ParsedRequest`。
 3. [`src/agent/lib/executor.ts`](src/agent/lib/executor.ts)：生成 Draft，再以 Evidence 收敛为 Reply。
 4. [`src/agent/lib/workflow.ts`](src/agent/lib/workflow.ts)：状态栏、批次裁决与 Tool Guardrail。
 5. [`src/agent/lib/evidence.ts`](src/agent/lib/evidence.ts)：Harness-owned Evidence 与确定性校验。
@@ -272,9 +270,9 @@ Agent Eval 调用真实 Model。这样既能快速定位代码和检索回归，
 
 | 层级 | 是否调用 Model | 当前覆盖 / 指标 | 用途 |
 | --- | --- | --- | --- |
-| 确定性测试 | 否 | 35 项测试（含 63 条 golden 基线对拉） | Tool 顺序、Evidence、SQLite、HTTP、会话状态 |
+| 确定性测试 | 否 | 43 项测试（含 63 条 golden 基线） | Tool 顺序、Evidence、SQLite、HTTP、会话状态 |
 | Retrieval Eval | 否 | 10 条标注 Query；HitRate@5 100%，MRR@5 0.8083 | FTS5 + BM25 检索质量 |
-| Agent Eval | 是，真实 DeepSeek | 7 条端到端 Case；5 轮实测 pass_rate 0.714–1.000，平均 0.914 | 推荐、澄清、政策问答、mixed-goal |
+| Agent Eval | 是，真实 DeepSeek | 7 条端到端 Case；5 轮实测 pass_rate 0.714–1.000，平均 0.914 | 推荐、澄清、政策问答、混合请求 |
 
 ```bash
 pnpm test             # 确定性测试，不联网
@@ -287,12 +285,12 @@ pnpm run check        # lint、typecheck、test、build
 三条 `eval` 命令走同一个 runner（`src/evals/lib/runner.ts`），后两条只是加了名字筛选参数；
 退出码 0 表示每个跑过的 Eval 都过了自己的 gate。
 
-`pnpm run check` 与 CI 等价——`.github/workflows/ci.yml` 只跑这一条，本地绿即 CI 绿。
+`pnpm run check` 与 CI 等价：`.github/workflows/ci.yml` 只跑这一条，本地通过即 CI 通过。
 只有 Agent Eval 需要 Model API key，其余全部离线可跑。
 
 Agent Eval 还记录 Action、端到端耗时、Model 请求数与 Token。真实 Model 输出存在波动：
 7 个 Case 里只有 2 个每轮都通过，同一份代码的运行间波动大于多数改动的效果。因此
-**单次 `eval:agent` 结果不作为一次改动是否有效的判据**，需要多轮分布对比，或者把结论换成
+单次 `eval:agent` 结果不作为一次改动是否有效的判据。需要多轮分布对比，或者把结论换成
 确定性断言。失败归因方法、软约束与硬约束的对照实验见
 [Chatty Book 第 6 章](docs/chatty-book/chapter6.md)。
 
@@ -307,7 +305,7 @@ Chatty 有意保持在最小可实现范围：
 - 不处理支付、下单、真实库存扣减或生产级鉴权。
 - Web GUI 只面向桌面 Demo，不承担生产电商前台职责。
 
-## 文档
+## 延伸阅读
 
 - [Chatty Book](docs/chatty-book/README.md)：十章解释 Agent、Harness、Context、Tool、RAG、Evidence、Eval 与 Web GUI。
 - [ADR 0001](docs/adr/0001-web-ui-and-http-layer.md)：为什么增加 React Frontend 与 HTTP Adapter。

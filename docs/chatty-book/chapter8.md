@@ -16,13 +16,11 @@ Chatty 只接受一条简单而明确的更新信号：
 例如，用户明确提出购买耳机，而且这一轮成功返回了可信推荐，Chatty 才把“耳机”写入画像。如果 Agent 最终澄清、运行失败，或者用户没有明确说出类目，画像保持不变。
 
 更新发生在 `src/agent/lib/executor.ts` 的成功路径之后，`src/data/catalog.ts` 的
-`update_user_profile_after_success` 负责写入 SQLite 并刷新内存中的画像。当前请求仍然
+`updateUserProfileAfterSuccess` 负责写入 SQLite 并刷新内存中的画像。当前请求仍然
 优先于更新后的历史偏好，所以用户随时可以表达不同需求。
 
 这是一个很小的自适应闭环：有明确输入、有成功评价、有受控更新，也能在下一次请求中观察到影响。它首先是一种用户记忆，而不是 Agent 自动改 Prompt、修改代码或训练自身参数。
 
 Chatty 的数据库由演示种子初始化，服务重启后画像会恢复。对于当前简历 Demo，这个生命周期已经足够说明更新闭环，而不需要事件表、置信度、后台学习任务或发布回滚平台。
-
----
 
 [← 上一章：什么时候才需要训练模型](chapter7.md) · [返回目录](README.md) · [下一章：中文 Web GUI →](chapter9.md)

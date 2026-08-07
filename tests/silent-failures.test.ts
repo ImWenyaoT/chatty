@@ -3,8 +3,9 @@ import { describe, it } from "node:test";
 
 import { createEvidence, recordKnowledge } from "../src/agent/lib/evidence.ts";
 import {
-  MAX_KNOWLEDGE_CALLS,
+  MAX_KNOWLEDGE_CALLS_PER_SCOPE,
   allowedTools,
+  knowledgeCallCount,
   renderAgentStatus,
   stageFor,
 } from "../src/agent/lib/workflow.ts";
@@ -80,7 +81,7 @@ describe("不把失败伪装成成功", () => {
     evidence.required_support_tools = ["retrieve_knowledge"];
     evidence.required_knowledge_scopes = ["general"];
 
-    for (let i = 0; i < MAX_KNOWLEDGE_CALLS; i += 1) {
+    for (let i = 0; i < MAX_KNOWLEDGE_CALLS_PER_SCOPE; i += 1) {
       recordKnowledge(evidence, [], [], "general");
     }
 
@@ -101,5 +102,56 @@ describe("不把失败伪装成成功", () => {
 
     assert.equal(stageFor(evidence), WorkflowStage.NEED_SUPPORT);
     assert.equal(allowedTools(evidence).includes("retrieve_knowledge"), true);
+  });
+
+  it("一个 scope 用尽预算时不会跳过另一个必需 scope", () => {
+    const evidence = createEvidence();
+    evidence.required_support_tools = ["retrieve_knowledge"];
+    evidence.required_knowledge_scopes = ["general", "product"];
+
+    for (let i = 0; i < MAX_KNOWLEDGE_CALLS_PER_SCOPE; i += 1) {
+      recordKnowledge(evidence, [], [], "general");
+    }
+
+    assert.equal(knowledgeCallCount(evidence, "general"), 3);
+    assert.equal(knowledgeCallCount(evidence, "product"), 0);
+    assert.equal(stageFor(evidence), WorkflowStage.NEED_SUPPORT);
+    assert.equal(allowedTools(evidence).includes("retrieve_knowledge"), true);
+  });
+
+  it("所有必需 scope 都用尽预算后才允许收尾", () => {
+    const evidence = createEvidence();
+    evidence.required_support_tools = ["retrieve_knowledge"];
+    evidence.required_knowledge_scopes = ["general", "product"];
+
+    for (const scope of evidence.required_knowledge_scopes) {
+      for (let i = 0; i < MAX_KNOWLEDGE_CALLS_PER_SCOPE; i += 1) {
+        recordKnowledge(evidence, [], [], scope);
+      }
+    }
+
+    assert.equal(stageFor(evidence), WorkflowStage.READY_TO_DRAFT);
+    assert.equal(allowedTools(evidence).includes("retrieve_knowledge"), false);
+  });
+
+  it("一个 scope 命中时不会把未尝试的 scope 当作完成", () => {
+    const evidence = createEvidence();
+    evidence.required_support_tools = ["retrieve_knowledge"];
+    evidence.required_knowledge_scopes = ["general", "product"];
+    const hit = {
+      doc_id: "D1",
+      title: "退货政策",
+      content: "七天无理由退货",
+      category: "耳机",
+      product_id: null,
+      source: "policy",
+      chunk_ordinal: 0,
+      relevance_score: 1,
+    };
+
+    recordKnowledge(evidence, [hit], [], "general");
+
+    assert.equal(stageFor(evidence), WorkflowStage.NEED_SUPPORT);
+    assert.equal(knowledgeCallCount(evidence, "product"), 0);
   });
 });

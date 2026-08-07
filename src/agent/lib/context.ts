@@ -22,6 +22,9 @@ export const WorkflowStage = {
 // 也就是 "need_support" | "ready_to_draft"。好处是加一个阶段只改上面的对象。
 export type WorkflowStage = (typeof WorkflowStage)[keyof typeof WorkflowStage];
 
+/** 知识检索只有两种来源范围；联合类型让 Context、Tool 与 Evidence 共用同一契约。 */
+export type KnowledgeScope = "general" | "product";
+
 /** 单个 Tool call 的门禁结果。 */
 export type GateDecision = {
   allowed: boolean;
