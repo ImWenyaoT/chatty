@@ -158,7 +158,7 @@ const MESSAGES: Record<string, string> = {
   product_not_grounded: "推荐商品缺少知识依据，被证据校验拦下了",
   conversation_exhausted: "这轮问得够多了，开一段新对话再试",
   session_not_found: "会话不在了，开一段新的",
-  task_frame_parse_failed: "没有可靠地理解这句话，请换一种说法再试",
+  request_parse_failed: "没有可靠地理解这句话，请换一种说法再试",
   invalid_response: "后端响应格式不正确，请查看服务日志",
   invalid_error_response: "后端错误响应格式不正确，请查看服务日志",
   network_error: "连不上后端，请确认服务已经启动",

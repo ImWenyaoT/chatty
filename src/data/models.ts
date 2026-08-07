@@ -57,25 +57,25 @@ export const productNeedSchema = z.object({
 });
 export type ProductNeed = z.infer<typeof productNeedSchema>;
 
-export type TaskFrame = {
+export type ParsedRequest = {
   product_need: ProductNeed | null;
   knowledge_query: string | null;
 };
 
 /** Harness 使用的领域形状；不直接作为 provider structured output。 */
-export const taskFrameSchema = z
+export const parsedRequestSchema = z
   .object({
     product_need: productNeedSchema.nullable().default(null),
     knowledge_query: z.string().nullable().default(null),
   })
-  .transform((frame): TaskFrame => ({
-    product_need: frame.product_need,
-    knowledge_query: frame.knowledge_query?.trim() || null,
+  .transform((request): ParsedRequest => ({
+    product_need: request.product_need,
+    knowledge_query: request.knowledge_query?.trim() || null,
   }))
   .refine(
     (frame) => frame.product_need !== null || frame.knowledge_query !== null,
     {
-      error: "empty_task_frame",
+      error: "empty_request",
     },
   );
 
@@ -142,8 +142,8 @@ export type RecommendationContext = {
 };
 
 /** 进入主 Agent Loop 前已经准备好的全部业务 Context。 */
-export type TaskContext = {
-  frame: TaskFrame;
+export type RequestContext = {
+  request: ParsedRequest;
   recommendation: RecommendationContext | null;
 };
 

@@ -1,8 +1,8 @@
 {
-  "describe_task_frame::不限类目的展示文本": {
+  "describe_request::不限类目的展示文本": {
     "ok": "不限类目"
   },
-  "describe_task_frame::商品加知识的展示文本": {
+  "describe_request::商品加知识的展示文本": {
     "ok": "耳机 · ≥100 元 · ≤300 元 · 知识 · 退换货政策"
   },
   "finalize::finalize 拒绝售罄商品": {
@@ -164,13 +164,13 @@
   "match_expression::中英混合查询的 FTS 表达式": {
     "ok": "\"iphone\" OR \"手  机\" OR \"256g\""
   },
-  "parse_task_frame::两部分都为空": {
-    "error": "empty_task_frame"
+  "parse_request::两部分都为空": {
+    "error": "empty_request"
   },
-  "parse_task_frame::价格区间颠倒": {
+  "parse_request::价格区间颠倒": {
     "error": "invalid_product_price_range"
   },
-  "parse_task_frame::只有商品需求": {
+  "parse_request::只有商品需求": {
     "ok": {
       "knowledge_query": null,
       "product_need": {
@@ -180,16 +180,16 @@
       }
     }
   },
-  "parse_task_frame::只有知识问题": {
+  "parse_request::只有知识问题": {
     "ok": {
       "knowledge_query": "退换货政策",
       "product_need": null
     }
   },
-  "parse_task_frame::未请求商品却带上商品字段": {
+  "parse_request::未请求商品却带上商品字段": {
     "error": "product_fields_without_request"
   },
-  "parse_task_frame::混合请求": {
+  "parse_request::混合请求": {
     "ok": {
       "knowledge_query": "七天无理由退货",
       "product_need": {
@@ -199,7 +199,7 @@
       }
     }
   },
-  "parse_task_frame::类目不在目录内": {
+  "parse_request::类目不在目录内": {
     "error": "invalid_product_category"
   },
   "plan_tool_batch::同批重复工具只放行第一个": {
@@ -483,32 +483,32 @@
   },
   "workflow_state::可以生成草稿": {
     "ok": {
-      "agent_status": "<agent_status version=\"5\">\nstage: ready_to_draft\ncompleted_steps: get_user_profile, search_products, check_inventory, retrieve_knowledge, get_marketing_strategy\nrequired_knowledge_scopes: product\ncompleted_knowledge_scopes: product\nallowed_next: retrieve_knowledge, final_output\nallowed_final_action: recommend, clarify\nfinal_action_check: 'answer' is NOT allowed this turn (product request present) \u2014 use recommend or clarify\nblocked_attempts: 0\n</agent_status>",
-      "allowed_next": ["retrieve_knowledge"]
+      "agent_status": "<agent_status version=\"5\">\nstage: ready_to_draft\ncompleted_steps: get_user_profile, search_products, check_inventory, retrieve_knowledge, get_marketing_strategy\nrequired_knowledge_scopes: product\ncompleted_knowledge_scopes: product\nknowledge_calls: product 1/3\nallowed_next: final_output\nallowed_final_action: recommend, clarify\nfinal_action_check: 'answer' is NOT allowed this turn (product request present) \u2014 use recommend or clarify\nblocked_attempts: 0\n</agent_status>",
+      "allowed_next": []
     }
   },
   "workflow_state::支撑材料未补齐": {
     "ok": {
-      "agent_status": "<agent_status version=\"3\">\nstage: need_support\ncompleted_steps: get_user_profile, search_products, check_inventory\nrequired_knowledge_scopes: product\ncompleted_knowledge_scopes: none\nallowed_next: retrieve_knowledge, get_marketing_strategy\nallowed_final_action: recommend, clarify\nfinal_action_check: 'answer' is NOT allowed this turn (product request present) \u2014 use recommend or clarify\nblocked_attempts: 0\n</agent_status>",
+      "agent_status": "<agent_status version=\"3\">\nstage: need_support\ncompleted_steps: get_user_profile, search_products, check_inventory\nrequired_knowledge_scopes: product\ncompleted_knowledge_scopes: none\nknowledge_calls: product 0/3\nallowed_next: retrieve_knowledge, get_marketing_strategy\nallowed_final_action: recommend, clarify\nfinal_action_check: 'answer' is NOT allowed this turn (product request present) \u2014 use recommend or clarify\nblocked_attempts: 0\n</agent_status>",
       "allowed_next": ["retrieve_knowledge", "get_marketing_strategy"]
     }
   },
   "workflow_state::知识检索已达三次上限": {
     "ok": {
-      "agent_status": "<agent_status version=\"8\">\nstage: ready_to_draft\ncompleted_steps: get_user_profile, search_products, check_inventory, retrieve_knowledge, get_marketing_strategy\nrequired_knowledge_scopes: product\ncompleted_knowledge_scopes: product\nallowed_next: final_output\nallowed_final_action: recommend, clarify\nfinal_action_check: 'answer' is NOT allowed this turn (product request present) \u2014 use recommend or clarify\nblocked_attempts: 1\n</agent_status>",
+      "agent_status": "<agent_status version=\"8\">\nstage: ready_to_draft\ncompleted_steps: get_user_profile, search_products, check_inventory, retrieve_knowledge, get_marketing_strategy\nrequired_knowledge_scopes: product\ncompleted_knowledge_scopes: product\nknowledge_calls: product 3/3\nallowed_next: final_output\nallowed_final_action: recommend, clarify\nfinal_action_check: 'answer' is NOT allowed this turn (product request present) \u2014 use recommend or clarify\nblocked_attempts: 1\n</agent_status>",
       "allowed_next": []
     }
   },
   "workflow_state::知识范围未覆盖完": {
     "ok": {
-      "agent_status": "<agent_status version=\"5\">\nstage: need_support\ncompleted_steps: get_user_profile, search_products, check_inventory, retrieve_knowledge, get_marketing_strategy\nrequired_knowledge_scopes: general, product\ncompleted_knowledge_scopes: general\nallowed_next: retrieve_knowledge\nallowed_final_action: recommend, clarify\nfinal_action_check: 'answer' is NOT allowed this turn (product request present) \u2014 use recommend or clarify\nblocked_attempts: 0\n</agent_status>",
+      "agent_status": "<agent_status version=\"5\">\nstage: need_support\ncompleted_steps: get_user_profile, search_products, check_inventory, retrieve_knowledge, get_marketing_strategy\nrequired_knowledge_scopes: general, product\ncompleted_knowledge_scopes: general\nknowledge_calls: general 1/3, product 0/3\nallowed_next: retrieve_knowledge\nallowed_final_action: recommend, clarify\nfinal_action_check: 'answer' is NOT allowed this turn (product request present) \u2014 use recommend or clarify\nblocked_attempts: 0\n</agent_status>",
       "allowed_next": ["retrieve_knowledge"]
     }
   },
   "workflow_state::纯知识问答不需要营销策略": {
     "ok": {
-      "agent_status": "<agent_status version=\"1\">\nstage: ready_to_draft\ncompleted_steps: retrieve_knowledge\nrequired_knowledge_scopes: general\ncompleted_knowledge_scopes: general\nallowed_next: retrieve_knowledge, final_output\nallowed_final_action: answer\nfinal_action_check: only 'answer' is allowed this turn (no product request)\nblocked_attempts: 0\n</agent_status>",
-      "allowed_next": ["retrieve_knowledge"]
+      "agent_status": "<agent_status version=\"1\">\nstage: ready_to_draft\ncompleted_steps: retrieve_knowledge\nrequired_knowledge_scopes: general\ncompleted_knowledge_scopes: general\nknowledge_calls: general 1/3\nallowed_next: final_output\nallowed_final_action: answer\nfinal_action_check: only 'answer' is allowed this turn (no product request)\nblocked_attempts: 0\n</agent_status>",
+      "allowed_next": []
     }
   }
 }

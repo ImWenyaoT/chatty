@@ -3,7 +3,7 @@
  *
  * 这个文件位于 `chatty.ts` 和 Agents SDK 之间：
  *
- * 1. `prepareTaskContext()` 从 SQLite 准备模型可以参考的业务 Context；
+ * 1. `prepareRequestContext()` 从 SQLite 准备模型可以参考的业务 Context；
  * 2. `generateDraft()` 让 Model 调用 Tool，并返回 `AgentDraft`；
  * 3. `finalizeReply()` 不相信草稿中的事实，重新用 Evidence 和 SQLite 校验；
  * 4. 校验成功后才返回 `Reply`，失败则统一抛出 `RecommendationError`。
@@ -26,8 +26,8 @@ import {
   type RecommendationContext,
   type RecommendationRequest,
   type Reply,
-  type TaskContext,
-  type TaskFrame,
+  type ParsedRequest,
+  type RequestContext,
 } from "../../data/models.ts";
 import { buildChattyAgent, type ChattyAgentType } from "../agent.ts";
 import { buildDraftCorrectionAgent } from "../subagents/draft_corrector/agent.ts";
@@ -43,10 +43,14 @@ import {
   type RecommendationEvidence,
 } from "./evidence.ts";
 import { productContext } from "./framing.ts";
-import { createRunContext, type ChattyRunContext } from "./context.ts";
+import {
+  createRunContext,
+  type ChattyRunContext,
+  type KnowledgeScope,
+} from "./context.ts";
 import {
   appendAgentStatus,
-  MAX_KNOWLEDGE_CALLS,
+  MAX_KNOWLEDGE_CALLS_PER_SCOPE,
   knowledgeCallCount,
 } from "./workflow.ts";
 
@@ -85,22 +89,26 @@ export function prepareRecommendationContext(
   return { request, profile, candidates, inventory };
 }
 
-/** 按 TaskFrame 的非空字段确定性准备 Context。 */
-export function prepareTaskContext(
-  frame: TaskFrame,
+/** 按 ParsedRequest 的非空字段确定性准备 Context。 */
+export function prepareRequestContext(
+  request: ParsedRequest,
   userId: string,
   catalog: Catalog,
   evidence: RecommendationEvidence,
-): TaskContext {
+): RequestContext {
   let recommendation: RecommendationContext | null = null;
-  if (frame.product_need !== null) {
+  if (request.product_need !== null) {
     // ProductNeed 使用“元”，Catalog 使用“分”；productContext() 负责转换单位。
-    const request: RecommendationRequest = {
+    const recommendationRequest: RecommendationRequest = {
       user_id: userId,
       num_items: 3,
-      context: productContext(frame.product_need),
+      context: productContext(request.product_need),
     };
-    recommendation = prepareRecommendationContext(request, catalog, evidence);
+    recommendation = prepareRecommendationContext(
+      recommendationRequest,
+      catalog,
+      evidence,
+    );
   }
 
   // 纯知识问答不需要营销策略，只需要知识检索。
@@ -108,9 +116,9 @@ export function prepareTaskContext(
     evidence.required_support_tools = ["retrieve_knowledge"];
 
   // scope 告诉 Evidence：本轮必须完成通用知识、商品知识，或者两者都完成。
-  const scopes: string[] = [];
-  if (frame.knowledge_query !== null) scopes.push("general");
-  if (frame.product_need !== null) scopes.push("product");
+  const scopes: KnowledgeScope[] = [];
+  if (request.knowledge_query !== null) scopes.push("general");
+  if (request.product_need !== null) scopes.push("product");
   evidence.required_knowledge_scopes = scopes;
 
   // 有商品需求就不能用 answer 收尾，哪怕同时还有知识问题——混合请求把答案写进
@@ -118,7 +126,7 @@ export function prepareTaskContext(
   evidence.allowed_final_actions =
     recommendation === null ? ["answer"] : ["recommend", "clarify"];
 
-  return { frame, recommendation };
+  return { request, recommendation };
 }
 
 /** Executor 对外的稳定失败类型，code 给 HTTP 层，diagnostics 给日志。 */
@@ -186,7 +194,7 @@ function narrowActions(
     (action): action is DraftAction =>
       (DRAFT_ACTIONS as readonly string[]).includes(action),
   );
-  // 空集合意味着 TaskContext 没准备好；此时不收窄，交给既有校验报错。
+  // 空集合意味着 RequestContext 没准备好；此时不收窄，交给既有校验报错。
   return allowed.length === 0
     ? DRAFT_ACTIONS
     : (allowed as [DraftAction, ...DraftAction[]]);
@@ -206,7 +214,7 @@ export class ChattyExecutor {
 
   /** 先生成 Model 草稿，再用确定性代码把草稿收敛为 Reply。 */
   async respond(
-    taskContext: TaskContext,
+    requestContext: RequestContext,
     evidence: RecommendationEvidence,
     userText: string,
     history: readonly AgentInputItem[] = [],
@@ -214,13 +222,13 @@ export class ChattyExecutor {
     try {
       // draft 仍然只是 Model 的提议，不能直接返回给用户。
       const draft = await this.#generateDraft(
-        taskContext,
+        requestContext,
         evidence,
         userText,
         history,
       );
       // finalize 是信任边界：只有通过 Evidence 和 SQLite 校验才能成为 Reply。
-      return this.#finalizeReply(taskContext, evidence, draft);
+      return this.#finalizeReply(requestContext, evidence, draft);
     } catch (error) {
       // 把不同来源的失败统一成 RecommendationError；cause 保留原始异常链。
       if (error instanceof RecommendationError) {
@@ -254,20 +262,20 @@ export class ChattyExecutor {
 
   /** 运行主 Agent Loop；此阶段只产出草稿，不返回用户结果。 */
   async #generateDraft(
-    taskContext: TaskContext,
+    requestContext: RequestContext,
     evidence: RecommendationEvidence,
     userText: string,
     history: readonly AgentInputItem[],
   ): Promise<AgentDraft> {
     // 纯知识问答没有 recommendation，因此 request 可以是 null。
-    const request = taskContext.recommendation?.request ?? null;
+    const request = requestContext.recommendation?.request ?? null;
     // RunContext 是一次 Agent Loop 的共享运行时对象。
     // Tool Result 返回 Model；Evidence 留在 RunContext，仅供 Harness 校验。
     const runContext = createRunContext(request, this.#catalog, evidence);
 
     const result = await run(
       buildChattyAgent(this.#provider, narrowActions(evidence)),
-      buildModelInput(taskContext, userText, history),
+      buildModelInput(requestContext, userText, history),
       {
         context: runContext,
         // 一个 turn 指一次 Model 请求，不是一次用户对话。Tool Loop 最多 12 次。
@@ -293,24 +301,29 @@ export class ChattyExecutor {
 
   /** 用 Harness Evidence 和 SQLite 把模型草稿收敛为领域 Reply。 */
   #finalizeReply(
-    taskContext: TaskContext,
+    requestContext: RequestContext,
     evidence: RecommendationEvidence,
     draft: AgentDraft,
   ): Reply {
-    const recommendation = taskContext.recommendation;
-    validateKnowledgeAnswer(taskContext, evidence, draft.answer, draft.action);
+    const recommendation = requestContext.recommendation;
+    validateKnowledgeAnswer(
+      requestContext,
+      evidence,
+      draft.answer,
+      draft.action,
+    );
 
     // 路径 1：只有知识问答时才能直接 answer；商品请求不能借此绕过推荐校验。
     if (draft.action === "answer") {
       if (
-        taskContext.frame.knowledge_query === null ||
+        requestContext.request.knowledge_query === null ||
         recommendation !== null ||
         draft.answer === null
       ) {
         throw new RecommendationError("invalid_draft", {
           reason: "answer_action_not_allowed",
           draft_action: draft.action,
-          has_knowledge_query: taskContext.frame.knowledge_query !== null,
+          has_knowledge_query: requestContext.request.knowledge_query !== null,
           has_product_request: recommendation !== null,
           answer_present: draft.answer !== null,
         });
@@ -367,7 +380,7 @@ export class ChattyExecutor {
 
 /** 保留用户原话，并把 Harness Context 作为独立来源注入。 */
 function buildModelInput(
-  taskContext: TaskContext,
+  requestContext: RequestContext,
   userText: string,
   history: readonly AgentInputItem[],
 ): AgentInputItem[] {
@@ -378,20 +391,20 @@ function buildModelInput(
     // Harness Context 使用 system role，明确它比用户描述更可信。
     {
       role: "system",
-      content: `<harness_context>\n${JSON.stringify(taskContext)}\n</harness_context>`,
+      content: `<harness_context>\n${JSON.stringify(requestContext)}\n</harness_context>`,
     },
   ];
 }
 
 /** 知识问题必须有回答，并且 Evidence 必须记录到真实检索命中。 */
 function validateKnowledgeAnswer(
-  taskContext: TaskContext,
+  requestContext: RequestContext,
   evidence: RecommendationEvidence,
   answer: string | null,
   draftAction: string,
 ): void {
   // 没有知识问题时，这项校验与本轮无关。
-  if (taskContext.frame.knowledge_query === null) return;
+  if (requestContext.request.knowledge_query === null) return;
   // 混合请求最常见的失败：模型给了商品推荐，却把知识问题的 answer 留空。
   if (!answer)
     throw new RecommendationError("invalid_draft", {
@@ -401,11 +414,12 @@ function validateKnowledgeAnswer(
   // 检索一条都没命中时，提示词明确允许模型"说明没有查到"——这条出口不能被堵死，
   // 否则 Harness 就在否决自己允许的行为。只有在还能继续检索时才判死：
   // 那种情况说明模型没用完机会就下结论。
-  const exhausted = knowledgeCallCount(evidence) >= MAX_KNOWLEDGE_CALLS;
+  const generalCalls = knowledgeCallCount(evidence, "general");
+  const exhausted = generalCalls >= MAX_KNOWLEDGE_CALLS_PER_SCOPE;
   if (evidence.general_knowledge_hits === 0 && !exhausted) {
     throw new RecommendationError("knowledge_not_retrieved", {
       reason: "answered_without_retrieval",
-      knowledge_calls: knowledgeCallCount(evidence),
+      knowledge_calls: generalCalls,
     });
   }
 }

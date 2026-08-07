@@ -164,7 +164,7 @@ describe("HTTP 契约", () => {
           understoodAs: "耳机 · ≤200 元",
           context: { pendingUserMessages: [text], history: [], turns: 1 },
           turnsLeft: 2,
-          trace: ["task_framing", "evidence_validation"],
+          trace: ["request_parsing", "evidence_validation"],
           usage: new Usage(),
           latencyMs: 1,
         };

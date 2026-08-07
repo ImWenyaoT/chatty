@@ -29,8 +29,8 @@ Chatty 仍然是 Single Agent，五项能力仍然是 Tool，SQLite 仍然是商
   Tool input guardrail 执行批次快照门禁。
 - 需求解析与最终草稿使用 SDK `output_type`，而不是提示模型输出 JSON 后手动解析；provider
   未遵守 Schema 时，仅允许一次 SDK `invalid_final_output` correction。
-- Task Framer 使用无 `anyOf` / `$ref` 的扁平 `TaskFrameWire` 适配 DeepSeek 的 JSON Schema
-  子集，再映射为领域 `TaskFrame(product_need?, knowledge_query?)`；DeepSeek 特有的
+- Request Parser 使用扁平的 `RequestParseOutput` 适配 DeepSeek 的 JSON Schema
+  子集，再映射为领域 `ParsedRequest(product_need?, knowledge_query?)`；DeepSeek 特有的
   `properties` 实例包装只在 SDK `invalid_final_output` handler 中确定性解包，不再次调用 Model。
 - 不依赖 provider 是否遵守 `parallel_tool_calls`。同批 Tool call 先统一裁决，本地执行并发上限
   设为 1，避免依赖步骤读取到批次中途变化的 Evidence。

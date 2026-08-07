@@ -26,7 +26,7 @@ export type ModelProvider = {
   readonly modelId: string;
 };
 
-/** Task Framer 和主 Agent Loop 共用同一个 DeepSeek Responses 客户端。 */
+/** Request Parser 和主 Agent Loop 共用同一个 DeepSeek Responses 客户端。 */
 export class ResponsesModelProvider implements ModelProvider {
   readonly modelId: string;
   readonly configured: boolean;

@@ -27,7 +27,7 @@ JSON 和 JSONL 文件只负责提供可读的初始化种子。启动时，`data
 检索使用 SQLite FTS5 和 BM25。离线阶段只负责分块与建索引，不调用 Model。在线阶段由
 Agent 调用 `retrieve_knowledge`：`general` scope 检索政策等通用知识，`product` scope 由
 Harness 自动附加当前类目与在售商品 ID。Tool Result 进入 Model Context；如果第一次结果
-不足，Agent 可以调整 Query 再检索，Harness 最多允许三次。
+不足，Agent 可以调整 Query 再检索。Harness 为每个必需 scope 分别提供三次检索预算。
 
 ```mermaid
 flowchart TB
@@ -37,7 +37,7 @@ flowchart TB
     end
 
     subgraph Online["在线：Model 主动检索"]
-        Input["TaskFrame + 当前候选商品"] --> Decide["Model 选择 scope / Query"]
+        Input["ParsedRequest + 当前候选商品"] --> Decide["Model 选择 scope / Query"]
         Decide --> Tool["retrieve_knowledge"]
         Tool --> Rank["FTS5 + BM25"]
         FTS --> Rank
@@ -63,6 +63,4 @@ Skills 的“先看到名称和简述，选中后再加载正文”采用同一�
 
 当前数据规模小、关键词和商品 ID 都很明确，FTS5 已经足够。向量数据库、Reranker 或 GraphRAG 只有在现有检索无法满足数据规模和语义召回时才有引入价值。
 
----
-
-[← 上一章：Context 如何流动](chapter2.md) · [返回目录](README.md) · [下一章：五个 Tool →](chapter4.md)
+[← 上一章：Context 如何流动](chapter2.md) · [返回目录](README.md) · [下一章：Tool 如何分工 →](chapter4.md)

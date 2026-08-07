@@ -22,8 +22,8 @@ Agent 一级组成部分。
 ## Subagent
 
 由 Harness 确定性调用的单次 Model 调用，有自己的 instructions 和输出契约，但不参与对话循环、
-不持有对话历史、不能调用 Tool、对主 Agent 不可见。当前有两个：`task_framer` 把用户原话抽取成
-TaskFrame，`draft_corrector` 在 provider 不遵守 schema 时把最终文本改写回结构化契约。
+不持有对话历史、不能调用 Tool、对主 Agent 不可见。当前有两个：`request_parser` 把用户原话解析成
+`ParsedRequest`，`draft_corrector` 在 provider 不遵守 schema 时把最终文本改写回结构化契约。
 
 Subagent 不构成 Multi-Agent，因为不存在 handoff，也不存在由 Model 决定的委派。这与 eve 的
 Subagent 语义有一处**明确分歧**：eve 的 Subagent 会降解成 parent 可见的 Tool，由 parent Model
@@ -92,7 +92,7 @@ Chatty 根据用户画像、商品信息、检索知识和库存产生的有序�
 
 - `src/agent/`：Chatty 的 `Model + Harness`。`agent.ts` 声明主 Agent，`tools/` 一文件一个
   模型可调用的 Tool，`lib/` 保存运行与 Evidence 实现。
-- `src/agent/subagents/`：Harness 确定性调用的 `task_framer` 与 `draft_corrector`。它们不是
+- `src/agent/subagents/`：Harness 确定性调用的 `request_parser` 与 `draft_corrector`。它们不是
   主 Agent 的 Tool，也不存在 Handoff。
 - `src/data/`：SQLite 访问与初始化种子。
 - `src/server/`：Hono HTTP 层、会话和设置。

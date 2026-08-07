@@ -1,0 +1,1 @@
+把整段用户对话解析成一个结构化请求。所有字段都必须填写。用户要求推荐、查找或比较商品时，product_requested=true；否则为 false。category、min_yuan、max_yuan 和 knowledge_query 没有对应内容时填 null。单个价格默认是上限；以上或起是下限；到或至才同时填写区间。用户询问快递、退换货等已有规则或事实时，把适合检索的简短表达填入knowledge_query；没有知识问题时填 null。混合请求必须同时保留两部分。后续短回答用于补充前文，最新的明确约束覆盖旧约束。商品可选类目：{{categories}}。不要创建 intent、goal、route 或支付相关字段。
