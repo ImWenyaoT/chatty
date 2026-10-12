@@ -32,8 +32,8 @@ Subagent 语义有一处**明确分歧**：eve 的 Subagent 会降解成 parent 
 
 ## Model
 
-Agent 中负责理解自然语言、选择开放 Tool 和生成表达的部分。当前 Model 通过 OpenAI Agents SDK
-调用 DeepSeek Responses API；Model 不拥有商品价格、库存或最终事实裁决权。
+Agent 中负责理解自然语言、选择开放 Tool 和生成表达的部分。当前 Model 通过 OpenAI 兼容
+Chat Completions + Tool Calling 调用 DeepSeek；Model 不拥有商品价格、库存或最终事实裁决权。
 
 ## Harness
 
@@ -88,21 +88,16 @@ Chatty 根据用户画像、商品信息、检索知识和库存产生的有序�
 
 ## Project Structure
 
-仓库是单包，源码全部收进 `src/`，`tests/` 与配置文件留在根，布局理由见 ADR 0004：
+仓库分为 Go 后端与 Vite 前端，布局理由见 ADR 0005：
 
-- `src/agent/`：Chatty 的 `Model + Harness`。`agent.ts` 声明主 Agent，`tools/` 一文件一个
-  模型可调用的 Tool，`lib/` 保存运行与 Evidence 实现。
-- `src/agent/subagents/`：Harness 确定性调用的 `request_parser` 与 `draft_corrector`。它们不是
-  主 Agent 的 Tool，也不存在 Handoff。
-- `src/data/`：SQLite 访问与初始化种子。
-- `src/server/`：Hono HTTP 层、会话和设置。
-- `src/web/`：React 前端，只通过 `api-client.ts` 访问 HTTP。
-- `src/evals/`：Agent 与检索评测。
+- `backend/internal/agent/`：Chatty 的 `Model + Harness`（Request Parser、Tool Loop、Evidence）。
+- `backend/prompts/`：主 Agent、`request_parser`、`draft_corrector` 提示词。
+- `backend/internal/catalog/`：SQLite 访问；种子在 `data/seed/`。
+- `backend/internal/api/`：HTTP 层与会话（内存）。
+- `web/`：React + Vite + Tailwind + shadcn/ui，只通过 `src/lib/api-client.ts` 访问 HTTP。
 
-`tools/` 是 eve-like authored slot，但装配仍由 `agent.ts` 静态 import；不实现目录扫描、registry
-或通用 `define-*` 包装。只有出现真实 lifecycle hook 时才增加 `hooks/`。
+Harness 确定性调用的 `request_parser` 与 `draft_corrector` 不是主 Agent 的 Tool，也不存在 Handoff。
 
 ## Evals
 
-`src/evals/lib/runner.ts` 发现 `*.eval.ts`、按名称筛选、执行 gate 并设置退出码。评测在进程内
-调用 `Chatty.run()`；HTTP 契约由 `tests/api.test.ts` 单独覆盖。
+CI 以 `make check`（Go 测试 + 前端构建）为门禁。真实模型对话需配置 `DEEPSEEK_API_KEY` 后本地验证。
