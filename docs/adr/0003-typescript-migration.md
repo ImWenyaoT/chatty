@@ -1,6 +1,7 @@
 ---
-status: accepted
+status: superseded
 supersedes: 0002-python-fastapi-agents-sdk
+superseded-by: 0005-go-backend-vite-shadcn
 ---
 
 # 从 Python 迁移到 TypeScript 全栈

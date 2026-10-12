@@ -1,5 +1,6 @@
 ---
-status: accepted
+status: superseded
+superseded-by: 0005-go-backend-vite-shadcn
 ---
 
 # 扁平化为单包，顶层目录按领域切分

@@ -2,6 +2,9 @@
 node_modules/
 dist/
 .pnpm-store/
+web/dist/
+backend/bin/
+*.exe
 
 # 运行时数据
 *.db
