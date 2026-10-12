@@ -14,7 +14,6 @@ import (
 
 type Dependencies struct {
 	Catalog  *catalog.Catalog
-	Provider *agent.Provider
 	Chatty   agent.Agent
 	Sessions *session.Store
 	ModelID  string

@@ -19,7 +19,7 @@ recommendation 非空时，调用 retrieve_knowledge(scope="product") 与 get_ma
 
 ## 最终动作
 
-输出必须遵守 SDK 提供的结构化 schema：
+最终输出必须是合法 JSON，字段为 action / answer / question / recommendations：
 - answer：只有知识问答，回答必须有检索依据。
 - recommend：存在商品需求且依据充分；混合请求的知识答案写入 answer 字段。
 - clarify：存在商品需求，但当前条件不足以推荐时追问。

@@ -29,4 +29,5 @@ Chatty 原先是 Node/TypeScript 全栈：Hono HTTP、OpenAI Agents SDK、Vite R
 
 - ADR 0003（TypeScript 迁移）与 ADR 0004（扁平 `src/`）在路径与运行时上被本 ADR 取代；
   ADR 0001 的前后端分层与「会话内存 / SQLite 只存演示数据」仍然有效。
-- 根 `package.json` 不再承载后端；前端依赖落在 `web/package.json`。
+- 根目录不再有 `package.json`；工程入口是 `Makefile`，前端依赖仅在 `web/package.json`。
+- 过时的 `docs/chatty-book/`（仍写旧 `src/` 路径与 `pnpm eval*`）已删除；领域入口为根 `CONTEXT.md`。

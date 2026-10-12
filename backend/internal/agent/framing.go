@@ -22,6 +22,7 @@ type RequestParseOutput struct {
 }
 
 func ParseRequestOutput(raw string) (RequestParseOutput, error) {
+	raw = extractJSONObject(raw)
 	var value any
 	if err := json.Unmarshal([]byte(raw), &value); err != nil {
 		return RequestParseOutput{}, RequestParseError("invalid_request_parse_output")

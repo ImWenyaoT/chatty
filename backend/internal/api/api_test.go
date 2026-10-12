@@ -103,7 +103,10 @@ func TestSessionAndTurn(t *testing.T) {
 	ts := newTestServer(t, fakeChatty{})
 	defer ts.Close()
 
-	bad, _ := http.Post(ts.URL+"/api/sessions", "application/json", bytes.NewBufferString(`{"user_id":"missing"}`))
+	bad, err := http.Post(ts.URL+"/api/sessions", "application/json", bytes.NewBufferString(`{"user_id":"missing"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer bad.Body.Close()
 	if bad.StatusCode != 422 {
 		t.Fatalf("want 422 got %d", bad.StatusCode)
@@ -122,7 +125,10 @@ func TestSessionAndTurn(t *testing.T) {
 		t.Fatal("empty session")
 	}
 
-	blank, _ := http.Post(ts.URL+"/api/sessions/"+sess.SessionID+"/turns", "application/json", bytes.NewBufferString(`{"text":"   "}`))
+	blank, err := http.Post(ts.URL+"/api/sessions/"+sess.SessionID+"/turns", "application/json", bytes.NewBufferString(`{"text":"   "}`))
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer blank.Body.Close()
 	if blank.StatusCode != 422 {
 		t.Fatalf("blank want 422 got %d", blank.StatusCode)

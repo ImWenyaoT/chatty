@@ -29,7 +29,6 @@ func main() {
 	chatty := agent.NewChatty(cat, provider, promptsDir)
 	srv := api.New(api.Dependencies{
 		Catalog:  cat,
-		Provider: provider,
 		Chatty:   chatty,
 		Sessions: session.NewStore(),
 		ModelID:  cfg.Model,

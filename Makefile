@@ -27,5 +27,10 @@ api-dev:
 web-dev:
 	cd web && pnpm dev
 
+# 同时起 API 与 Vite；Ctrl+C 结束当前 shell 内的子进程。
 dev:
-	@echo "在两个终端分别运行: make api-dev 与 make web-dev"
+	@bash -c 'set -e; \
+	  trap "kill 0" EXIT INT TERM; \
+	  CHATTY_ROOT="$(ROOT)" go run ./backend/cmd/chatty & \
+	  (cd web && pnpm dev) & \
+	  wait'

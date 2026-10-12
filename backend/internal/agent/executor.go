@@ -132,7 +132,8 @@ func (e *Executor) generateDraft(ctx context.Context, requestContext models.Requ
 		if len(msg.ToolCalls) == 0 {
 			draft, err := parseAgentDraft(msg.Content, ev.AllowedFinalActions)
 			if err != nil {
-				corrected, cerr := e.correctDraft(ctx, msg.Content, ev.AllowedFinalActions)
+				corrected, corrUsage, cerr := e.correctDraft(ctx, msg.Content, ev.AllowedFinalActions)
+				ev.Usage.Add(corrUsage)
 				if cerr != nil {
 					return models.AgentDraft{}, &RecommendationError{Code: "invalid_draft", Diagnostics: map[string]any{"reason": "correction_failed", "cause": cerr.Error()}}
 				}
@@ -176,22 +177,21 @@ func (e *Executor) generateDraft(ctx context.Context, requestContext models.Requ
 	return models.AgentDraft{}, &RecommendationError{Code: "invalid_draft", Diagnostics: map[string]any{"reason": "max_turns_exceeded"}}
 }
 
-func (e *Executor) correctDraft(ctx context.Context, raw string, allowed []string) (models.AgentDraft, error) {
+func (e *Executor) correctDraft(ctx context.Context, raw string, allowed []string) (models.AgentDraft, Usage, error) {
 	prompt, err := os.ReadFile(filepath.Join(e.Prompts, "draft_corrector.md"))
 	if err != nil {
-		return models.AgentDraft{}, err
+		return models.AgentDraft{}, Usage{}, err
 	}
 	messages := []ChatMessage{
-		{Role: "system", Content: string(prompt) + "\nAllowed actions: " + strings.Join(allowed, ", ")},
+		{Role: "system", Content: string(prompt) + "\nAllowed actions: " + strings.Join(allowed, ", ") + "\nRespond with JSON only."},
 		{Role: "user", Content: raw},
 	}
 	msg, usage, err := e.Provider.Chat(ctx, messages, nil, nil)
 	if err != nil {
-		return models.AgentDraft{}, err
+		return models.AgentDraft{}, usage, err
 	}
-	// usage counted by caller via evidence? add here through side channel — caller should add
-	_ = usage
-	return parseAgentDraft(msg.Content, allowed)
+	draft, err := parseAgentDraft(msg.Content, allowed)
+	return draft, usage, err
 }
 
 func (e *Executor) executeTool(call ToolCall, requestContext models.RequestContext, ev *Evidence) (string, error) {
@@ -338,11 +338,7 @@ func validateKnowledgeAnswer(requestContext models.RequestContext, ev *Evidence,
 }
 
 func parseAgentDraft(raw string, allowed []string) (models.AgentDraft, error) {
-	raw = strings.TrimSpace(raw)
-	raw = strings.TrimPrefix(raw, "```json")
-	raw = strings.TrimPrefix(raw, "```")
-	raw = strings.TrimSuffix(raw, "```")
-	raw = strings.TrimSpace(raw)
+	raw = extractJSONObject(raw)
 	var value any
 	if err := json.Unmarshal([]byte(raw), &value); err != nil {
 		return models.AgentDraft{}, err
@@ -386,6 +382,20 @@ func parseAgentDraft(raw string, allowed []string) (models.AgentDraft, error) {
 		return models.AgentDraft{}, fmt.Errorf("unknown_action")
 	}
 	return draft, nil
+}
+
+func extractJSONObject(raw string) string {
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimPrefix(raw, "```json")
+	raw = strings.TrimPrefix(raw, "```")
+	raw = strings.TrimSuffix(strings.TrimSpace(raw), "```")
+	raw = strings.TrimSpace(raw)
+	start := strings.Index(raw, "{")
+	end := strings.LastIndex(raw, "}")
+	if start >= 0 && end > start {
+		return raw[start : end+1]
+	}
+	return raw
 }
 
 func toolDefinitions() []ToolDef {

@@ -35,11 +35,12 @@ Model 主导的 Tool Loop、Evidence 校验与领域输出：商品 ID、价格�
 cp .env.example .env   # 填入 DEEPSEEK_API_KEY
 make setup
 
-# 终端 1
-make api-dev           # http://127.0.0.1:8000
+# 一条命令同时起 API (:8000) 与 Vite (:5173)
+make dev
 
-# 终端 2
-make web-dev           # http://127.0.0.1:5173 （代理 /api）
+# 或分两个终端：
+# make api-dev
+# make web-dev
 ```
 
 检查：
@@ -58,10 +59,11 @@ make check             # go test + 前端 typecheck/build
 ## 仓库布局
 
 ```
-backend/     Go API + Agent + Catalog
-web/         Vite React 前端
+backend/     Go API + Agent + Catalog + prompts/
+web/         Vite + React + Tailwind + shadcn/ui
 data/seed/   SQLite 初始化种子（非运行时查询接口）
-docs/adr/    架构决策
+docs/adr/    架构决策（现行见 0005）
+Makefile     install / dev / check 入口
 ```
 
 领域词汇见 [`CONTEXT.md`](CONTEXT.md)。工程约定见 [`AGENTS.md`](AGENTS.md)。
@@ -69,5 +71,6 @@ docs/adr/    架构决策
 ## 与旧 Node 栈的差异
 
 - 后端从 TypeScript/Hono/OpenAI Agents SDK 迁到 Go 自研 Tool Loop。
-- 前端从根目录 Vite 迁到 `web/`，并引入 Tailwind + shadcn/ui。
-- 旧 `pnpm eval*` Agent/检索评测未迁移；CI 以 `make check` 为准。详见 [ADR 0005](docs/adr/0005-go-backend-vite-shadcn.md)。
+- 前端在 `web/`，Tailwind + shadcn/ui；根目录无 `package.json`。
+- 旧 `pnpm eval*`、golden 对拍与过时 chatty-book 路径文档已去掉；CI 只跑 `make check`。
+  详见 [ADR 0005](docs/adr/0005-go-backend-vite-shadcn.md)。

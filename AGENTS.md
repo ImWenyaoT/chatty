@@ -36,10 +36,13 @@
 
 ```bash
 make setup          # go mod download + web pnpm install
-make api-dev        # Go HTTP :8000
-make web-dev        # Vite :5173，代理 /api
+make dev            # API :8000 + Vite :5173（代理 /api）
+make api-dev        # 仅 Go HTTP
+make web-dev        # 仅 Vite
 make check          # go test + 前端 typecheck/build
 ```
+
+根目录没有 `package.json`；前端依赖只在 `web/`。
 
 目录：
 
