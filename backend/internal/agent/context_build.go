@@ -3,18 +3,17 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/ImWenyaoT/chatty/backend/internal/models"
 )
 
 // ContextBudget 限制进入 Model 的动态 harness_context 体积。
 type ContextBudget struct {
-	MaxCandidates           int
-	MaxInventory            int
-	MaxRecentIDs            int
+	MaxCandidates            int
+	MaxInventory             int
+	MaxRecentIDs             int
 	MaxKnowledgeContentChars int
-	MaxCandidateDescChars   int
+	MaxCandidateDescChars    int
 }
 
 func DefaultContextBudget() ContextBudget {
@@ -40,48 +39,65 @@ type candidateProjection struct {
 }
 
 type profileProjection struct {
-	UserID              string              `json:"user_id"`
-	Segment             models.UserSegment  `json:"segment"`
-	PreferredCategories []string            `json:"preferred_categories"`
-	MinPriceCents       int                 `json:"min_price_cents"`
-	MaxPriceCents       int                 `json:"max_price_cents"`
-	RecentViews         []string            `json:"recent_views"`
-	RecentPurchases     []string            `json:"recent_purchases"`
+	UserID              string             `json:"user_id"`
+	Segment             models.UserSegment `json:"segment"`
+	PreferredCategories []string           `json:"preferred_categories"`
+	MinPriceCents       int                `json:"min_price_cents"`
+	MaxPriceCents       int                `json:"max_price_cents"`
+	RecentViews         []string           `json:"recent_views"`
+	RecentPurchases     []string           `json:"recent_purchases"`
+}
+
+// requestProjection 只保留决策需要的显式约束；recent_* 只出现在 profile 投影里。
+type requestProjection struct {
+	UserID              string   `json:"user_id"`
+	NumItems            int      `json:"num_items"`
+	PreferredCategories []string `json:"preferred_categories,omitempty"`
+	MinPriceCents       *int     `json:"min_price_cents,omitempty"`
+	MaxPriceCents       *int     `json:"max_price_cents,omitempty"`
 }
 
 type recommendationProjection struct {
-	Request    models.RecommendationRequest `json:"request"`
-	Profile    profileProjection            `json:"profile"`
-	Candidates []candidateProjection        `json:"candidates"`
-	Inventory  []candidateProjection        `json:"inventory"`
+	Request    requestProjection      `json:"request"`
+	Profile    profileProjection     `json:"profile"`
+	Candidates []candidateProjection `json:"candidates"`
+	Inventory  []candidateProjection `json:"inventory"`
 }
 
 // harnessContextView 是 model-visible 的动态 Context（非 Evidence 全量）。
 type harnessContextView struct {
-	Source         string                     `json:"source"`
-	QueriedAt      string                     `json:"queried_at"`
-	Request        models.ParsedRequest       `json:"request"`
-	Recommendation *recommendationProjection  `json:"recommendation"`
+	Source         string                    `json:"source"`
+	Request        models.ParsedRequest      `json:"request"`
+	Recommendation *recommendationProjection `json:"recommendation"`
 }
 
-// ProjectHarnessContext 将 RequestContext 投影为带预算与 provenance 的视图。
+// ProjectHarnessContext 将 RequestContext 投影为带预算与来源标注的视图。
 func ProjectHarnessContext(rc models.RequestContext, budget ContextBudget) harnessContextView {
 	view := harnessContextView{
-		Source:    "sqlite_catalog",
-		QueriedAt: time.Now().UTC().Format(time.RFC3339),
-		Request:   rc.Request,
+		Source:  "sqlite_catalog",
+		Request: rc.Request,
 	}
 	if rc.Recommendation == nil {
 		return view
 	}
 	rec := rc.Recommendation
 	view.Recommendation = &recommendationProjection{
-		Request: rec.Request,
-		Profile: projectProfile(rec.Profile, budget),
+		Request:    projectRecommendationRequest(rec.Request),
+		Profile:    projectProfile(rec.Profile, budget),
 		Candidates: projectProducts(rec.Candidates, budget.MaxCandidates, budget.MaxCandidateDescChars),
 		Inventory:  projectProducts(rec.Inventory, budget.MaxInventory, budget.MaxCandidateDescChars),
 	}
 	return view
+}
+
+func projectRecommendationRequest(req models.RecommendationRequest) requestProjection {
+	return requestProjection{
+		UserID:              req.UserID,
+		NumItems:            req.NumItems,
+		PreferredCategories: req.Context.PreferredCategories,
+		MinPriceCents:       req.Context.MinPriceCents,
+		MaxPriceCents:       req.Context.MaxPriceCents,
+	}
 }
 
 func projectProfile(p models.UserProfile, budget ContextBudget) profileProjection {
@@ -121,7 +137,10 @@ func projectProducts(products []models.Product, max int, descChars int) []candid
 }
 
 func truncateIDs(ids []string, max int) []string {
-	if max <= 0 || len(ids) <= max {
+	if max <= 0 {
+		return nil
+	}
+	if len(ids) <= max {
 		return ids
 	}
 	return ids[:max]
@@ -178,11 +197,6 @@ func ProjectKnowledgeHitsForModel(hits []models.KnowledgeHit, budget ContextBudg
 	return string(b)
 }
 
-// LoadStaticInstructions 读取稳定前缀 instructions（Static Context）。
-func LoadStaticInstructions(promptsDir string) (string, error) {
-	return readPromptFile(promptsDir, "instructions.md")
-}
-
 func buildInitialLoopMessages(instructions, userText string, history []ChatMessage, harnessXML string) []ChatMessage {
 	messages := append([]ChatMessage{}, history...)
 	messages = append(messages,
@@ -198,7 +212,6 @@ func formatBlockedToolResult(batch *ToolBatch, ev *Evidence, reason string) stri
 		"status":        "blocked",
 		"reason":        reason,
 		"required_next": AllowedTools(ev),
-		"agent_status":  RenderAgentStatus(ev),
 		"stage":         string(batch.Stage),
 	})
 	return string(payload)

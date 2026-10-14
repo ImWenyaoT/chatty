@@ -53,14 +53,12 @@ type Chatty struct {
 	Catalog  *catalog.Catalog
 	Provider *Provider
 	Executor *Executor
-	Prompts  string
 }
 
 func NewChatty(cat *catalog.Catalog, provider *Provider, promptsDir string) *Chatty {
 	return &Chatty{
 		Catalog:  cat,
 		Provider: provider,
-		Prompts:  promptsDir,
 		Executor: NewExecutor(cat, provider, promptsDir),
 	}
 }
@@ -72,7 +70,6 @@ func (c *Chatty) Run(ctx context.Context, userID, text string, chatCtx ChattyCon
 	}
 	pending := append(append([]string{}, chatCtx.PendingUserMessages...), text)
 	ev := NewEvidence()
-	sink := &TraceSink{}
 
 	if c.Provider == nil || !c.Provider.Configured() {
 		return ChattyTurn{}, &ChattyError{Code: "llm_not_configured"}
@@ -91,7 +88,7 @@ func (c *Chatty) Run(ctx context.Context, userID, text string, chatCtx ChattyCon
 	if err != nil {
 		return ChattyTurn{}, toChattyError(err)
 	}
-	reply, err := c.Executor.Respond(ctx, requestContext, ev, text, chatCtx.History, sink)
+	reply, err := c.Executor.Respond(ctx, requestContext, ev, text, chatCtx.History)
 	if err != nil {
 		return ChattyTurn{}, toChattyError(err)
 	}
@@ -115,14 +112,14 @@ func (c *Chatty) Run(ctx context.Context, userID, text string, chatCtx ChattyCon
 		UnderstoodAs: DescribeRequest(parsed),
 		Context:      next,
 		TurnsLeft:    MaxTurns - next.Turns,
-		Trace:        sink.Steps(ev),
+		Trace:        traceSteps(ev),
 		Usage:        usage,
 		LatencyMs:    float64(time.Since(started).Milliseconds()),
 	}, nil
 }
 
 func (c *Chatty) parseRequest(ctx context.Context, pending []string) (RequestParseOutput, Usage, error) {
-	prompt, err := readPromptFile(c.Prompts, "request_parser.md")
+	prompt, err := readPromptFile(c.Executor.Prompts, "request_parser.md")
 	if err != nil {
 		return RequestParseOutput{}, Usage{}, err
 	}
@@ -169,6 +166,35 @@ func toChattyError(err error) error {
 		return &ChattyError{Code: string(ce), Cause: err}
 	}
 	return &ChattyError{Code: "recommendation_failed", Diagnostics: map[string]any{"cause": err.Error()}, Cause: err}
+}
+
+func traceSteps(ev *Evidence) []string {
+	seen := map[string]struct{}{}
+	steps := []string{"request_parsing"}
+	if ev != nil {
+		for _, tool := range ev.UsedTools {
+			if _, ok := seen[tool]; ok {
+				continue
+			}
+			seen[tool] = struct{}{}
+			steps = append(steps, tool)
+		}
+		for _, attempt := range ev.BlockedAttempts {
+			// format: stage:tool:reason
+			parts := strings.SplitN(attempt, ":", 3)
+			if len(parts) < 2 {
+				continue
+			}
+			label := "blocked:" + parts[1]
+			if _, ok := seen[label]; ok {
+				continue
+			}
+			seen[label] = struct{}{}
+			steps = append(steps, label)
+		}
+	}
+	steps = append(steps, "response_generation", "evidence_validation")
+	return steps
 }
 
 func clarificationHistory(userText, question string, answer *string) []ChatMessage {

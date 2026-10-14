@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 
 	"github.com/ImWenyaoT/chatty/backend/internal/catalog"
 	"github.com/ImWenyaoT/chatty/backend/internal/models"
@@ -20,12 +22,12 @@ type ModelClient interface {
 	Configured() bool
 }
 
-// Executor 持有 Loop + ToolRuntime 依赖；对外仍由 Orchestrator（Chatty）调用。
+// Executor 持有 Loop 与 Tool 执行依赖；由 Chatty（Orchestrator）调用。
 type Executor struct {
-	Catalog  *catalog.Catalog
-	Model    ModelClient
-	Prompts  string
-	Budget   ContextBudget
+	Catalog *catalog.Catalog
+	Model   ModelClient
+	Prompts string
+	Budget  ContextBudget
 }
 
 func NewExecutor(cat *catalog.Catalog, model ModelClient, promptsDir string) *Executor {
@@ -37,10 +39,18 @@ func NewExecutor(cat *catalog.Catalog, model ModelClient, promptsDir string) *Ex
 	}
 }
 
-func (e *Executor) Respond(ctx context.Context, requestContext models.RequestContext, ev *Evidence, userText string, history []ChatMessage, sink *TraceSink) (models.Reply, error) {
-	draft, err := e.runLoop(ctx, requestContext, ev, userText, history, sink)
+func (e *Executor) Respond(ctx context.Context, requestContext models.RequestContext, ev *Evidence, userText string, history []ChatMessage) (models.Reply, error) {
+	draft, err := e.runLoop(ctx, requestContext, ev, userText, history)
 	if err != nil {
 		return models.Reply{}, err
 	}
 	return e.finalizeReply(requestContext, ev, draft)
+}
+
+func readPromptFile(promptsDir, name string) (string, error) {
+	b, err := os.ReadFile(filepath.Join(promptsDir, name))
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }

@@ -8,8 +8,61 @@ import (
 	"github.com/ImWenyaoT/chatty/backend/internal/models"
 )
 
-// ToolRuntime 语义：执行主 Agent Model Tool，写入 Evidence，并投影结果给 Model。
-// Harness Step（profile/search/inventory）由 Orchestrator 预取，不在此执行。
+// modelTool 是主 Agent 可见 Tool 的轻量合同（非 Agent）。
+// Harness Subagent（request_parser / draft_corrector）不得出现在此表。
+type modelTool struct {
+	Name        string
+	Description string
+	Parameters  map[string]any
+}
+
+var modelTools = []modelTool{
+	{
+		Name:        "retrieve_knowledge",
+		Description: "检索政策或商品知识。知识问题使用 general；商品推荐使用 product。0 命中时改写 query 后重试，不要原样重复。",
+		Parameters: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"query": map[string]any{"type": "string", "description": "关键词查询。"},
+				"limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 8},
+				"scope": map[string]any{"type": "string", "enum": []string{"general", "product"}},
+			},
+			"required": []string{"query", "limit", "scope"},
+		},
+	},
+	{
+		Name:        "get_marketing_strategy",
+		Description: "获取画像分群对应的营销语气、写作要求与禁用词。",
+		Parameters: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{},
+		},
+	},
+}
+
+// ToolDefinitions 转为 Provider Chat Completions 的 tools 载荷。
+func ToolDefinitions() []ToolDef {
+	out := make([]ToolDef, len(modelTools))
+	for i, t := range modelTools {
+		out[i] = ToolDef{
+			Type: "function",
+			Function: ToolDefFunc{
+				Name:        t.Name,
+				Description: t.Description,
+				Parameters:  t.Parameters,
+			},
+		}
+	}
+	return out
+}
+
+func modelToolNameSet() map[string]struct{} {
+	set := make(map[string]struct{}, len(modelTools))
+	for _, t := range modelTools {
+		set[t.Name] = struct{}{}
+	}
+	return set
+}
 
 func (e *Executor) executeTool(call ToolCall, requestContext models.RequestContext, ev *Evidence) (string, error) {
 	switch call.Function.Name {
@@ -81,8 +134,8 @@ func (e *Executor) executeRetrieveKnowledge(call ToolCall, requestContext models
 	}
 	sort.Strings(groundedIDs)
 	RecordKnowledge(ev, hits, groundedIDs, args.Scope)
-	projected := ProjectKnowledgeHitsForModel(hits, e.Budget)
-	return ProjectToolResult("retrieve_knowledge", projected), nil
+	// Evidence 保留完整 hits；进 Model 的是投影后的合法 JSON。
+	return ProjectKnowledgeHitsForModel(hits, e.Budget), nil
 }
 
 func (e *Executor) executeMarketingStrategy(ev *Evidence) (string, error) {
@@ -94,6 +147,9 @@ func (e *Executor) executeMarketingStrategy(ev *Evidence) (string, error) {
 		return "", err
 	}
 	ev.UsedTools = append(ev.UsedTools, "get_marketing_strategy")
-	b, _ := json.Marshal(strategy)
-	return ProjectToolResult("get_marketing_strategy", string(b)), nil
+	b, err := json.Marshal(strategy)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }

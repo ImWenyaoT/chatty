@@ -11,8 +11,8 @@ const maxLoopIterations = 12
 
 // runLoop 是唯一的 Agent Loop：iteration → Model → Gate+Execute → draft。
 // Subagent corrector 仅在无 tool_use 且 draft 非法时由 Harness 触发。
-func (e *Executor) runLoop(ctx context.Context, requestContext models.RequestContext, ev *Evidence, userText string, history []ChatMessage, sink *TraceSink) (models.AgentDraft, error) {
-	instructions, err := LoadStaticInstructions(e.Prompts)
+func (e *Executor) runLoop(ctx context.Context, requestContext models.RequestContext, ev *Evidence, userText string, history []ChatMessage) (models.AgentDraft, error) {
+	instructions, err := readPromptFile(e.Prompts, "instructions.md")
 	if err != nil {
 		return models.AgentDraft{}, err
 	}
@@ -27,7 +27,6 @@ func (e *Executor) runLoop(ctx context.Context, requestContext models.RequestCon
 		if StageFor(ev) == StageReadyToDraft {
 			toolChoice = "auto"
 		}
-		sink.Add(TraceEvent{Kind: "iteration", Iteration: iteration + 1, Stage: string(StageFor(ev))})
 		msg, usage, err := e.Model.Chat(ctx, roundMsgs, tools, toolChoice)
 		if err != nil {
 			return models.AgentDraft{}, err
@@ -41,10 +40,8 @@ func (e *Executor) runLoop(ctx context.Context, requestContext models.RequestCon
 				if cerr != nil {
 					return models.AgentDraft{}, &RecommendationError{Code: "invalid_draft", Diagnostics: map[string]any{"reason": "correction_failed", "cause": cerr.Error()}}
 				}
-				sink.Add(TraceEvent{Kind: "draft_corrected"})
 				return corrected, nil
 			}
-			sink.Add(TraceEvent{Kind: "draft_ready", Detail: string(draft.Action)})
 			return draft, nil
 		}
 		messages = append(messages, msg)
@@ -53,7 +50,6 @@ func (e *Executor) runLoop(ctx context.Context, requestContext models.RequestCon
 			decision := GateToolCall(batch, call.Function.Name)
 			if !decision.Allowed {
 				ev.BlockedAttempts = append(ev.BlockedAttempts, strings.Join([]string{string(batch.Stage), call.Function.Name, decision.Reason}, ":"))
-				sink.Add(TraceEvent{Kind: "tool_blocked", Tool: call.Function.Name, Stage: string(batch.Stage), Detail: decision.Reason, Iteration: iteration + 1})
 				messages = append(messages, ChatMessage{
 					Role:       "tool",
 					ToolCallID: call.ID,
@@ -65,9 +61,6 @@ func (e *Executor) runLoop(ctx context.Context, requestContext models.RequestCon
 			result, err := e.executeTool(call, requestContext, ev)
 			if err != nil {
 				result = formatToolError(err)
-				sink.Add(TraceEvent{Kind: "tool_error", Tool: call.Function.Name, Detail: err.Error(), Iteration: iteration + 1})
-			} else {
-				sink.Add(TraceEvent{Kind: "tool_result", Tool: call.Function.Name, Iteration: iteration + 1})
 			}
 			messages = append(messages, ChatMessage{
 				Role:       "tool",

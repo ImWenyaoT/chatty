@@ -30,7 +30,15 @@ func TestProjectHarnessContextBudgetAndWhitelist(t *testing.T) {
 	rc := models.RequestContext{
 		Request: models.ParsedRequest{ProductNeed: &models.ProductNeed{}},
 		Recommendation: &models.RecommendationContext{
-			Request: models.RecommendationRequest{UserID: "u1", NumItems: 3},
+			Request: models.RecommendationRequest{
+				UserID:   "u1",
+				NumItems: 3,
+				Context: models.UserContext{
+					RecentViews:         []string{"a", "b", "c", "d", "e", "f"},
+					RecentPurchases:     []string{"x", "y", "z"},
+					PreferredCategories: []string{"耳机"},
+				},
+			},
 			Profile: models.UserProfile{
 				UserID:          "u1",
 				Segment:         models.SegmentActive,
@@ -47,8 +55,8 @@ func TestProjectHarnessContextBudgetAndWhitelist(t *testing.T) {
 	budget.MaxRecentIDs = 3
 
 	view := ProjectHarnessContext(rc, budget)
-	if view.Source != "sqlite_catalog" || view.QueriedAt == "" {
-		t.Fatalf("provenance missing: %+v", view)
+	if view.Source != "sqlite_catalog" {
+		t.Fatalf("source=%q", view.Source)
 	}
 	if view.Recommendation == nil {
 		t.Fatal("nil recommendation projection")
@@ -59,6 +67,9 @@ func TestProjectHarnessContextBudgetAndWhitelist(t *testing.T) {
 	if len(view.Recommendation.Profile.RecentViews) != 3 {
 		t.Fatalf("recent_views=%d", len(view.Recommendation.Profile.RecentViews))
 	}
+	if view.Recommendation.Request.UserID != "u1" || view.Recommendation.Request.NumItems != 3 {
+		t.Fatalf("request projection=%+v", view.Recommendation.Request)
+	}
 	c0 := view.Recommendation.Candidates[0]
 	if c0.Description == longDesc {
 		t.Fatal("description should be truncated")
@@ -67,6 +78,22 @@ func TestProjectHarnessContextBudgetAndWhitelist(t *testing.T) {
 	s := string(raw)
 	if strings.Contains(s, "image_url") || strings.Contains(s, "seller_id") || strings.Contains(s, "popularity_score") {
 		t.Fatalf("noise fields leaked into harness_context: %s", s)
+	}
+	if strings.Contains(s, `"queried_at"`) {
+		t.Fatal("queried_at removed until prepare-time stamp exists")
+	}
+	// request 投影不得再塞一份 uncapped recent_*
+	var decoded map[string]any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	rec := decoded["recommendation"].(map[string]any)
+	req := rec["request"].(map[string]any)
+	if _, ok := req["context"]; ok {
+		t.Fatal("recommendation.request must not embed full UserContext")
+	}
+	if _, ok := req["recent_views"]; ok {
+		t.Fatal("recent_views must not appear under recommendation.request")
 	}
 }
 
@@ -85,7 +112,7 @@ func TestProjectKnowledgeHitsForModelTruncatesContent(t *testing.T) {
 		t.Fatal(err)
 	}
 	content, _ := out[0]["content"].(string)
-	if len([]rune(content)) > 51 { // 50 + ellipsis rune
+	if len([]rune(content)) > 51 {
 		t.Fatalf("content too long: %d", len([]rune(content)))
 	}
 	if strings.Contains(raw, "chunk_ordinal") {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/ImWenyaoT/chatty/backend/internal/catalog"
@@ -80,9 +81,8 @@ func TestLoopBlockedToolReturnsResultNotCrash(t *testing.T) {
 	ev.AllowedFinalActions = []string{"answer"}
 	kq := "退货"
 	rc := models.RequestContext{Request: models.ParsedRequest{KnowledgeQuery: &kq}}
-	sink := &TraceSink{}
 
-	draft, err := exec.runLoop(context.Background(), rc, ev, "怎么退货", nil, sink)
+	draft, err := exec.runLoop(context.Background(), rc, ev, "怎么退货", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,14 +92,16 @@ func TestLoopBlockedToolReturnsResultNotCrash(t *testing.T) {
 	if len(ev.BlockedAttempts) == 0 {
 		t.Fatal("expected blocked attempt for marketing in knowledge-only turn")
 	}
-	blocked := false
-	for _, e := range sink.Events() {
-		if e.Kind == "tool_blocked" && e.Tool == "get_marketing_strategy" {
-			blocked = true
+	steps := traceSteps(ev)
+	found := false
+	for _, s := range steps {
+		if s == "blocked:get_marketing_strategy" {
+			found = true
+			break
 		}
 	}
-	if !blocked {
-		t.Fatalf("trace events=%+v", sink.Events())
+	if !found {
+		t.Fatalf("trace steps=%v", steps)
 	}
 }
 
@@ -126,12 +128,29 @@ func TestLoopReadyToDraftWithoutTools(t *testing.T) {
 	kq := "政策"
 	rc := models.RequestContext{Request: models.ParsedRequest{KnowledgeQuery: &kq}}
 
-	draft, err := exec.runLoop(context.Background(), rc, ev, "政策", nil, &TraceSink{})
+	draft, err := exec.runLoop(context.Background(), rc, ev, "政策", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if draft.Action != models.ActionAnswer {
 		t.Fatalf("action=%s", draft.Action)
+	}
+}
+
+func TestProjectKnowledgeHitsJSONValid(t *testing.T) {
+	hits := []models.KnowledgeHit{{
+		DocID:   "d1",
+		Title:   "t",
+		Content: strings.Repeat("文", 800),
+		Source:  "fts5",
+	}}
+	raw := ProjectKnowledgeHitsForModel(hits, DefaultContextBudget())
+	var out []map[string]any
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		t.Fatalf("projected knowledge must be valid JSON: %v raw=%s", err, raw)
+	}
+	if len(out) != 1 {
+		t.Fatalf("hits=%d", len(out))
 	}
 }
 
