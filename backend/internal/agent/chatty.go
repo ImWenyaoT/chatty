@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -50,19 +48,18 @@ type Agent interface {
 	Run(ctx context.Context, userID, text string, chatCtx ChattyContext) (ChattyTurn, error)
 }
 
+// Chatty 是 Orchestrator：parse → prepare → loop → finalize → 更新会话内存 Context。
 type Chatty struct {
 	Catalog  *catalog.Catalog
 	Provider *Provider
 	Executor *Executor
-	Prompts  string
 }
 
 func NewChatty(cat *catalog.Catalog, provider *Provider, promptsDir string) *Chatty {
 	return &Chatty{
 		Catalog:  cat,
 		Provider: provider,
-		Prompts:  promptsDir,
-		Executor: &Executor{Catalog: cat, Provider: provider, Prompts: promptsDir},
+		Executor: NewExecutor(cat, provider, promptsDir),
 	}
 }
 
@@ -74,7 +71,7 @@ func (c *Chatty) Run(ctx context.Context, userID, text string, chatCtx ChattyCon
 	pending := append(append([]string{}, chatCtx.PendingUserMessages...), text)
 	ev := NewEvidence()
 
-	if !c.Provider.Configured() {
+	if c.Provider == nil || !c.Provider.Configured() {
 		return ChattyTurn{}, &ChattyError{Code: "llm_not_configured"}
 	}
 
@@ -122,7 +119,7 @@ func (c *Chatty) Run(ctx context.Context, userID, text string, chatCtx ChattyCon
 }
 
 func (c *Chatty) parseRequest(ctx context.Context, pending []string) (RequestParseOutput, Usage, error) {
-	prompt, err := os.ReadFile(filepath.Join(c.Prompts, "request_parser.md"))
+	prompt, err := readPromptFile(c.Executor.Prompts, "request_parser.md")
 	if err != nil {
 		return RequestParseOutput{}, Usage{}, err
 	}
@@ -132,7 +129,7 @@ func (c *Chatty) parseRequest(ctx context.Context, pending []string) (RequestPar
 		fmt.Fprintf(&b, "用户第%d轮：%s\n", i+1, msg)
 	}
 	messages := []ChatMessage{
-		{Role: "system", Content: string(prompt) + "\nAvailable categories: " + string(cats) + "\nRespond with JSON only."},
+		{Role: "system", Content: prompt + "\nAvailable categories: " + string(cats) + "\nRespond with JSON only."},
 		{Role: "user", Content: b.String()},
 	}
 	msg, usage, err := c.Provider.Chat(ctx, messages, nil, nil)
@@ -141,7 +138,6 @@ func (c *Chatty) parseRequest(ctx context.Context, pending []string) (RequestPar
 	}
 	out, err := ParseRequestOutput(msg.Content)
 	if err != nil {
-		// try wrapping recovery already in ParseRequestOutput; fail as parse
 		return RequestParseOutput{}, usage, RequestParseError("request_parse_failed")
 	}
 	return out, usage, nil
@@ -175,12 +171,27 @@ func toChattyError(err error) error {
 func traceSteps(ev *Evidence) []string {
 	seen := map[string]struct{}{}
 	steps := []string{"request_parsing"}
-	for _, t := range ev.UsedTools {
-		if _, ok := seen[t]; ok {
-			continue
+	if ev != nil {
+		for _, tool := range ev.UsedTools {
+			if _, ok := seen[tool]; ok {
+				continue
+			}
+			seen[tool] = struct{}{}
+			steps = append(steps, tool)
 		}
-		seen[t] = struct{}{}
-		steps = append(steps, t)
+		for _, attempt := range ev.BlockedAttempts {
+			// format: stage:tool:reason
+			parts := strings.SplitN(attempt, ":", 3)
+			if len(parts) < 2 {
+				continue
+			}
+			label := "blocked:" + parts[1]
+			if _, ok := seen[label]; ok {
+				continue
+			}
+			seen[label] = struct{}{}
+			steps = append(steps, label)
+		}
 	}
 	steps = append(steps, "response_generation", "evidence_validation")
 	return steps
