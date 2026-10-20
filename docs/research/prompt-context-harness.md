@@ -23,7 +23,7 @@ phistory 是非官方捕获，不是厂商承诺的稳定契约；捕获还混�
 
 本地还对照了 `../oss/codex`、`../oss/claude-code` 与 `../oss/hermes-agent` 的实现。只提取了与 Chatty 规模相称的原则：
 
-- Codex 的 `codex-rs/core/src/context/` 把 model-visible Context 做成显式片段与状态快照；Chatty 对应保留明确的 `harness_context` 和 `agent_status`，不引入通用 registry。
+- Codex 的 `codex-rs/core/src/context/` 把 model-visible Context 做成显式片段与状态快照；Chatty 对应保留明确的 `harness_context` 和 `agent_status`，不引入通用 context registry（Tool 合同表 `modelTools` 除外）。
 - Claude Code 的 `services/compact/microCompact.ts` 会限制旧 Tool Result 对 Context 的占用；Chatty 当前会话较短，先依靠既有轮次上限和窄 Tool Result，不提前实现 compactor。
 - Hermes Agent 的 `agent/system_prompt.py` 按稳定到易变的顺序装配 prompt；Chatty 同样把稳定 `instructions.md` 放在 Agent 定义中，把 RequestContext、Tool Result 与状态栏后置到每轮运行时。
 

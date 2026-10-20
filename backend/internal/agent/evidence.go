@@ -9,9 +9,6 @@ import (
 )
 
 var harnessSteps = []string{"get_user_profile", "search_products", "check_inventory"}
-var modelToolNames = []string{"get_marketing_strategy", "retrieve_knowledge"}
-var toolNames = append(append([]string{}, harnessSteps...), modelToolNames...)
-var dependencyChain = harnessSteps
 
 type KnowledgeScope string
 
@@ -109,8 +106,11 @@ func RecordKnowledge(ev *Evidence, hits []models.KnowledgeHit, grounded []string
 
 func validateToolSequence(used []string) string {
 	expected := map[string]struct{}{}
-	for _, t := range toolNames {
+	for _, t := range harnessSteps {
 		expected[t] = struct{}{}
+	}
+	for name := range modelToolNameSet() {
+		expected[name] = struct{}{}
 	}
 	actual := map[string]struct{}{}
 	for _, t := range used {
@@ -136,11 +136,11 @@ func validateToolSequence(used []string) string {
 	if len(unknown) > 0 {
 		return "调用了未注册的工具：" + strings.Join(unknown, ", ")
 	}
-	for i := 1; i < len(dependencyChain); i++ {
-		prev := indexOf(used, dependencyChain[i-1])
-		cur := indexOf(used, dependencyChain[i])
+	for i := 1; i < len(harnessSteps); i++ {
+		prev := indexOf(used, harnessSteps[i-1])
+		cur := indexOf(used, harnessSteps[i])
 		if cur < prev {
-			return fmt.Sprintf("依赖顺序错误，应为 %s", strings.Join(dependencyChain, " -> "))
+			return fmt.Sprintf("依赖顺序错误，应为 %s", strings.Join(harnessSteps, " -> "))
 		}
 	}
 	return ""

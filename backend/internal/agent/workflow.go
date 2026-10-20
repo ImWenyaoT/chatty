@@ -49,18 +49,28 @@ func AllowedTools(ev *Evidence) []string {
 	for _, t := range ev.UsedTools {
 		used[t] = struct{}{}
 	}
+	seen := map[string]struct{}{}
 	var allowed []string
+	add := func(name string) {
+		if _, ok := seen[name]; ok {
+			return
+		}
+		seen[name] = struct{}{}
+		allowed = append(allowed, name)
+	}
 	for _, scope := range ev.RequiredKnowledgeScopes {
 		if !knowledgeScopeSettled(ev, scope) {
-			allowed = append(allowed, "retrieve_knowledge")
+			add("retrieve_knowledge")
 			break
 		}
 	}
 	for _, tool := range ev.RequiredSupportTools {
-		if tool == "get_marketing_strategy" {
-			if _, ok := used[tool]; !ok {
-				allowed = append(allowed, tool)
-			}
+		if tool == "retrieve_knowledge" {
+			// 知识工具只由 scope 结算驱动，避免与 RequiredSupportTools 重复列出。
+			continue
+		}
+		if _, ok := used[tool]; !ok {
+			add(tool)
 		}
 	}
 	return allowed
