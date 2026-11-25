@@ -30,13 +30,24 @@ export class AiSdkModelProvider implements ModelProvider {
 
   constructor(credentials: ModelCredentials) {
     this.modelId = credentials.model;
-    this.configured = Boolean(credentials.apiKey);
+    this.configured = isUsableApiKey(credentials.apiKey);
     const openai = createOpenAI({
-      apiKey: credentials.apiKey || "not-configured",
+      apiKey: this.configured ? credentials.apiKey : "not-configured",
       baseURL: credentials.baseUrl,
     });
     this.languageModel = openai.chat(credentials.model);
   }
+}
+
+/** 把 .env.example 里的占位符当成未配置，避免假 key 打到外网变成 500。 */
+function isUsableApiKey(apiKey: string): boolean {
+  const key = apiKey.trim();
+  if (!key) return false;
+  const lower = key.toLowerCase();
+  if (lower.includes("your_") || lower.includes("changeme") || lower === "not-configured") {
+    return false;
+  }
+  return true;
 }
 
 /** 兼容既有 `api.ts` / eval 的导入名。 */
