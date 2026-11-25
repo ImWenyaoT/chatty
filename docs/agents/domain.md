@@ -17,10 +17,12 @@ If any of these files don't exist, **proceed silently**. Don't flag their absenc
 ├── AGENTS.md
 ├── docs/adr/
 ├── docs/research/
+├── app/              # Next.js App Router + Astryx
+├── components/       # Chatty UI
+├── lib/              # turn API client
 ├── src/agent/        # AI SDK Agent + Harness
 ├── src/data/         # SQLite Catalog
-├── src/server/       # Hono HTTP
-├── web/              # Vite + React
+├── src/server/       # Hono HTTP (mounted by Next)
 └── data/seed/        # SQLite seed only
 ```
 

@@ -5,6 +5,8 @@
  * 不允许引入新事实——收敛仍由 finalizeReply 负责。
  */
 
+import { join } from "node:path";
+
 import { generateText, NoObjectGeneratedError, Output } from "ai";
 
 import {
@@ -18,7 +20,10 @@ import { readInstructions } from "../../lib/instructions.ts";
 import type { ModelProvider } from "../../lib/model-provider.ts";
 
 const INSTRUCTIONS = readInstructions(
-  new URL("./instructions.md", import.meta.url),
+  join(
+    process.cwd(),
+    "src/agent/subagents/draft_corrector/instructions.md",
+  ),
 );
 
 export type DraftCorrectorConfig = {

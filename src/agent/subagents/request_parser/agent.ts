@@ -5,6 +5,8 @@
  * 没有 handoff、不持有对话历史、不能调用 Tool——占用 subagent slot，但不构成 Multi-Agent。
  */
 
+import { join } from "node:path";
+
 import { z } from "zod";
 
 import { renderInstructions } from "../../lib/instructions.ts";
@@ -21,13 +23,16 @@ export const requestParseOutputSchema = z.object({
 
 export type RequestParseOutput = z.infer<typeof requestParseOutputSchema>;
 
-const INSTRUCTIONS_URL = new URL("./instructions.md", import.meta.url);
+const INSTRUCTIONS_PATH = join(
+  process.cwd(),
+  "src/agent/subagents/request_parser/instructions.md",
+);
 
 /** 把 SQLite 中真实存在的商品类目写入 Request Parser Instructions。 */
 export function requestParserInstructions(
   categories: readonly string[],
 ): string {
-  return renderInstructions(INSTRUCTIONS_URL, {
+  return renderInstructions(INSTRUCTIONS_PATH, {
     categories: categories.join("、"),
   });
 }

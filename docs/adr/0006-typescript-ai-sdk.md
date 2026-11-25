@@ -1,6 +1,7 @@
 ---
 status: accepted
 supersedes: 0005-go-backend-vite-shadcn
+superseded-by: 0007-nextjs-astryx
 ---
 
 # 后端回到 TypeScript，Agent 改用 Vercel AI SDK

@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/ImWenyaoT/chatty/actions/workflows/ci.yml/badge.svg)](https://github.com/ImWenyaoT/chatty/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-AI%20SDK-3178C6?logo=typescript&logoColor=white)](package.json)
-[![React](https://img.shields.io/badge/React-Vite%20%2B%20Tailwind%20%2B%20shadcn-61DAFB?logo=react&logoColor=black)](web/package.json)
+[![Next.js](https://img.shields.io/badge/Next.js-Astryx-000000?logo=nextdotjs&logoColor=white)](package.json)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 </div>
@@ -23,8 +23,9 @@ Model 主导的 Tool Loop、Evidence 校验与领域输出：商品 ID、价格�
 
 | 层 | 技术 |
 | --- | --- |
-| 前端 | React + Vite + TypeScript + Tailwind + shadcn/ui + AI SDK UI 心智 |
-| 后端 | Hono + Node（直跑 TypeScript）+ SQLite FTS5（`node:sqlite`） |
+| 前端 | Next.js App Router + Astryx（`@astryxdesign/core`）+ AI SDK UI 心智 |
+| HTTP | Hono（经 Next route handler 挂载，`runtime = nodejs`） |
+| Catalog | SQLite FTS5（`node:sqlite`） |
 | Agent | Vercel AI SDK（`generateText` / Tool / structured output） |
 | Model | DeepSeek（OpenAI 兼容 Chat Completions） |
 | 冒烟 | agent-browser（可选，本地） |
@@ -37,14 +38,14 @@ Model 主导的 Tool Loop、Evidence 校验与领域输出：商品 ID、价格�
 cp .env.example .env   # 填入 DEEPSEEK_API_KEY
 pnpm setup             # 或 make setup
 
-# 一条命令同时起 API (:8000) 与 Vite (:5173)
+# Next.js :3000（UI + /api + /health）
 pnpm dev               # 或 make dev
 ```
 
 检查：
 
 ```bash
-pnpm check             # typecheck + 测试 + 前端 build
+pnpm check             # typecheck + 测试 + next build
 ```
 
 可选 UI 冒烟（需先 `pnpm dev`）：
@@ -63,18 +64,21 @@ pnpm smoke:browser
 ## 仓库布局
 
 ```
+app/         Next.js App Router + Astryx 页面与 API 挂载
+components/  Chatty UI（对话、目录、壳）
+lib/         turn API 客户端与会话 Hook
 src/agent/   AI SDK Agent + Harness + tools + subagents
 src/data/    SQLite Catalog
-src/server/  Hono API + 内存会话
-web/         Vite + React + Tailwind + shadcn/ui
+src/server/  Hono createApp + 内存会话
 data/seed/   SQLite 初始化种子（非运行时查询接口）
-docs/adr/    架构决策（现行见 0006）
+docs/adr/    架构决策（现行见 0007）
 ```
 
 领域词汇见 [`CONTEXT.md`](CONTEXT.md)。工程约定见 [`AGENTS.md`](AGENTS.md)。
 
-## 与 Go 栈的差异
+## 与双进程 Vite 栈的差异
 
-- 后端从 Go 自研 Tool Loop 回到 TypeScript + Vercel AI SDK。
-- 前端仍在 `web/`；会话 Hook 对齐 AI SDK `ChatStatus`，协议仍是 turn-based（保护 Evidence）。
-- CI 只跑 `pnpm check`。详见 [ADR 0006](docs/adr/0006-typescript-ai-sdk.md)。
+- 前端从 `web/` Vite + shadcn 迁到根 `app/` Next.js + Astryx。
+- Hono 仍提供契约；Next catch-all 转发 `/api/*` 与 `/health`。
+- 会话 Hook 对齐 AI SDK `ChatStatus`，协议仍是 turn-based（保护 Evidence）。
+- CI 只跑 `pnpm check`。详见 [ADR 0007](docs/adr/0007-nextjs-astryx.md)。

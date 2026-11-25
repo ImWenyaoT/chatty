@@ -1,13 +1,13 @@
 /**
  * 用 agent-browser 对本地演示页做一次可访问性快照冒烟检查。
  *
- * 前置：`pnpm dev` 已在跑（API :8000 + Vite :5173）。
+ * 前置：`pnpm dev` 已在跑（Next :3000）。
  * 这不是 CI 门禁——真实模型与浏览器依赖不适合默认流水线。
  */
 
 import { spawnSync } from "node:child_process";
 
-const baseUrl = process.env.CHATTY_SMOKE_URL ?? "http://127.0.0.1:5173";
+const baseUrl = process.env.CHATTY_SMOKE_URL ?? "http://127.0.0.1:3000";
 
 function run(args: string[]): string {
   const result = spawnSync("pnpm", ["exec", "agent-browser", ...args], {

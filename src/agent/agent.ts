@@ -5,6 +5,8 @@
  * 系统提示词放在同目录的 `instructions.md`，读取时不做任何加工。
  */
 
+import { join } from "node:path";
+
 import { Output, type LanguageModel } from "ai";
 
 import {
@@ -18,7 +20,7 @@ import { createGetMarketingStrategyTool } from "./tools/get_marketing_strategy.t
 import { createRetrieveKnowledgeTool } from "./tools/retrieve_knowledge.ts";
 
 const INSTRUCTIONS = readInstructions(
-  new URL("./instructions.md", import.meta.url),
+  join(process.cwd(), "src/agent/instructions.md"),
 );
 
 export type ChattyTools = {

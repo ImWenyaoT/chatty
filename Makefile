@@ -1,32 +1,16 @@
-.PHONY: setup check test backend-test web-install web-check web-build web-dev api-dev dev smoke-browser
-
-ROOT := $(CURDIR)
+.PHONY: setup check test api-dev dev smoke-browser
 
 setup:
 	pnpm install
 
-web-install:
-	pnpm --dir web install
-
-backend-test:
+test:
 	pnpm test
-
-web-check:
-	pnpm --dir web typecheck && pnpm --dir web build
-
-web-build:
-	pnpm --dir web build
-
-test: backend-test
 
 check:
 	pnpm check
 
 api-dev:
 	pnpm dev:api
-
-web-dev:
-	pnpm --dir web dev
 
 dev:
 	pnpm dev

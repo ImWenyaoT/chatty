@@ -1,6 +1,6 @@
 dist
-web/dist
+.next
 node_modules
 pnpm-lock.yaml
-web/pnpm-lock.yaml
 *.tsbuildinfo
+app/_templates

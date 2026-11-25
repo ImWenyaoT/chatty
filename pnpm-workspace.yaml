@@ -1,11 +1,16 @@
 packages:
   - "."
-  - "web"
 
 onlyBuiltDependencies:
   - esbuild
   - agent-browser
+  - "@astryxdesign/cli"
+  - "@astryxdesign/core"
+  - sharp
 
 allowBuilds:
   esbuild: true
   agent-browser: true
+  "@astryxdesign/cli": true
+  "@astryxdesign/core": true
+  sharp: true
