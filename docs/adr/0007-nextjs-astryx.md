@@ -19,6 +19,8 @@ ADR 0006 把后端与 Agent 留在 TypeScript + Vercel AI SDK，前端仍是独�
 - **App**：仓库根 `app/` 为 Next.js App Router；`pnpm dev` → `next dev -p 3000`。
 - **UI**：Astryx 组件 + `shell-side-nav` / `ai-chat` / `ai-chat-landing` / `library`
   模板骨架；中文文案；空态建议为商品推荐 / 政策问答，不是通用写作/编程 chips。
+- **样式**：走 Astryx 官方 **Next.js + Tailwind** 路径（`fonts.css` + cascade `@layer` +
+  `tailwind-theme.css` bridge），不自造 token 映射或第二套设计系统。
 - **HTTP**：既有 Hono `createApp` 经 `hono/vercel` `handle` 挂到
   `app/api/[[...route]]/route.ts` 与 `app/health/route.ts`；`runtime = 'nodejs'`，
   因为 Catalog 用 `node:sqlite`。确定性测试仍直接打 `createApp`，不经 Next。

@@ -41,12 +41,14 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.5",
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "agent-browser": "^0.44.0",
     "oxlint": "^1.95.0",
     "prettier": "^3.10.1",
+    "tailwindcss": "^4.3.5",
     "typescript": "~5.9.3"
   }
 }
