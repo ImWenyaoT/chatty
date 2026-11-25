@@ -1,5 +1,6 @@
 ---
-status: accepted
+status: superseded
+superseded-by: 0006-typescript-ai-sdk
 ---
 
 # 后端迁到 Go，前端迁到 Vite + Tailwind + shadcn/ui

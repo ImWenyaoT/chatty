@@ -7,8 +7,8 @@
 <sub>Model 负责理解需求、主动检索与生成表达；Harness + SQLite 负责流程、事实与可信输出。</sub>
 
 [![CI](https://github.com/ImWenyaoT/chatty/actions/workflows/ci.yml/badge.svg)](https://github.com/ImWenyaoT/chatty/actions/workflows/ci.yml)
-[![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](backend/go.mod)
-[![React](https://img.shields.io/badge/React-Vite%20%2B%20Tailwind%20%2B%20shadcn-61DAFB?logo=react&logoColor=black)](web/package.json)
+[![TypeScript](https://img.shields.io/badge/TypeScript-AI%20SDK-3178C6?logo=typescript&logoColor=white)](package.json)
+[![Next.js](https://img.shields.io/badge/Next.js-Astryx-000000?logo=nextdotjs&logoColor=white)](package.json)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 </div>
@@ -23,54 +23,62 @@ Model 主导的 Tool Loop、Evidence 校验与领域输出：商品 ID、价格�
 
 | 层 | 技术 |
 | --- | --- |
-| 前端 | React + Vite + TypeScript + Tailwind CSS + shadcn/ui |
-| 后端 | Go（`net/http`）+ SQLite FTS5（`modernc.org/sqlite`） |
-| Model | DeepSeek（OpenAI 兼容 Chat Completions + Tool Calling） |
+| 前端 | Next.js App Router + Astryx（`@astryxdesign/core`）+ AI SDK UI 心智 |
+| HTTP | Hono（经 Next route handler 挂载，`runtime = nodejs`） |
+| Catalog | SQLite FTS5（`node:sqlite`） |
+| Agent | Vercel AI SDK（`generateText` / Tool / structured output） |
+| Model | DeepSeek（OpenAI 兼容 Chat Completions） |
+| 冒烟 | agent-browser（可选，本地） |
 
 ## 快速开始
 
-前置：Go 1.22+、Node 22+、pnpm 11+。
+前置：Node 22+、pnpm 11+。
 
 ```bash
 cp .env.example .env   # 填入 DEEPSEEK_API_KEY
-make setup
+pnpm setup             # 或 make setup
 
-# 一条命令同时起 API (:8000) 与 Vite (:5173)
-make dev
-
-# 或分两个终端：
-# make api-dev
-# make web-dev
+# Next.js :3000（UI + /api + /health）
+pnpm dev               # 或 make dev
 ```
 
 检查：
 
 ```bash
-make check             # go test + 前端 typecheck/build
+pnpm check             # typecheck + 测试 + next build
+```
+
+可选 UI 冒烟（需先 `pnpm dev`）：
+
+```bash
+pnpm smoke:browser
 ```
 
 ## 一次请求如何完成
 
 1. **Request Parser（Subagent）** 把用户原话解析成 `ParsedRequest`（商品需求 / 知识问题）。
 2. **Harness** 从 SQLite 确定性准备画像、候选商品与库存，写入 Evidence。
-3. **主 Agent Loop** 调用 `retrieve_knowledge` / `get_marketing_strategy`，按门禁推进。
+3. **主 Agent Loop（AI SDK）** 调用 `retrieve_knowledge` / `get_marketing_strategy`，按门禁推进。
 4. **Evidence 校验 + SQLite 重查** 后才返回推荐/澄清/回答；价格与库存不由模型生成。
 
 ## 仓库布局
 
 ```
-backend/     Go API + Agent + Catalog + prompts/
-web/         Vite + React + Tailwind + shadcn/ui
+app/         Next.js App Router + Astryx 页面与 API 挂载
+components/  Chatty UI（对话、目录、壳）
+lib/         turn API 客户端与会话 Hook
+src/agent/   AI SDK Agent + Harness + tools + subagents
+src/data/    SQLite Catalog
+src/server/  Hono createApp + 内存会话
 data/seed/   SQLite 初始化种子（非运行时查询接口）
-docs/adr/    架构决策（现行见 0005）
-Makefile     install / dev / check 入口
+docs/adr/    架构决策（现行见 0007）
 ```
 
 领域词汇见 [`CONTEXT.md`](CONTEXT.md)。工程约定见 [`AGENTS.md`](AGENTS.md)。
 
-## 与旧 Node 栈的差异
+## 与双进程 Vite 栈的差异
 
-- 后端从 TypeScript/Hono/OpenAI Agents SDK 迁到 Go 自研 Tool Loop。
-- 前端在 `web/`，Tailwind + shadcn/ui；根目录无 `package.json`。
-- 旧 `pnpm eval*`、golden 对拍与过时 chatty-book 路径文档已去掉；CI 只跑 `make check`。
-  详见 [ADR 0005](docs/adr/0005-go-backend-vite-shadcn.md)。
+- 前端从 `web/` Vite + shadcn 迁到根 `app/` Next.js + Astryx。
+- Hono 仍提供契约；Next catch-all 转发 `/api/*` 与 `/health`。
+- 会话 Hook 对齐 AI SDK `ChatStatus`，协议仍是 turn-based（保护 Evidence）。
+- CI 只跑 `pnpm check`。详见 [ADR 0007](docs/adr/0007-nextjs-astryx.md)。

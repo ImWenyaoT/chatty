@@ -32,38 +32,38 @@
 
 ## Dev environment
 
-单仓双运行时：Go 后端 + Vite 前端。布局理由见 ADR 0005：
+单仓 TypeScript：Next.js App Router + Astryx UI + Hono（经 route handler 挂载）+ Vercel AI SDK Agent。布局理由见 ADR 0007：
 
 ```bash
-make setup          # go mod download + web pnpm install
-make dev            # API :8000 + Vite :5173（代理 /api）
-make api-dev        # 仅 Go HTTP
-make web-dev        # 仅 Vite
-make check          # go test + 前端 typecheck/build
+pnpm setup          # 或 make setup
+pnpm dev            # Next :3000（UI + /api + /health）
+pnpm dev:api        # 仅 Hono HTTP（调试用）
+pnpm check          # typecheck + 确定性测试 + next build
 ```
-
-根目录没有 `package.json`；前端依赖只在 `web/`。
 
 目录：
 
-- `backend/` — Go：`cmd/chatty` 入口，`internal/api` HTTP，`internal/agent` Model+Harness，
-  `internal/catalog` SQLite，`prompts/` 提示词。
-- `web/` — React + Vite + Tailwind + shadcn/ui + TypeScript；只经 `src/lib/api-client.ts` 打 HTTP。
-- `data/seed/` — SQLite 初始化种子。
+- `src/agent/` — Chatty 的 `Model + Harness`（AI SDK `generateText` / Tool / Evidence）。
+- `src/data/` — SQLite Catalog；种子在 `data/seed/`。
+- `src/server/` — Hono HTTP 与内存会话；由 `app/api` / `app/health` 挂载。
+- `app/` — Next.js App Router；Astryx 主题与页面。
+- `components/` / `lib/` — Chatty UI 与 turn API 客户端。
+- `scripts/smoke-browser.ts` — 可选 `agent-browser` 冒烟（不进 CI）。
 - `docs/` — ADR 与说明。
 
-依赖方向：`web/` 不 import `backend/`；`internal/api` 委托给 `agent` 与 `catalog`，自身不含业务规则。
+依赖方向：UI 经 HTTP 调 `/api`；`src/server` 委托给 `agent` 与 `catalog`，自身不含业务规则。
 
 ## Testing
 
-`make check` `MUST` 是唯一 CI 门禁。`.github/workflows/ci.yml` 只运行这一条路径。
+`pnpm check`（或 `make check`）`MUST` 是唯一 CI 门禁。`.github/workflows/ci.yml` 只运行这一条路径。
 
 ```bash
-make check
+pnpm check
 ```
 
-- `make backend-test` — Go 单元/HTTP 契约测试。
-- `make web-check` — 前端 typecheck + production build。
+- `pnpm test` — 确定性单元 / HTTP / golden 测试（含 Scripted Model）。
+- `pnpm build` — Next.js production build。
+- `pnpm smoke:browser` — 可选；需本地 `pnpm dev` 与浏览器。
 
 Agent 真实模型评测不再作为 CI 门禁；本地需 `DEEPSEEK_API_KEY` 后手动起服务验证对话。
 
@@ -72,9 +72,9 @@ Agent 真实模型评测不再作为 CI 门禁；本地需 `DEEPSEEK_API_KEY` �
 ## PR instructions
 
 - commit 标题 `MUST` 使用 conventional commits 英文前缀和中文标题。例：
-  `refactor: 将后端迁到 Go 并重建 Vite/shadcn 前端`
+  `refactor: 迁到 Next.js App Router 与 Astryx UI`
 - 前缀 `MUST` 是 `feat` / `fix` / `refactor` / `docs` / `chore` / `test` 之一。
-- 提交前 `MUST` 运行 `make check`。
+- 提交前 `MUST` 运行 `pnpm check`（或 `make check`）。
 
 ## Agent skills
 
@@ -89,3 +89,36 @@ Issues/PRD 存于本仓库 GitHub Issues，用 `gh` CLI 读写。See `docs/agent
 ### Domain docs
 
 单上下文：根 `CONTEXT.md` 是唯一的领域词汇入口。See `docs/agents/domain.md`.
+
+<!-- ASTRYX:START -->
+Astryx v0.7.17 · 174 components
+CLI: run every command as `pnpm exec astryx <cmd>` (shown below as `astryx ...`).
+
+SETUP (once, in app entry e.g. main.tsx) — without these, components render unstyled:
+  import "@astryxdesign/core/reset.css";
+  import "@astryxdesign/core/astryx.css";
+
+WORKFLOW — start every page from a template, never from scratch:
+1. `astryx build "<idea>"` — names the template to scaffold from and the parts it lacks.
+2. `astryx template <name> <path>` — scaffold it; keep its frame, gap and padding; replace the content.
+3. `astryx component <Name>` to read props before using one; `astryx template <Block>` prints a block example to read for a part it lacks. Astryx names differ from other libraries: buttons, badges, tokens and tabs take their text in `label` (Text, Heading and Link take children), booleans start with `is` or `has` (`isOpen`, `isDisabled`), and every input takes `value` and `onChange`.
+Changing an existing page? Keep it: skip step 2 and add components inside its sections; read a block example when it helps.
+Before you deliver a build, run `astryx doctor --built <dir>`; don't deliver it if it fails.
+
+RULES:
+- No <div> — components handle all layout and spacing.
+- Read `astryx docs layout` before changing a template's frame.
+- Dense data = rows (Table, List/Item), not Card-wrapped lists. Badge = counts only.
+- Style with component props first, then tokens (var(--color-*|--spacing-*|--radius-*)). No raw hex/px. No StyleX/Tailwind compiler here — don't use xstyle/utility classes directly. Some templates use StyleX and need a compiler plugin; see `astryx docs styling-overview`.
+- THEMES: palettes and custom colors go through the theme, never :root overrides; so does a denser or roomier app (`editor set <name> spacing tight`), never gap and padding changes page by page. A change to one kind of part (the sidebar, its selected item, the gaps in a form) is a theme change too, not props on one page: `editor how "<ask>"` names the `set … --on <part>` line. No app yet: `astryx experimental theme preview app <dir>` makes a starter app that shows the theme. To make or change a theme (colors, fonts, corners, spacing, a look from a picture), prefer the experimental theme editor over hand-written theme files: `astryx experimental theme editor new <name> --like neutral`, then `editor set <name> <thing> <value>` or `editor how "<what you want>"`; wire it with `astryx theme add <name>`; after each change look at it with `astryx experimental theme editor show <name> --png` (takes pictures of real components) and open the PNGs it writes; a theme change is not done until you have looked at the pictures. In code, extend an imported theme to customize it; `theme eject <slug>` only forks source. See `astryx docs theme`.
+- SELF-CHECK: re-read the file; replace any raw <div>/<span>, imported .css/@apply, or hardcoded #hex/px with the component or a token.
+
+`astryx help` lists every command. Key ones beyond the workflow:
+  search "<query>"   find any component / hook / doc / template
+  discover <words>   integrations you could add
+  docs <topic>       getting-started, principles, tokens, theme … (`astryx docs` lists all)
+  docs cli           commands and API reference
+  docs authoring     build an integration package, and every field it holds
+  upgrade --from <old version> --apply   run after a dependency bump
+To remove this block, run `astryx init --remove-agents`, which removes it from the agent files at the project root and in the folder you run it in; from any other file it leaves, delete everything from ASTRYX:START to ASTRYX:END.
+<!-- ASTRYX:END -->
