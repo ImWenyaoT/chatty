@@ -32,38 +32,41 @@
 
 ## Dev environment
 
-单仓双运行时：Go 后端 + Vite 前端。布局理由见 ADR 0005：
+单仓 TypeScript：Hono API + Vite 前端 + Vercel AI SDK Agent。布局理由见 ADR 0006：
 
 ```bash
-make setup          # go mod download + web pnpm install
-make dev            # API :8000 + Vite :5173（代理 /api）
-make api-dev        # 仅 Go HTTP
-make web-dev        # 仅 Vite
-make check          # go test + 前端 typecheck/build
+pnpm setup          # 或 make setup
+pnpm dev            # API :8000 + Vite :5173（代理 /api）
+pnpm dev:api        # 仅 Hono HTTP
+pnpm --dir web dev  # 仅 Vite
+pnpm check          # typecheck + 确定性测试 + 前端 build
 ```
 
-根目录没有 `package.json`；前端依赖只在 `web/`。
+根 `package.json` 编排后端与脚本；前端依赖在 `web/`。
 
 目录：
 
-- `backend/` — Go：`cmd/chatty` 入口，`internal/api` HTTP，`internal/agent` Model+Harness，
-  `internal/catalog` SQLite，`prompts/` 提示词。
-- `web/` — React + Vite + Tailwind + shadcn/ui + TypeScript；只经 `src/lib/api-client.ts` 打 HTTP。
-- `data/seed/` — SQLite 初始化种子。
+- `src/agent/` — Chatty 的 `Model + Harness`（AI SDK `generateText` / Tool / Evidence）。
+- `src/data/` — SQLite Catalog；种子在 `data/seed/`。
+- `src/server/` — Hono HTTP 与内存会话。
+- `web/` — React + Vite + Tailwind + shadcn/ui + `@ai-sdk/react` 心智；只经
+  `src/lib/api-client.ts` 打 HTTP。
+- `scripts/smoke-browser.ts` — 可选 `agent-browser` 冒烟（不进 CI）。
 - `docs/` — ADR 与说明。
 
-依赖方向：`web/` 不 import `backend/`；`internal/api` 委托给 `agent` 与 `catalog`，自身不含业务规则。
+依赖方向：`web/` 不 import `src/`；`src/server` 委托给 `agent` 与 `catalog`，自身不含业务规则。
 
 ## Testing
 
-`make check` `MUST` 是唯一 CI 门禁。`.github/workflows/ci.yml` 只运行这一条路径。
+`pnpm check`（或 `make check`）`MUST` 是唯一 CI 门禁。`.github/workflows/ci.yml` 只运行这一条路径。
 
 ```bash
-make check
+pnpm check
 ```
 
-- `make backend-test` — Go 单元/HTTP 契约测试。
-- `make web-check` — 前端 typecheck + production build。
+- `pnpm test` — 确定性单元 / HTTP / golden 测试（含 Scripted Model）。
+- `pnpm --dir web typecheck` + build — 前端门禁。
+- `pnpm smoke:browser` — 可选；需本地 `pnpm dev` 与浏览器。
 
 Agent 真实模型评测不再作为 CI 门禁；本地需 `DEEPSEEK_API_KEY` 后手动起服务验证对话。
 
@@ -72,9 +75,9 @@ Agent 真实模型评测不再作为 CI 门禁；本地需 `DEEPSEEK_API_KEY` �
 ## PR instructions
 
 - commit 标题 `MUST` 使用 conventional commits 英文前缀和中文标题。例：
-  `refactor: 将后端迁到 Go 并重建 Vite/shadcn 前端`
+  `refactor: 用 Vercel AI SDK 重写 TypeScript Agent`
 - 前缀 `MUST` 是 `feat` / `fix` / `refactor` / `docs` / `chore` / `test` 之一。
-- 提交前 `MUST` 运行 `make check`。
+- 提交前 `MUST` 运行 `pnpm check`（或 `make check`）。
 
 ## Agent skills
 

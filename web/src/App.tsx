@@ -1,29 +1,22 @@
 import { useEffect, useState } from "react";
 import { CatalogBrowser } from "@/components/catalog/CatalogBrowser";
 import { ChatPanel } from "@/components/chat/ChatPanel";
-import type { ChatEntry } from "@/components/chat/types";
 import { UserPicker } from "@/components/chat/UserPicker";
 import { AppShell, type AppView } from "@/components/layout/AppShell";
 import {
   ApiError,
-  createSession,
   explain,
   fetchCatalog,
-  takeTurn,
   type CatalogInfo,
-  type Turn,
 } from "@/lib/api-client";
+import { useChattySession } from "@/lib/use-chatty-session";
 
 export default function App() {
   const [view, setView] = useState<AppView>("chat");
   const [info, setInfo] = useState<CatalogInfo | null>(null);
   const [userId, setUserId] = useState("user_active");
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [entries, setEntries] = useState<ChatEntry[]>([]);
-  const [text, setText] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [turnsLeft, setTurnsLeft] = useState<number | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
+  const session = useChattySession(userId);
 
   useEffect(() => {
     void (async () => {
@@ -38,56 +31,15 @@ export default function App() {
   }, []);
 
   const reset = (nextUser = userId) => {
+    if (nextUser === userId) {
+      session.reset();
+      return;
+    }
     setUserId(nextUser);
-    setSessionId(null);
-    setEntries([]);
-    setTurnsLeft(null);
   };
 
-  const send = async (raw: string) => {
-    const trimmed = raw.trim();
-    if (!trimmed || busy) return;
-    setText("");
-    setEntries((current) => [...current, { kind: "user", text: trimmed }]);
-    setBusy(true);
-    try {
-      let activeSessionId = sessionId;
-      if (activeSessionId === null) {
-        const session = await createSession(userId);
-        activeSessionId = session.session_id;
-        setSessionId(activeSessionId);
-      }
-      const turn: Turn = await takeTurn(activeSessionId, trimmed);
-      setTurnsLeft(turn.turns_left);
-      const responseEntries: ChatEntry[] = [
-        {
-          kind: "run",
-          trace: turn.trace,
-          latencyMs: turn.latency_ms,
-          usage: turn.usage,
-        },
-      ];
-      if (turn.answer) {
-        responseEntries.push({ kind: "answer", text: turn.answer });
-      }
-      if (turn.kind === "recommend") {
-        responseEntries.push({ kind: "products", products: turn.products });
-      } else if (turn.kind !== "answer") {
-        if (!turn.question) throw new ApiError("invalid_response");
-        responseEntries.push({ kind: "question", text: turn.question });
-      }
-      setEntries((current) => [
-        ...current,
-        { kind: "understood", text: turn.understood_as },
-        ...responseEntries,
-      ]);
-    } catch (error: unknown) {
-      const code = error instanceof ApiError ? error.code : "invalid_response";
-      setEntries((current) => [...current, { kind: "error", code }]);
-    } finally {
-      setBusy(false);
-    }
-  };
+  const busy =
+    session.status === "submitted" || session.status === "streaming";
 
   if (bootError) {
     return (
@@ -103,7 +55,8 @@ export default function App() {
     );
   }
 
-  const exhausted = turnsLeft !== null && turnsLeft <= 0;
+  const exhausted =
+    session.turnsLeft !== null && session.turnsLeft <= 0;
   const catalogSummary =
     info === null
       ? "载入中…"
@@ -144,14 +97,14 @@ export default function App() {
           <div className="min-h-0 flex-1">
             <ChatPanel
               info={info}
-              entries={entries}
-              text={text}
-              onTextChange={setText}
-              onSend={(raw) => void send(raw)}
+              entries={session.entries}
+              text={session.text}
+              onTextChange={session.setText}
+              onSend={(raw) => void session.sendMessage(raw)}
               busy={busy}
               exhausted={exhausted}
               onReset={() => reset()}
-              turnsLeft={turnsLeft}
+              turnsLeft={session.turnsLeft}
             />
           </div>
         </div>

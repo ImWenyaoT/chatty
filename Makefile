@@ -1,36 +1,35 @@
-.PHONY: setup check test backend-test web-install web-check web-build web-dev api-dev dev
+.PHONY: setup check test backend-test web-install web-check web-build web-dev api-dev dev smoke-browser
 
 ROOT := $(CURDIR)
 
-setup: web-install
-	cd backend && go mod download
+setup:
+	pnpm install
 
 web-install:
-	cd web && pnpm install
+	pnpm --dir web install
 
 backend-test:
-	cd backend && go test ./...
+	pnpm test
 
 web-check:
-	cd web && pnpm run typecheck && pnpm run build
+	pnpm --dir web typecheck && pnpm --dir web build
 
 web-build:
-	cd web && pnpm run build
+	pnpm --dir web build
 
 test: backend-test
 
-check: backend-test web-check
+check:
+	pnpm check
 
 api-dev:
-	cd backend && CHATTY_ROOT=$(ROOT) go run ./cmd/chatty
+	pnpm dev:api
 
 web-dev:
-	cd web && pnpm dev
+	pnpm --dir web dev
 
-# 同时起 API 与 Vite；Ctrl+C 结束当前 shell 内的子进程。
 dev:
-	@bash -c 'set -e; \
-	  trap "kill 0" EXIT INT TERM; \
-	  CHATTY_ROOT="$(ROOT)" go run ./backend/cmd/chatty & \
-	  (cd web && pnpm dev) & \
-	  wait'
+	pnpm dev
+
+smoke-browser:
+	pnpm smoke:browser

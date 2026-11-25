@@ -17,7 +17,9 @@ If any of these files don't exist, **proceed silently**. Don't flag their absenc
 ├── AGENTS.md
 ├── docs/adr/
 ├── docs/research/
-├── backend/          # Go: cmd/chatty, internal/{api,agent,catalog,session}
+├── src/agent/        # AI SDK Agent + Harness
+├── src/data/         # SQLite Catalog
+├── src/server/       # Hono HTTP
 ├── web/              # Vite + React
 └── data/seed/        # SQLite seed only
 ```

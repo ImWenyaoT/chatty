@@ -88,16 +88,18 @@ Chatty 根据用户画像、商品信息、检索知识和库存产生的有序�
 
 ## Project Structure
 
-仓库分为 Go 后端与 Vite 前端，布局理由见 ADR 0005：
+仓库为 TypeScript 全栈，布局理由见 ADR 0006：
 
-- `backend/internal/agent/`：Chatty 的 `Model + Harness`（Request Parser、Tool Loop、Evidence）。
-- `backend/prompts/`：主 Agent、`request_parser`、`draft_corrector` 提示词。
-- `backend/internal/catalog/`：SQLite 访问；种子在 `data/seed/`。
-- `backend/internal/api/`：HTTP 层与会话（内存）。
-- `web/`：React + Vite + Tailwind + shadcn/ui，只通过 `src/lib/api-client.ts` 访问 HTTP。
+- `src/agent/`：Chatty 的 `Model + Harness`（Vercel AI SDK、Request Parser、Tool Loop、Evidence）。
+- `src/agent/subagents/`：Harness 触发的 `request_parser` 与 `draft_corrector` 提示词与契约。
+- `src/data/`：SQLite Catalog；种子在 `data/seed/`。
+- `src/server/`：Hono HTTP 层与会话（内存）。
+- `web/`：React + Vite + Tailwind + shadcn/ui，只通过 `src/lib/api-client.ts` 访问 HTTP；
+  会话 Hook 对齐 AI SDK UI 的 `ChatStatus` 心智。
 
 Harness 确定性调用的 `request_parser` 与 `draft_corrector` 不是主 Agent 的 Tool，也不存在 Handoff。
 
 ## Evals
 
-CI 以 `make check`（Go 测试 + 前端构建）为门禁。真实模型对话需配置 `DEEPSEEK_API_KEY` 后本地验证。
+CI 以 `pnpm check`（typecheck + 确定性测试 + 前端构建）为门禁。真实模型对话需配置
+`DEEPSEEK_API_KEY` 后本地验证。可选 `pnpm smoke:browser` 用 agent-browser 做 UI 冒烟。

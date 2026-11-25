@@ -1,0 +1,11 @@
+packages:
+  - "."
+  - "web"
+
+onlyBuiltDependencies:
+  - esbuild
+  - agent-browser
+
+allowBuilds:
+  esbuild: true
+  agent-browser: true
